@@ -1,8 +1,11 @@
-# Secrets
+# Secrets — stay local
 .env
 compose/license.xml
 terraform.tfvars
-*.auto.tfvars
+secrets.auto.tfvars
+*.secrets.tfvars
+# Note: defaults.auto.tfvars and other non-sensitive *.auto.tfvars ARE
+# committed — they hold lab-wide config like the Octopus URL.
 
 # OpenTofu state — has secrets, machine-specific
 *.tfstate

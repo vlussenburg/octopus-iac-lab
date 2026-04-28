@@ -5,32 +5,31 @@ SHELL := /bin/bash
 COMPOSE := docker compose --env-file .env -f compose/docker-compose.yml
 CP_DIR := tofu/control-plane
 APP_DIR := tofu/app-randomquotes
+AGENT_DIR := tofu/k8s-agent
 
-# Load .env and export every var it defines as TF_VAR_<lowercase>.
+# Load .env (secrets only) and export TF_VAR_* for OpenTofu. Non-sensitive
+# values come from each stack's committed defaults.auto.tfvars.
 define load_env
 	set -a; \
 	[ -f .env ] || { echo "Missing .env — copy .env.example and fill it in."; exit 1; }; \
 	source .env; set +a; \
-	export TF_VAR_octopus_url="$$OCTOPUS_URL" \
-	       TF_VAR_octopus_space="$$OCTOPUS_SPACE" \
-	       TF_VAR_octopus_api_key="$$OCTOPUS_API_KEY" \
-	       TF_VAR_github_pat="$$GITHUB_PAT" \
-	       TF_VAR_cac_repo_url="$$CAC_REPO_URL" \
-	       TF_VAR_cac_branch="$$CAC_BRANCH" \
-	       TF_VAR_cac_base_path="$$CAC_BASE_PATH";
+	export TF_VAR_octopus_api_key="$$OCTOPUS_API_KEY" \
+	       TF_VAR_github_pat="$$GITHUB_PAT";
 endef
 
 .PHONY: help \
         up down logs ps nuke \
         cp-init cp-plan cp-apply cp-destroy cp-fmt cp-validate \
         app-init app-plan app-apply app-destroy app-fmt app-validate \
+        agent-init agent-plan agent-apply agent-destroy agent-fmt agent-validate \
         fmt validate apply destroy
 
 help:
-	@echo "compose/             : up | down | logs | ps | nuke"
-	@echo "tofu/control-plane/  : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
+	@echo "compose/              : up | down | logs | ps | nuke"
+	@echo "tofu/control-plane/   : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
 	@echo "tofu/app-randomquotes/: app-init | app-plan | app-apply | app-destroy | app-fmt | app-validate"
-	@echo "convenience          : fmt (both) | validate (both) | apply (cp then app) | destroy (app then cp)"
+	@echo "tofu/k8s-agent/       : agent-init | agent-plan | agent-apply | agent-destroy | agent-fmt | agent-validate"
+	@echo "convenience           : fmt (all) | validate (all) | apply (cp,app) | destroy (app,cp)"
 
 # --- compose/ -------------------------------------------------------------
 
@@ -90,13 +89,34 @@ app-fmt:
 app-validate:
 	cd $(APP_DIR) && tofu validate
 
+# --- tofu/k8s-agent/ ------------------------------------------------------
+
+agent-init:
+	cd $(AGENT_DIR) && tofu init
+
+agent-plan:
+	$(load_env) cd $(AGENT_DIR) && tofu plan
+
+agent-apply:
+	$(load_env) cd $(AGENT_DIR) && tofu apply
+
+agent-destroy:
+	$(load_env) cd $(AGENT_DIR) && tofu destroy
+
+agent-fmt:
+	cd $(AGENT_DIR) && tofu fmt -recursive
+
+agent-validate:
+	cd $(AGENT_DIR) && tofu validate
+
 # --- convenience ----------------------------------------------------------
 
-fmt: cp-fmt app-fmt
-validate: cp-validate app-validate
+fmt: cp-fmt app-fmt agent-fmt
+validate: cp-validate app-validate agent-validate
 
-# Apply must run cp first then app — app reads cp state.
-apply: cp-apply app-apply
+# Apply must run cp first then app — app reads cp state. Agent is independent
+# but reads cp state too, so it goes after cp.
+apply: cp-apply app-apply agent-apply
 
-# Destroy in reverse — app first, then cp.
-destroy: app-destroy cp-destroy
+# Destroy in reverse.
+destroy: agent-destroy app-destroy cp-destroy

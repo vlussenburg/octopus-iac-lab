@@ -38,7 +38,9 @@ services:
       OCTOPUS_SERVER_NODE_NAME: "OctopusServer"
       MASTER_KEY: "${MASTER_KEY}"
     ports:
-      - "8090:8080"
+      - "8090:8080"      # HTTP API + UI
+      - "10943:10943"    # Halibut — Polling Tentacle / K8s Agent comms (TLS)
+      - "8443:8443"      # gRPC — Kubernetes Monitor (KLOS), enable when needed
     volumes:
       - octopus-repository:/repository
       - octopus-artifacts:/artifacts
