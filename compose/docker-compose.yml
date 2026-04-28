@@ -37,6 +37,11 @@ services:
       ADMIN_PASSWORD: "Password01!"
       OCTOPUS_SERVER_NODE_NAME: "OctopusServer"
       MASTER_KEY: "${MASTER_KEY}"
+      # If set, install.sh runs `Octopus.Server license --licenseBase64=…` on
+      # boot. Empty = skip (paste in UI). The Makefile's `up` target encodes
+      # compose/license.xml on the fly when it exists, so this stays empty
+      # unless explicitly overridden.
+      OCTOPUS_SERVER_BASE64_LICENSE: "${OCTOPUS_SERVER_BASE64_LICENSE:-}"
     ports:
       - "8090:8080"      # HTTP API + UI
       - "10943:10943"    # Halibut — Polling Tentacle / K8s Agent comms (TLS)
