@@ -1,0 +1,18 @@
+# Secrets
+.env
+compose/license.xml
+terraform.tfvars
+*.auto.tfvars
+
+# OpenTofu state — has secrets, machine-specific
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+crash.*.log
+
+# macOS
+.DS_Store
+
+# Note: .terraform.lock.hcl is intentionally NOT ignored — it pins provider
+# versions and should be committed.

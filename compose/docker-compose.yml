@@ -1,0 +1,51 @@
+# Local Octopus Server sandbox. Apple Silicon: both images are amd64,
+# enable Docker Desktop → Settings → General → "Use Rosetta" for native-ish speed.
+# Host port 8090 to avoid clashing with the local ArgoCD port-forward on 8080.
+
+# Pinned project name so containers + named volumes stay stable regardless of
+# where this file lives on disk. Kept as "selfhost-setup" — the original parent
+# folder before this compose moved here — so existing volumes keep being used.
+name: selfhost-setup
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Octop@s!Sandb0x"
+      MSSQL_PID: "Developer"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Octop@s!Sandb0x' -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    volumes:
+      - mssql-data:/var/opt/mssql
+
+  octopus:
+    image: octopusdeploy/octopusdeploy:latest
+    platform: linux/amd64
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ACCEPT_EULA: "Y"
+      DB_CONNECTION_STRING: "Server=db,1433;Database=OctopusDeploy;User=sa;Password=Octop@s!Sandb0x;TrustServerCertificate=True"
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "Password01!"
+      OCTOPUS_SERVER_NODE_NAME: "OctopusServer"
+      MASTER_KEY: "${MASTER_KEY}"
+    ports:
+      - "8090:8080"
+    volumes:
+      - octopus-repository:/repository
+      - octopus-artifacts:/artifacts
+      - octopus-tasklogs:/taskLogs
+
+volumes:
+  mssql-data:
+  octopus-repository:
+  octopus-artifacts:
+  octopus-tasklogs:
