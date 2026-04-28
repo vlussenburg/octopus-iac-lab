@@ -2,15 +2,7 @@
 # docker compose loads it directly, OpenTofu gets it as TF_VAR_*.
 
 SHELL := /bin/bash
-
-# MODE switches the compose topology. Default = single-node. `MODE=ha` selects
-# the HA file (db + octopus-1 + octopus-2 + nginx LB). Both modes use the same
-# project name and named volumes, so DB + filesystem state survives flipping
-# between them — but only one mode runs at a time (host ports clash).
-MODE ?= single
-COMPOSE_FILE := compose/docker-compose$(if $(filter ha,$(MODE)),.ha,).yml
-COMPOSE := docker compose --env-file .env -f $(COMPOSE_FILE)
-
+COMPOSE := docker compose --env-file .env -f compose/docker-compose.yml
 CP_DIR := tofu/control-plane
 APP_DIR := tofu/app-randomquotes
 AGENT_DIR := tofu/k8s-agent
@@ -34,14 +26,12 @@ endef
         fmt validate apply destroy
 
 help:
-	@echo "compose/              : up | down | logs | ps | nuke      (override topology with MODE=ha)"
+	@echo "compose/              : up | down | logs | ps | nuke"
 	@echo "bootstrap             : master-key (first-time) | mint-api-key | reset (full rebuild)"
 	@echo "tofu/control-plane/   : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
 	@echo "tofu/app-randomquotes/: app-init | app-plan | app-apply | app-destroy | app-fmt | app-validate"
 	@echo "tofu/k8s-agent/       : agent-init | agent-plan | agent-apply | agent-destroy | agent-fmt | agent-validate"
 	@echo "convenience           : fmt (all) | validate (all) | apply (cp,app,agent) | destroy (rev)"
-	@echo ""
-	@echo "Current MODE=$(MODE) → COMPOSE_FILE=$(COMPOSE_FILE)"
 
 # --- compose/ -------------------------------------------------------------
 
@@ -63,11 +53,7 @@ down:
 	$(COMPOSE) down
 
 logs:
-ifeq ($(MODE),ha)
-	$(COMPOSE) logs -f
-else
 	$(COMPOSE) logs -f octopus
-endif
 
 ps:
 	$(COMPOSE) ps
