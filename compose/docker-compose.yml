@@ -1,10 +1,14 @@
-# Local Octopus Server sandbox. Apple Silicon: both images are amd64,
-# enable Docker Desktop → Settings → General → "Use Rosetta" for native-ish speed.
-# Host port 8090 to avoid clashing with the local ArgoCD port-forward on 8080.
+# HA topology: two Octopus Server nodes sharing one SQL DB and one set of
+# named volumes, fronted by an nginx LB doing both HTTP and TCP (Halibut)
+# load balancing. Project name pinned to "selfhost-setup" so volumes are
+# the same as docker-compose.yml — switching MODE between runs preserves
+# DB + filesystem state. Only one mode runs at a time (host ports clash).
+#
+# Single-host HA caveat: this works because both Octopus nodes hit the
+# same Linux kernel, so fcntl/flock advisory locks behave correctly across
+# the shared volumes. Across multiple hosts you'd swap the named volumes
+# for NFS / EFS / Azure Files.
 
-# Pinned project name so containers + named volumes stay stable regardless of
-# where this file lives on disk. Kept as "selfhost-setup" — the original parent
-# folder before this compose moved here — so existing volumes keep being used.
 name: selfhost-setup
 
 services:
@@ -24,7 +28,7 @@ services:
     volumes:
       - mssql-data:/var/opt/mssql
 
-  octopus:
+  octopus-1:
     image: octopusdeploy/octopusdeploy:latest
     platform: linux/amd64
     depends_on:
@@ -35,21 +39,66 @@ services:
       DB_CONNECTION_STRING: "Server=db,1433;Database=OctopusDeploy;User=sa;Password=Octop@s!Sandb0x;TrustServerCertificate=True"
       ADMIN_USERNAME: "admin"
       ADMIN_PASSWORD: "Password01!"
-      OCTOPUS_SERVER_NODE_NAME: "OctopusServer"
+      OCTOPUS_SERVER_NODE_NAME: "OctopusNode1"
       MASTER_KEY: "${MASTER_KEY}"
-      # If set, install.sh runs `Octopus.Server license --licenseBase64=…` on
-      # boot. Empty = skip (paste in UI). The Makefile's `up` target encodes
-      # compose/license.xml on the fly when it exists, so this stays empty
-      # unless explicitly overridden.
       OCTOPUS_SERVER_BASE64_LICENSE: "${OCTOPUS_SERVER_BASE64_LICENSE:-}"
-    ports:
-      - "8090:8080"      # HTTP API + UI
-      - "10943:10943"    # Halibut — Polling Tentacle / K8s Agent comms (TLS)
-      - "8443:8443"      # gRPC — Kubernetes Monitor (KLOS), enable when needed
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
     volumes:
       - octopus-repository:/repository
       - octopus-artifacts:/artifacts
       - octopus-tasklogs:/taskLogs
+
+  # Second node waits for octopus-1 to be healthy so first-boot DB migrations
+  # and master-key setup finish on a single node before the second joins.
+  octopus-2:
+    image: octopusdeploy/octopusdeploy:latest
+    platform: linux/amd64
+    depends_on:
+      db:
+        condition: service_healthy
+      octopus-1:
+        condition: service_healthy
+    environment:
+      ACCEPT_EULA: "Y"
+      DB_CONNECTION_STRING: "Server=db,1433;Database=OctopusDeploy;User=sa;Password=Octop@s!Sandb0x;TrustServerCertificate=True"
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "Password01!"
+      OCTOPUS_SERVER_NODE_NAME: "OctopusNode2"
+      MASTER_KEY: "${MASTER_KEY}"
+      # Skip licence apply on the second node — node 1 already did it.
+      OCTOPUS_SERVER_BASE64_LICENSE: ""
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    volumes:
+      - octopus-repository:/repository
+      - octopus-artifacts:/artifacts
+      - octopus-tasklogs:/taskLogs
+
+  # nginx with the `stream` module — load-balances HTTP (8090) and TCP
+  # (Halibut on 10943, KLOS gRPC on 8443). Both modules ship in the
+  # standard nginx:alpine image.
+  lb:
+    image: nginx:alpine
+    depends_on:
+      octopus-1:
+        condition: service_healthy
+      octopus-2:
+        condition: service_healthy
+    ports:
+      - "8090:80"        # HTTP API + UI (load-balanced round-robin)
+      - "10943:10943"    # Halibut polling (TCP load-balanced)
+      - "8443:8443"      # KLOS gRPC (TCP load-balanced)
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
 
 volumes:
   mssql-data:

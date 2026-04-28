@@ -3,13 +3,10 @@
 
 SHELL := /bin/bash
 
-# MODE switches the compose topology. Default = single-node. `MODE=ha` selects
-# the HA file (db + octopus-1 + octopus-2 + nginx LB). Both modes use the same
-# project name and named volumes, so DB + filesystem state survives flipping
-# between them — but only one mode runs at a time (host ports clash).
-MODE ?= single
-COMPOSE_FILE := compose/docker-compose$(if $(filter ha,$(MODE)),.ha,).yml
-COMPOSE := docker compose --env-file .env -f $(COMPOSE_FILE)
+# Single source of truth. The compose stack is HA: two Octopus nodes share
+# named volumes + DB, fronted by an nginx LB.
+COMPOSE := docker compose --env-file .env -f compose/docker-compose.yml
+COMPOSE_PROJECT := selfhost-setup
 
 CP_DIR := tofu/control-plane
 APP_DIR := tofu/app-randomquotes
@@ -34,14 +31,12 @@ endef
         fmt validate apply destroy
 
 help:
-	@echo "compose/              : up | down | logs | ps | nuke      (override topology with MODE=ha)"
+	@echo "compose/              : up | down | logs | ps | nuke      (HA: db + 2 octopus nodes + nginx LB)"
 	@echo "bootstrap             : master-key (first-time) | mint-api-key | reset (full rebuild)"
 	@echo "tofu/control-plane/   : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
 	@echo "tofu/app-randomquotes/: app-init | app-plan | app-apply | app-destroy | app-fmt | app-validate"
 	@echo "tofu/k8s-agent/       : agent-init | agent-plan | agent-apply | agent-destroy | agent-fmt | agent-validate"
 	@echo "convenience           : fmt (all) | validate (all) | apply (cp,app,agent) | destroy (rev)"
-	@echo ""
-	@echo "Current MODE=$(MODE) → COMPOSE_FILE=$(COMPOSE_FILE)"
 
 # --- compose/ -------------------------------------------------------------
 
@@ -63,11 +58,7 @@ down:
 	$(COMPOSE) down
 
 logs:
-ifeq ($(MODE),ha)
 	$(COMPOSE) logs -f
-else
-	$(COMPOSE) logs -f octopus
-endif
 
 ps:
 	$(COMPOSE) ps
@@ -208,8 +199,12 @@ reset:
 	@until ! kubectl get ns octopus-agent-docker-desktop 2>/dev/null | grep -q Terminating; do printf '.'; sleep 2; done; echo
 	@echo "==> remove tofu state"
 	rm -f $(CP_DIR)/terraform.tfstate* $(APP_DIR)/terraform.tfstate* $(AGENT_DIR)/terraform.tfstate*
-	@echo "==> wipe compose volumes"
-	$(COMPOSE) down -v
+	@echo "==> wipe compose volumes (project-scoped — also catches orphans from prior runs)"
+	-$(COMPOSE) down -v --remove-orphans
+	@echo "==> belt-and-suspenders: anything labelled with the compose project goes"
+	-@docker ps -a --filter label=com.docker.compose.project=$(COMPOSE_PROJECT) -q | xargs -r docker rm -f
+	-@docker volume ls --filter label=com.docker.compose.project=$(COMPOSE_PROJECT) -q | xargs -r docker volume rm
+	-@docker network ls --filter label=com.docker.compose.project=$(COMPOSE_PROJECT) -q | xargs -r docker network rm
 	@echo "==> boot fresh Octopus (licence auto-applies via OCTOPUS_SERVER_BASE64_LICENSE)"
 	$(MAKE) up
 	@echo "==> wait for API"
