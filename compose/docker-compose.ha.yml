@@ -1,0 +1,107 @@
+# HA topology: two Octopus Server nodes sharing one SQL DB and one set of
+# named volumes, fronted by an nginx LB doing both HTTP and TCP (Halibut)
+# load balancing. Project name pinned to "selfhost-setup" so volumes are
+# the same as docker-compose.yml — switching MODE between runs preserves
+# DB + filesystem state. Only one mode runs at a time (host ports clash).
+#
+# Single-host HA caveat: this works because both Octopus nodes hit the
+# same Linux kernel, so fcntl/flock advisory locks behave correctly across
+# the shared volumes. Across multiple hosts you'd swap the named volumes
+# for NFS / EFS / Azure Files.
+
+name: selfhost-setup
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Octop@s!Sandb0x"
+      MSSQL_PID: "Developer"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Octop@s!Sandb0x' -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    volumes:
+      - mssql-data:/var/opt/mssql
+
+  octopus-1:
+    image: octopusdeploy/octopusdeploy:latest
+    platform: linux/amd64
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ACCEPT_EULA: "Y"
+      DB_CONNECTION_STRING: "Server=db,1433;Database=OctopusDeploy;User=sa;Password=Octop@s!Sandb0x;TrustServerCertificate=True"
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "Password01!"
+      OCTOPUS_SERVER_NODE_NAME: "OctopusNode1"
+      MASTER_KEY: "${MASTER_KEY}"
+      OCTOPUS_SERVER_BASE64_LICENSE: "${OCTOPUS_SERVER_BASE64_LICENSE:-}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    volumes:
+      - octopus-repository:/repository
+      - octopus-artifacts:/artifacts
+      - octopus-tasklogs:/taskLogs
+
+  # Second node waits for octopus-1 to be healthy so first-boot DB migrations
+  # and master-key setup finish on a single node before the second joins.
+  octopus-2:
+    image: octopusdeploy/octopusdeploy:latest
+    platform: linux/amd64
+    depends_on:
+      db:
+        condition: service_healthy
+      octopus-1:
+        condition: service_healthy
+    environment:
+      ACCEPT_EULA: "Y"
+      DB_CONNECTION_STRING: "Server=db,1433;Database=OctopusDeploy;User=sa;Password=Octop@s!Sandb0x;TrustServerCertificate=True"
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "Password01!"
+      OCTOPUS_SERVER_NODE_NAME: "OctopusNode2"
+      MASTER_KEY: "${MASTER_KEY}"
+      # Skip licence apply on the second node — node 1 already did it.
+      OCTOPUS_SERVER_BASE64_LICENSE: ""
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    volumes:
+      - octopus-repository:/repository
+      - octopus-artifacts:/artifacts
+      - octopus-tasklogs:/taskLogs
+
+  # nginx with the `stream` module — load-balances HTTP (8090) and TCP
+  # (Halibut on 10943, KLOS gRPC on 8443). Both modules ship in the
+  # standard nginx:alpine image.
+  lb:
+    image: nginx:alpine
+    depends_on:
+      octopus-1:
+        condition: service_healthy
+      octopus-2:
+        condition: service_healthy
+    ports:
+      - "8090:80"        # HTTP API + UI (load-balanced round-robin)
+      - "10943:10943"    # Halibut polling (TCP load-balanced)
+      - "8443:8443"      # KLOS gRPC (TCP load-balanced)
+    volumes:
+      - ./nginx-ha.conf:/etc/nginx/nginx.conf:ro
+
+volumes:
+  mssql-data:
+  octopus-repository:
+  octopus-artifacts:
+  octopus-tasklogs:
