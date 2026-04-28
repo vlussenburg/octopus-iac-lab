@@ -1,6 +1,11 @@
-output "project_url" {
-  value       = "${var.octopus_url}/app#/${octopusdeploy_project.lab.space_id}/projects/${octopusdeploy_project.lab.id}/deployments/process"
-  description = "Open the CaC project in the Octopus UI."
+# Outputs that the app stack (../app-randomquotes/) consumes via terraform_remote_state.
+
+output "octopus_url" {
+  value = var.octopus_url
+}
+
+output "space_id" {
+  value = var.octopus_space
 }
 
 output "environment_ids" {
@@ -12,6 +17,10 @@ output "environment_ids" {
 
 output "lifecycle_id" {
   value = octopusdeploy_lifecycle.dev_to_production.id
+}
+
+output "project_group_id" {
+  value = octopusdeploy_project_group.iac_lab.id
 }
 
 output "git_credential_id" {

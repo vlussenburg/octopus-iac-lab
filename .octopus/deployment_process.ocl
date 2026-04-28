@@ -1,0 +1,65 @@
+step "deploy-k8s-manifests" {
+    name = "Deploy K8s Manifests"
+    properties = {
+        Octopus.Action.TargetRoles = "k8s"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesDeployRawYaml"
+        properties = {
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                apiVersion: v1
+                kind: Namespace
+                metadata:
+                  name: randomquotes
+                ---
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: randomquotes
+                  namespace: randomquotes
+                  labels:
+                    app: randomquotes
+                spec:
+                  replicas: 2
+                  selector:
+                    matchLabels:
+                      app: randomquotes
+                  template:
+                    metadata:
+                      labels:
+                        app: randomquotes
+                    spec:
+                      containers:
+                        - name: randomquotes
+                          image: octopussamples/randomquotes-k8s:latest
+                          ports:
+                            - containerPort: 80
+                          resources:
+                            requests:
+                              cpu: "100m"
+                              memory: "64Mi"
+                            limits:
+                              cpu: "250m"
+                              memory: "128Mi"
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: randomquotes
+                  namespace: randomquotes
+                spec:
+                  type: LoadBalancer
+                  selector:
+                    app: randomquotes
+                  ports:
+                    - protocol: TCP
+                      port: 80
+                      targetPort: 80
+                EOT
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptSource = "Inline"
+        }
+    }
+}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Random Quotes</title>
+  <style>
+    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
+    .card { max-width: 600px; padding: 2rem; text-align: center; }
+    blockquote { font-size: 1.5rem; font-style: italic; margin: 0 0 1rem; }
+    cite { color: #aaa; }
+    button { margin-top: 1.5rem; padding: 0.6rem 1.5rem; background: #e94560; border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+    button:hover { background: #c73652; }
+    footer { margin-top: 2rem; font-size: 0.75rem; color: #555; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <blockquote id="quote"></blockquote>
+    <cite id="author"></cite>
+    <br>
+    <button onclick="next()">Next quote</button>
+    <footer id="version"></footer>
+  </div>
+  <script>
+    const quotes = [
+      { q: "If it hurts, do it more frequently, and bring the pain forward.", a: "Jez Humble"},
+      { q: "The goal is to deploy so often that deployment becomes boring.", a: "Charity Majors"},
+      { q: "The best way to predict the future is to invent it.", a: "Alan Kay" },
+      { q: "The real problem is that the way the internet is going to affect society, both good and bad, is just going to happen and most people won't see it coming.", a: "Marvin Minsky" },
+      { q: "Machine intelligence is the last invention that humanity will ever need to make.", a: "Nick Bostrom"},
+      { q: "Any fool can write code that a computer can understand. Good programmers write code that humans can understand.", a: "Martin Fowler" },
+      { q: "First, solve the problem. Then, write the code.", a: "John Johnson" },
+      { q: "Simplicity is the soul of efficiency.", a: "Austin Freeman" },
+      { q: "Make it work, make it right, make it fast.", a: "Kent Beck" },
+      { q: "Programs must be written for people to read, and only incidentally for machines to execute.", a: "Harold Abelson" },
+      { q: "The most powerful tool we have as developers is automation.", a: "Scott Hanselman" },
+      { q: "Continuous delivery is not a technology problem. It's an organizational one.", a: "Jez Humble" },
+    ];
+    let i = Math.floor(Math.random() * quotes.length);
+    function next() { i = (i + 1) % quotes.length; render(); }
+    function render() {
+      document.getElementById("quote").textContent = `"${quotes[i].q}"`;
+      document.getElementById("author").textContent = `— ${quotes[i].a}`;
+    }
+    document.getElementById("version").textContent = `v${window.APP_VERSION || "dev"}`;
+    render();
+  </script>
+</body>
+</html>
