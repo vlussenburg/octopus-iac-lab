@@ -34,8 +34,7 @@ variable "octopus_polling_url_from_cluster" {
 
 variable "agent_target_name" {
   type        = string
-  description = "Name of the deployment target Octopus registers for this agent."
-  default     = "docker-desktop"
+  description = "Name of the deployment target Octopus registers for this agent. Auto-derived from OCTOPUS_URL by the Makefile — octopus-tentacle-{local,saas}."
 }
 
 variable "agent_chart_version" {
