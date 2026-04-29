@@ -62,8 +62,8 @@ ps:
 	$(COMPOSE) ps
 
 nuke:
-	@read -p "This deletes the local Octopus DB. Continue? [y/N] " ans && [ "$$ans" = "y" ]
-	$(COMPOSE) down -v
+	@read -p "This deletes the local Octopus DB. Continue? [y/N] " ans && [ "$$ans" = "y" ] || [ "$$ans" = "yes" ]
+	$(COMPOSE) down -v --remove-orphans
 
 # --- tofu/control-plane/ --------------------------------------------------
 
@@ -207,7 +207,7 @@ mint-api-key:
 # provider caches, defaults.auto.tfvars, OCL files in .octopus/.
 reset:
 	@echo "==> WARNING: full reset destroys local Octopus DB, K8s agent state, and tofu state."
-	@read -p "    Continue? [y/N] " ans && [ "$$ans" = "y" ] || { echo "aborted"; exit 1; }
+	@read -p "    Continue? [y/N] " ans && [ "$$ans" = "y" ] || [ "$$ans" = "yes" ] || { echo "aborted"; exit 1; }
 	@echo "==> uninstall helm releases (ignore errors if absent)"
 	-@helm uninstall docker-desktop -n octopus-agent-docker-desktop 2>/dev/null
 	-@helm uninstall csi-driver-nfs -n kube-system 2>/dev/null
@@ -217,12 +217,14 @@ reset:
 	@until ! kubectl get ns octopus-agent-docker-desktop 2>/dev/null | grep -q Terminating; do printf '.'; sleep 2; done; echo
 	@echo "==> remove tofu state"
 	rm -f $(CP_DIR)/terraform.tfstate* $(PH_DIR)/terraform.tfstate* $(APP_DIR)/terraform.tfstate* $(AGENT_DIR)/terraform.tfstate*
-	@echo "==> wipe compose volumes"
-	$(COMPOSE) down -v
+	@echo "==> wipe compose volumes (--remove-orphans catches containers from a different topology, e.g. switching HA → single-node)"
+	$(COMPOSE) down -v --remove-orphans
 	@echo "==> boot fresh Octopus (licence auto-applies via OCTOPUS_SERVER_BASE64_LICENSE)"
 	$(MAKE) up
 	@echo "==> wait for API"
 	@until curl -sf http://localhost:8090/api > /dev/null 2>&1; do printf '.'; sleep 5; done; echo " up"
+	@echo "==> mint a fresh API key (the old one in .env is invalid after the DB wipe)"
 	$(MAKE) mint-api-key
-	$(MAKE) apply
+	@echo "==> apply all stacks (TF_CLI_ARGS_apply=-auto-approve so the inner applies don't prompt)"
+	TF_CLI_ARGS_apply=-auto-approve $(MAKE) apply
 	@echo "==> reset complete — agent should report Healthy within ~30s"
