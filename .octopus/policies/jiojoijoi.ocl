@@ -1,0 +1,18 @@
+name = "jiojoijoi"
+violation_action = "block"
+
+conditions {
+    rego = <<-EOT
+            package jiojoijoi
+            
+            default result := {"allowed": true}
+            EOT
+}
+
+scope {
+    rego = <<-EOT
+            package jiojoijoi
+            
+            default evaluate := true
+            EOT
+}
