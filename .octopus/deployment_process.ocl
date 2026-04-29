@@ -57,7 +57,7 @@ step "deploy-k8s-manifests" {
                     - protocol: TCP
                       port: 80
                       targetPort: 80
-                                EOT
+                                    EOT
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
         }
