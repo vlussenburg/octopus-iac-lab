@@ -2,14 +2,14 @@
 # lifecycle of this resource flips it to true before issuing DELETE — that's
 # the precondition Octopus enforces.
 #
-# `space_managers_teams = ["teams-administrators"]` makes the system Octopus
-# Administrators team a manager. That team contains whoever owns the API key
-# we're using, so the same person who creates the Space stays a manager of it
-# without any per-instance user lookup.
+# Both system teams as Space managers because the API key user lives in a
+# different team depending on the target: local self-host puts the bootstrap
+# user in `teams-administrators`; SaaS puts the customer in `teams-managers`.
+# Listing both works on both targets — the empty team is a no-op.
 resource "octopusdeploy_space" "this" {
   name                  = var.space_name
   description           = var.space_description
   is_default            = false
   is_task_queue_stopped = false
-  space_managers_teams  = ["teams-administrators"]
+  space_managers_teams  = ["teams-administrators", "teams-managers"]
 }
