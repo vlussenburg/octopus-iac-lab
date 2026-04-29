@@ -54,6 +54,45 @@ After `make app-apply`, the deployment process in [`.octopus/deployment_process.
 - **Agent → Octopus**: admin API key as Bearer (Octopus accepts API keys for `Authorization: Bearer`). Localhost-lab choice; for anything real, scope a service account.
 - **Stale API key recovery**: `make apply` and `make destroy` first probe `OCTOPUS_API_KEY` against `/api/users/me`. If rejected on local, the Makefile mints a fresh key and updates `.env`. On SaaS it fails with a UI link — SaaS keys can't be minted programmatically without a browser session.
 
+## Deploys
+
+Deploys come from CI ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)). Push to `main` → image built and pushed to GHCR → release created on each Octopus and deployed to `Dev`. Promotion to `Production` is a manual step in the Octopus UI.
+
+The workflow fans out via a job matrix to two targets — **SaaS** and **Local** — using one set of secrets each:
+
+| Secret | Value |
+|---|---|
+| `OCTOPUS_SAAS_URL` | `https://<id>.octopus.app` |
+| `OCTOPUS_SAAS_API_KEY` | API key on that SaaS instance |
+| `OCTOPUS_LOCAL_URL` | Public URL for the local Octopus (see below). Empty → local job is cleanly skipped. |
+| `OCTOPUS_LOCAL_API_KEY` | API key on the local Octopus |
+
+The local target is `continue-on-error: true` — if the tunnel's down or the secrets are blank, the SaaS deploy still succeeds and the pipeline reports the local leg as a non-fatal warning.
+
+### Exposing local Octopus to GitHub Actions
+
+Local Octopus runs on `localhost:8090`, which GitHub Actions runners can't reach. **Cloudflare Tunnel** is the cleanest solution — free, stable URL on your own domain, automatic TLS:
+
+```bash
+brew install cloudflared
+cloudflared tunnel login                                          # picks the Cloudflare zone for your domain
+cloudflared tunnel create octopus-iac-lab
+cloudflared tunnel route dns octopus-iac-lab octopus.example.com
+cat > ~/.cloudflared/config.yml <<EOF
+tunnel: octopus-iac-lab
+credentials-file: $HOME/.cloudflared/<UUID>.json
+ingress:
+  - hostname: octopus.example.com
+    service: http://localhost:8090
+  - service: http_status:404
+EOF
+cloudflared tunnel run octopus-iac-lab
+```
+
+Set `OCTOPUS_LOCAL_URL=https://octopus.example.com` in GitHub Actions secrets once. CI deploys to local whenever the tunnel is up; the local matrix leg is skipped (with a warning) when it's not. Halibut polling (`:10943`) is still over the docker-desktop loopback; the tunnel is only for the API path GHA needs.
+
+Alternative: **Tailscale Funnel** (free, but URL is `<host>.<tailnet>.ts.net`, no custom domain).
+
 ## Wiping the lab
 
 Two scopes — pick what you want gone.

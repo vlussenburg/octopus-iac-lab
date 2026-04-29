@@ -28,7 +28,7 @@ endef
 
 .PHONY: help \
         up down logs ps nuke \
-        master-key mint-api-key ensure-api-key release \
+        master-key mint-api-key ensure-api-key \
         space-init space-plan space-apply space-destroy space-fmt space-validate \
         cp-init cp-plan cp-apply cp-destroy cp-fmt cp-validate \
         ph-init ph-plan ph-apply ph-destroy ph-fmt ph-validate \
@@ -39,7 +39,7 @@ endef
 help:
 	@echo "compose/              : up | down | logs | ps | nuke      (local self-host only)"
 	@echo "bootstrap             : master-key (first-time) | mint-api-key (local-only)"
-	@echo "deploy                : release [VERSION=1.0.42]      (create + deploy a release; CI-built image in GHCR)"
+	@echo "deploys come from CI: push to main on github → .github/workflows/deploy.yml"
 	@echo "tofu/space/           : space-init | space-plan | space-apply | space-destroy | space-fmt | space-validate"
 	@echo "tofu/control-plane/   : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
 	@echo "tofu/platform-hub/    : ph-init | ph-plan | ph-apply | ph-destroy | ph-fmt | ph-validate"
@@ -234,34 +234,6 @@ mint-api-key:
 		echo "OCTOPUS_API_KEY=$$KEY" >> .env; \
 	fi; \
 	echo "OCTOPUS_API_KEY written to .env (purpose=\"make mint-api-key\")"
-
-# Create a release of the randomquotes project on this worktree's Octopus
-# and deploy it to Dev. Release number = image tag — Octopus templates
-# `#{Octopus.Release.Number}` into the manifest's image string at deploy
-# time, so VERSION must already exist in GHCR. CI builds versions like
-# 1.0.<run#>; for an ad-hoc local release of an existing CI build, just
-# pass VERSION=1.0.<n>.
-release: ensure-api-key
-	@$(load_env) \
-	  VERSION="$${VERSION:-0.0.local.$$(date +%s)}"; \
-	  echo "==> create release $$VERSION on $$OCTOPUS_URL (space: iac-sandbox)"; \
-	  PROJECT_ID=$$(curl -sf -H "X-Octopus-ApiKey: $$OCTOPUS_API_KEY" \
-	    "$$OCTOPUS_URL/api/iac-sandbox/projects/randomquotes" | jq -r .Id); \
-	  RELEASE_ID=$$(curl -sf -H "X-Octopus-ApiKey: $$OCTOPUS_API_KEY" \
-	    -H "Content-Type: application/json" -X POST \
-	    -d "{\"ProjectId\":\"$$PROJECT_ID\",\"Version\":\"$$VERSION\"}" \
-	    "$$OCTOPUS_URL/api/iac-sandbox/releases" | jq -r .Id); \
-	  [ -n "$$RELEASE_ID" ] && [ "$$RELEASE_ID" != "null" ] || { echo "release create failed"; exit 1; }; \
-	  echo "    release: $$RELEASE_ID"; \
-	  echo "==> deploy to Dev"; \
-	  DEV_ID=$$(curl -sf -H "X-Octopus-ApiKey: $$OCTOPUS_API_KEY" \
-	    "$$OCTOPUS_URL/api/iac-sandbox/environments?partialName=Dev" \
-	    | jq -r '.Items[] | select(.Name == "Dev") | .Id'); \
-	  TASK_ID=$$(curl -sf -H "X-Octopus-ApiKey: $$OCTOPUS_API_KEY" \
-	    -H "Content-Type: application/json" -X POST \
-	    -d "{\"ReleaseId\":\"$$RELEASE_ID\",\"EnvironmentId\":\"$$DEV_ID\"}" \
-	    "$$OCTOPUS_URL/api/iac-sandbox/deployments" | jq -r .TaskId); \
-	  echo "    task: $$TASK_ID — follow at $$OCTOPUS_URL/app#/iac-sandbox/tasks/$$TASK_ID"
 
 # Probe the current OCTOPUS_API_KEY against /api/users/me. If unauthorised:
 #   - local: silently mint a fresh key (admin/Password01! login still works
