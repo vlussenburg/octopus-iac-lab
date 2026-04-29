@@ -59,38 +59,41 @@ jobs:
             ${{ env.IMAGE }}:latest
           build-args: VERSION=${{ steps.version.outputs.version }}
 
-  release:
-    name: Release → ${{ matrix.target }}
+  release-saas:
+    name: Release → SaaS
     runs-on: ubuntu-latest
     needs: build
     if: github.ref == 'refs/heads/main'
-    # Local target is allowed to fail (the tunnel may be down). SaaS isn't.
-    continue-on-error: ${{ matrix.allow_failure }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: SaaS
-            url: ${{ secrets.OCTOPUS_SAAS_URL }}
-            api_key: ${{ secrets.OCTOPUS_SAAS_API_KEY }}
-            allow_failure: false
-          - target: Local
-            url: ${{ secrets.OCTOPUS_LOCAL_URL }}
-            api_key: ${{ secrets.OCTOPUS_LOCAL_API_KEY }}
-            allow_failure: true
     env:
-      OCTOPUS_URL: ${{ matrix.url }}
-      OCTOPUS_API_KEY: ${{ matrix.api_key }}
+      OCTOPUS_URL: ${{ secrets.OCTOPUS_SAAS_URL }}
+      OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_SAAS_API_KEY }}
     steps:
-      # Skip cleanly if the local secrets aren't set — typical when the
-      # cloudflared tunnel isn't running and the user hasn't bothered to
-      # populate the local secrets yet.
-      - name: Skip if URL is unset
-        if: matrix.url == ''
-        run: |
-          echo "::warning::OCTOPUS_${{ matrix.target == 'Local' && 'LOCAL' || 'SAAS' }}_URL secret is empty — skipping ${{ matrix.target }}"
-          exit 78  # neutral exit; pairs with continue-on-error for clean "skipped" status
+      - name: Create release
+        id: create_release
+        uses: OctopusDeploy/create-release-action@v3
+        with:
+          project: ${{ env.PROJECT }}
+          release_number: ${{ needs.build.outputs.version }}
 
+      - name: Deploy to Dev
+        uses: OctopusDeploy/deploy-release-action@v3
+        with:
+          project: ${{ env.PROJECT }}
+          release_number: ${{ steps.create_release.outputs.release_number }}
+          environments: Dev
+
+  release-local:
+    name: Release → Local
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    # Tunnel may be down, secret may be empty, the agent on Docker Desktop
+    # may be off. Don't fail the overall pipeline because of that.
+    continue-on-error: true
+    env:
+      OCTOPUS_URL: ${{ secrets.OCTOPUS_LOCAL_URL }}
+      OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_LOCAL_API_KEY }}
+    steps:
       - name: Create release
         id: create_release
         uses: OctopusDeploy/create-release-action@v3
