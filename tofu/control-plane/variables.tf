@@ -11,8 +11,14 @@ variable "octopus_api_key" {
 
 variable "github_pat" {
   type        = string
-  description = "GitHub Personal Access Token (classic, repo scope) used by Octopus to read/write CaC OCL files."
+  description = "GitHub Personal Access Token. Used by Octopus to read/write CaC OCL files (repo scope) and pull container images from GHCR (read:packages scope)."
   sensitive   = true
+}
+
+variable "github_username" {
+  type        = string
+  description = "GitHub username paired with the PAT. Anything works for PAT auth on the CaC credential, but GHCR pulls require the actual username."
+  default     = "vlussenburg"
 }
 
 variable "cac_repo_url" {

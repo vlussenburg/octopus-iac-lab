@@ -19,3 +19,8 @@ output "project_group_id" {
 output "git_credential_id" {
   value = octopusdeploy_git_credential.github_pat.id
 }
+
+output "ghcr_feed_id" {
+  value       = octopusdeploy_docker_container_registry.ghcr.id
+  description = "Octopus feed ID for GHCR. Referenced by the deployment process's image package reference."
+}

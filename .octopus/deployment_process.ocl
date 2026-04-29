@@ -33,7 +33,7 @@ step "deploy-k8s-manifests" {
                     spec:
                       containers:
                         - name: randomquotes
-                          image: octopussamples/randomquotes-k8s:latest
+                          image: ghcr.io/vlussenburg/octopus-iac-lab:#{Octopus.Release.Number}
                           ports:
                             - containerPort: 80
                           resources:

@@ -7,7 +7,11 @@
 # user in `teams-administrators`; SaaS puts the customer in `teams-managers`.
 # Listing both works on both targets — the empty team is a no-op.
 resource "octopusdeploy_space" "this" {
-  name                  = var.space_name
+  name = var.space_name
+  # Pin the slug — it's the stable interface CI references (the auto-generated
+  # `Spaces-N` ID increments every destroy/recreate). Renaming the Space won't
+  # invalidate GHA secrets when the slug is locked here.
+  slug                  = "iac-sandbox"
   description           = var.space_description
   is_default            = false
   is_task_queue_stopped = false

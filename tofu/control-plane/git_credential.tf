@@ -4,6 +4,6 @@ resource "octopusdeploy_git_credential" "github_pat" {
   name        = "GitHub PAT (octopus-iac-lab)"
   description = "Personal access token used by Octopus for Config-as-Code."
   type        = "UsernamePassword"
-  username    = "vlussenburg"
+  username    = var.github_username
   password    = var.github_pat
 }
