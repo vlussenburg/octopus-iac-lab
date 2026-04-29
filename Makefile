@@ -28,7 +28,7 @@ endef
 
 .PHONY: help \
         up down logs ps nuke \
-        master-key mint-api-key reset \
+        master-key mint-api-key ensure-api-key \
         space-init space-plan space-apply space-destroy space-fmt space-validate \
         cp-init cp-plan cp-apply cp-destroy cp-fmt cp-validate \
         ph-init ph-plan ph-apply ph-destroy ph-fmt ph-validate \
@@ -38,7 +38,7 @@ endef
 
 help:
 	@echo "compose/              : up | down | logs | ps | nuke      (local self-host only)"
-	@echo "bootstrap             : master-key (first-time) | mint-api-key | reset (full rebuild)"
+	@echo "bootstrap             : master-key (first-time) | mint-api-key (local-only)"
 	@echo "tofu/space/           : space-init | space-plan | space-apply | space-destroy | space-fmt | space-validate"
 	@echo "tofu/control-plane/   : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
 	@echo "tofu/platform-hub/    : ph-init | ph-plan | ph-apply | ph-destroy | ph-fmt | ph-validate"
@@ -182,24 +182,25 @@ validate: space-validate cp-validate ph-validate app-validate agent-validate
 
 # Apply order: space → cp → ph → app → agent. Every downstream stack reads
 # space_id from tofu/space/ via terraform_remote_state, so space must apply
-# first. App reads cp outputs too.
-apply: space-apply cp-apply ph-apply app-apply agent-apply
+# first. App reads cp outputs too. ensure-api-key runs first so a stale token
+# (e.g. after a local DB wipe) is auto-recovered before any tofu work starts.
+apply: ensure-api-key space-apply cp-apply ph-apply app-apply agent-apply
 
 # Destroy in reverse — agent first, space last. Destroying space cascades on
 # the Octopus side (deleting the Space removes all child resources), but the
 # *terraform state* of downstream stacks still references those resources, so
 # we destroy them in dependency order to keep state coherent.
-destroy: agent-destroy app-destroy ph-destroy cp-destroy space-destroy
+destroy: ensure-api-key agent-destroy app-destroy ph-destroy cp-destroy space-destroy
 
 # --- bootstrap helpers ----------------------------------------------------
 
 # Generate a fresh 32-byte MASTER_KEY into .env. First-time setup only —
 # refuses to overwrite an existing key (would orphan any data encrypted with
-# the old one). Run `make reset` if you really want a clean slate.
+# the old one). To start fresh, see the manual wipe steps in README.md.
 master-key:
 	@CURRENT=$$(grep '^MASTER_KEY=' .env 2>/dev/null | cut -d= -f2-); \
 	if [ -n "$$CURRENT" ] && [ "$$CURRENT" != "CHANGE_ME" ]; then \
-		echo "MASTER_KEY already set in .env. Refusing to overwrite — run 'make reset' for a clean slate."; \
+		echo "MASTER_KEY already set in .env. Refusing to overwrite — see manual wipe steps in README.md."; \
 		exit 1; \
 	fi; \
 	KEY=$$(openssl rand -base64 32); \
@@ -211,8 +212,8 @@ master-key:
 	echo "MASTER_KEY generated."
 
 # Log in as admin (admin/Password01!) and mint a fresh API key, write it to
-# .env. Idempotent — old keys aren't revoked. Useful both for first-time
-# setup and after `make reset`.
+# .env. Idempotent — old keys aren't revoked. Local self-host only; SaaS API
+# keys must be minted in the UI (no admin/password to log in with).
 mint-api-key:
 	@COOKIE=$$(mktemp); \
 	curl -sf -c "$$COOKIE" -X POST -H "Content-Type: application/json" \
@@ -233,36 +234,25 @@ mint-api-key:
 	fi; \
 	echo "OCTOPUS_API_KEY written to .env (purpose=\"make mint-api-key\")"
 
-# Full server-side reset. Wipes Helm releases, K8s namespace, tofu state,
-# and compose volumes; reboots Octopus (licence auto-applies); mints a fresh
-# API key; reapplies all three stacks; queues a target health check.
-#
-# Preserves: .env (incl. MASTER_KEY), GitHub repo, license.xml, .terraform/
-# provider caches, defaults.auto.tfvars, OCL files in .octopus/.
-reset:
-	@echo "==> WARNING: full reset destroys local Octopus DB, K8s agent state, and tofu state."
-	@read -p "    Continue? [y/N] " ans && [ "$$ans" = "y" ] || [ "$$ans" = "yes" ] || { echo "aborted"; exit 1; }
-	@echo "==> uninstall this worktree's helm release + the shared CSI driver (ignore errors if absent)"
-	@AGENT=$$(cd $(AGENT_DIR) && tofu output -raw agent_release_name 2>/dev/null); \
-	  NS=$$(cd $(AGENT_DIR) && tofu output -raw agent_namespace 2>/dev/null); \
-	  if [ -n "$$AGENT" ] && [ -n "$$NS" ]; then \
-	    helm uninstall $$AGENT -n $$NS 2>/dev/null || true; \
-	    echo "==> force-clean stuck pods + namespace (ignore errors)"; \
-	    kubectl -n $$NS delete pod --all --force --grace-period=0 2>/dev/null || true; \
-	    kubectl delete ns $$NS --ignore-not-found 2>/dev/null || true; \
-	    until ! kubectl get ns $$NS 2>/dev/null | grep -q Terminating; do printf '.'; sleep 2; done; echo; \
-	  fi; \
-	  helm uninstall csi-driver-nfs -n kube-system 2>/dev/null || true
-	@echo "==> remove tofu state"
-	rm -f $(SPACE_DIR)/terraform.tfstate* $(CP_DIR)/terraform.tfstate* $(PH_DIR)/terraform.tfstate* $(APP_DIR)/terraform.tfstate* $(AGENT_DIR)/terraform.tfstate*
-	@echo "==> wipe compose volumes (--remove-orphans catches containers from a different topology, e.g. switching HA → single-node)"
-	$(COMPOSE) down -v --remove-orphans
-	@echo "==> boot fresh Octopus (licence auto-applies via OCTOPUS_SERVER_BASE64_LICENSE)"
-	$(MAKE) up
-	@echo "==> wait for API"
-	@until curl -sf http://localhost:8090/api > /dev/null 2>&1; do printf '.'; sleep 5; done; echo " up"
-	@echo "==> mint a fresh API key (the old one in .env is invalid after the DB wipe)"
-	$(MAKE) mint-api-key
-	@echo "==> apply all stacks (TF_CLI_ARGS_apply=-auto-approve so the inner applies don't prompt)"
-	TF_CLI_ARGS_apply=-auto-approve $(MAKE) apply
-	@echo "==> reset complete — agent should report Healthy within ~30s"
+# Probe the current OCTOPUS_API_KEY against /api/users/me. If unauthorised:
+#   - local: silently mint a fresh key (admin/Password01! login still works
+#     after a DB wipe)
+#   - SaaS:  fail with a pointer to the UI, since we can't mint without a
+#     session
+# Apply / destroy depend on this so a stale token from `make nuke` (DB
+# rebuilt, .env still pointing at the old key) auto-recovers.
+ensure-api-key:
+	@$(load_env) \
+	  if curl -sf -o /dev/null -H "X-Octopus-ApiKey: $$OCTOPUS_API_KEY" "$$OCTOPUS_URL/api/users/me"; then \
+	    :; \
+	  else \
+	    case "$$OCTOPUS_URL" in \
+	      *octopus.app*) \
+	        echo "OCTOPUS_API_KEY rejected by $$OCTOPUS_URL."; \
+	        echo "Mint a new one at $$OCTOPUS_URL/app#/users/me/apiKeys and update .env."; \
+	        exit 1 ;; \
+	      *) \
+	        echo "OCTOPUS_API_KEY rejected — local DB likely rebuilt. Minting fresh."; \
+	        $(MAKE) mint-api-key ;; \
+	    esac; \
+	  fi

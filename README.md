@@ -52,6 +52,25 @@ After `make app-apply`, the deployment process in [`.octopus/deployment_process.
 
 - **Octopus → GitHub (CaC)**: GitHub PAT with `repo` scope.
 - **Agent → Octopus**: admin API key as Bearer (Octopus accepts API keys for `Authorization: Bearer`). Localhost-lab choice; for anything real, scope a service account.
+- **Stale API key recovery**: `make apply` and `make destroy` first probe `OCTOPUS_API_KEY` against `/api/users/me`. If rejected on local, the Makefile mints a fresh key and updates `.env`. On SaaS it fails with a UI link — SaaS keys can't be minted programmatically without a browser session.
+
+## Wiping the lab
+
+Two scopes — pick what you want gone.
+
+- **Just the terraform-managed Octopus state** (envs, lifecycle, project, Platform Hub config, agent registration, K8s namespace + helm release): `make destroy`. Reverse chain runs through every stack and ends with the Space being deleted, which cascades on the Octopus side. Works identically against local self-host and SaaS.
+
+- **Plus the local Octopus DB itself** (master key, audit log, user accounts, the works):
+  ```bash
+  make destroy
+  make nuke    # docker compose down -v --remove-orphans
+  ```
+  The next `make up && make apply` runs against a fresh database. The previous API key in `.env` is now invalid against the new DB — `make apply`'s first step (`ensure-api-key`) detects that and re-mints automatically.
+
+- **Full cluster cleanup** (orphan CSI driver, leftover empty namespaces if any): the agent stack's destroy already removes its own namespace and pod. The shared NFS CSI driver is intentionally left running — it's installed via `helm upgrade --install` so it survives `make destroy` and serves any other agents on the cluster. Remove it explicitly when you're tearing the cluster down:
+  ```bash
+  helm uninstall csi-driver-nfs -n kube-system
+  ```
 
 ## Not in scope
 
