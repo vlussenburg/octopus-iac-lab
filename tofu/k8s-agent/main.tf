@@ -20,7 +20,14 @@ terraform {
 provider "octopusdeploy" {
   address  = var.octopus_url
   api_key  = var.octopus_api_key
-  space_id = var.octopus_space
+  space_id = data.terraform_remote_state.space.outputs.space_id
+}
+
+data "terraform_remote_state" "space" {
+  backend = "local"
+  config = {
+    path = "../space/terraform.tfstate"
+  }
 }
 
 # Both helm + kubernetes default to ~/.kube/config. Override the context if

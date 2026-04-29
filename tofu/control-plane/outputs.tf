@@ -1,12 +1,5 @@
-# Outputs that the app stack (../app-randomquotes/) consumes via terraform_remote_state.
-
-output "octopus_url" {
-  value = var.octopus_url
-}
-
-output "space_id" {
-  value = var.octopus_space
-}
+# Outputs the app stack (../app-randomquotes/) consumes via terraform_remote_state.
+# space_id and octopus_url come from upstream stacks/.env now, not from cp.
 
 output "environment_ids" {
   value = {

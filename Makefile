@@ -3,24 +3,30 @@
 
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file .env -f compose/docker-compose.yml
+SPACE_DIR := tofu/space
 CP_DIR := tofu/control-plane
 PH_DIR := tofu/platform-hub
 APP_DIR := tofu/app-randomquotes
 AGENT_DIR := tofu/k8s-agent
 
-# Load .env (secrets only) and export TF_VAR_* for OpenTofu. Non-sensitive
-# values come from each stack's committed defaults.auto.tfvars.
+# Load .env (secrets + per-target URL/key) and export TF_VAR_* for OpenTofu.
+# Non-sensitive values come from each stack's committed defaults.auto.tfvars.
+# OCTOPUS_URL is per-worktree: local has http://localhost:8090, SaaS has the
+# https://<id>.octopus.app URL.
 define load_env
 	set -a; \
 	[ -f .env ] || { echo "Missing .env — copy .env.example and fill it in."; exit 1; }; \
 	source .env; set +a; \
-	export TF_VAR_octopus_api_key="$$OCTOPUS_API_KEY" \
+	[ -n "$$OCTOPUS_URL" ] || { echo "OCTOPUS_URL is unset in .env (e.g. http://localhost:8090 or https://<id>.octopus.app)"; exit 1; }; \
+	export TF_VAR_octopus_url="$$OCTOPUS_URL" \
+	       TF_VAR_octopus_api_key="$$OCTOPUS_API_KEY" \
 	       TF_VAR_github_pat="$$GITHUB_PAT";
 endef
 
 .PHONY: help \
         up down logs ps nuke \
         master-key mint-api-key reset \
+        space-init space-plan space-apply space-destroy space-fmt space-validate \
         cp-init cp-plan cp-apply cp-destroy cp-fmt cp-validate \
         ph-init ph-plan ph-apply ph-destroy ph-fmt ph-validate \
         app-init app-plan app-apply app-destroy app-fmt app-validate \
@@ -28,13 +34,14 @@ endef
         fmt validate apply destroy
 
 help:
-	@echo "compose/              : up | down | logs | ps | nuke"
+	@echo "compose/              : up | down | logs | ps | nuke      (local self-host only)"
 	@echo "bootstrap             : master-key (first-time) | mint-api-key | reset (full rebuild)"
+	@echo "tofu/space/           : space-init | space-plan | space-apply | space-destroy | space-fmt | space-validate"
 	@echo "tofu/control-plane/   : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
 	@echo "tofu/platform-hub/    : ph-init | ph-plan | ph-apply | ph-destroy | ph-fmt | ph-validate"
 	@echo "tofu/app-randomquotes/: app-init | app-plan | app-apply | app-destroy | app-fmt | app-validate"
 	@echo "tofu/k8s-agent/       : agent-init | agent-plan | agent-apply | agent-destroy | agent-fmt | agent-validate"
-	@echo "convenience           : fmt (all) | validate (all) | apply (cp,ph,app,agent) | destroy (rev)"
+	@echo "convenience           : fmt (all) | validate (all) | apply (space,cp,ph,app,agent) | destroy (rev)"
 
 # --- compose/ -------------------------------------------------------------
 
@@ -64,6 +71,26 @@ ps:
 nuke:
 	@read -p "This deletes the local Octopus DB. Continue? [y/N] " ans && [ "$$ans" = "y" ] || [ "$$ans" = "yes" ]
 	$(COMPOSE) down -v --remove-orphans
+
+# --- tofu/space/ ----------------------------------------------------------
+
+space-init:
+	cd $(SPACE_DIR) && tofu init
+
+space-plan:
+	$(load_env) cd $(SPACE_DIR) && tofu plan
+
+space-apply:
+	$(load_env) cd $(SPACE_DIR) && tofu apply
+
+space-destroy:
+	$(load_env) cd $(SPACE_DIR) && tofu destroy
+
+space-fmt:
+	cd $(SPACE_DIR) && tofu fmt -recursive
+
+space-validate:
+	cd $(SPACE_DIR) && tofu validate
 
 # --- tofu/control-plane/ --------------------------------------------------
 
@@ -147,15 +174,19 @@ agent-validate:
 
 # --- convenience ----------------------------------------------------------
 
-fmt: cp-fmt ph-fmt app-fmt agent-fmt
-validate: cp-validate ph-validate app-validate agent-validate
+fmt: space-fmt cp-fmt ph-fmt app-fmt agent-fmt
+validate: space-validate cp-validate ph-validate app-validate agent-validate
 
-# Apply must run cp first then app — app reads cp state. Platform-hub and agent
-# are independent of app but logically belong after cp.
-apply: cp-apply ph-apply app-apply agent-apply
+# Apply order: space → cp → ph → app → agent. Every downstream stack reads
+# space_id from tofu/space/ via terraform_remote_state, so space must apply
+# first. App reads cp outputs too.
+apply: space-apply cp-apply ph-apply app-apply agent-apply
 
-# Destroy in reverse.
-destroy: agent-destroy app-destroy ph-destroy cp-destroy
+# Destroy in reverse — agent first, space last. Destroying space cascades on
+# the Octopus side (deleting the Space removes all child resources), but the
+# *terraform state* of downstream stacks still references those resources, so
+# we destroy them in dependency order to keep state coherent.
+destroy: agent-destroy app-destroy ph-destroy cp-destroy space-destroy
 
 # --- bootstrap helpers ----------------------------------------------------
 
@@ -216,7 +247,7 @@ reset:
 	-@kubectl delete ns octopus-agent-docker-desktop --ignore-not-found 2>/dev/null
 	@until ! kubectl get ns octopus-agent-docker-desktop 2>/dev/null | grep -q Terminating; do printf '.'; sleep 2; done; echo
 	@echo "==> remove tofu state"
-	rm -f $(CP_DIR)/terraform.tfstate* $(PH_DIR)/terraform.tfstate* $(APP_DIR)/terraform.tfstate* $(AGENT_DIR)/terraform.tfstate*
+	rm -f $(SPACE_DIR)/terraform.tfstate* $(CP_DIR)/terraform.tfstate* $(PH_DIR)/terraform.tfstate* $(APP_DIR)/terraform.tfstate* $(AGENT_DIR)/terraform.tfstate*
 	@echo "==> wipe compose volumes (--remove-orphans catches containers from a different topology, e.g. switching HA → single-node)"
 	$(COMPOSE) down -v --remove-orphans
 	@echo "==> boot fresh Octopus (licence auto-applies via OCTOPUS_SERVER_BASE64_LICENSE)"

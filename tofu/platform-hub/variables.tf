@@ -9,12 +9,6 @@ variable "octopus_api_key" {
   sensitive   = true
 }
 
-variable "octopus_space" {
-  type        = string
-  description = "Space ID (not name). Default install ships with Spaces-1."
-  default     = "Spaces-1"
-}
-
 variable "github_pat" {
   type        = string
   description = "GitHub PAT (classic, repo scope). Same one cp uses for the CaC credential."

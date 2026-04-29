@@ -9,12 +9,6 @@ variable "octopus_api_key" {
   sensitive   = true
 }
 
-variable "octopus_space" {
-  type        = string
-  description = "Space ID (not name). Default install ships with Spaces-1."
-  default     = "Spaces-1"
-}
-
 variable "cac_repo_url" {
   type        = string
   description = "HTTPS URL of the Git repo Octopus pulls/pushes CaC from."

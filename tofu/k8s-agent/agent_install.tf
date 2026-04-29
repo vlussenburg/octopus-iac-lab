@@ -31,7 +31,7 @@ resource "helm_release" "octopus_agent" {
 
   set {
     name  = "agent.space"
-    value = var.octopus_space_name
+    value = data.terraform_remote_state.space.outputs.space_name
   }
 
   set {

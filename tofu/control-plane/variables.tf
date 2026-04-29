@@ -9,12 +9,6 @@ variable "octopus_api_key" {
   sensitive   = true
 }
 
-variable "octopus_space" {
-  type        = string
-  description = "Space ID (not name). Default install ships with Spaces-1."
-  default     = "Spaces-1"
-}
-
 variable "github_pat" {
   type        = string
   description = "GitHub Personal Access Token (classic, repo scope) used by Octopus to read/write CaC OCL files."

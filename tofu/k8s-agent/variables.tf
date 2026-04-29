@@ -9,20 +9,6 @@ variable "octopus_api_key" {
   sensitive   = true
 }
 
-variable "octopus_space" {
-  type        = string
-  description = "Space ID — used by the octopusdeploy provider (e.g. Spaces-1)."
-  default     = "Spaces-1"
-}
-
-# The K8s agent Helm chart uniquely wants the space *name* (e.g. Default), not
-# the ID. Splitting into two variables avoids the every-time confusion.
-variable "octopus_space_name" {
-  type        = string
-  description = "Space *name* — used by the K8s agent Helm chart (e.g. Default)."
-  default     = "Default"
-}
-
 variable "kube_context" {
   type        = string
   description = "kubeconfig context to use. Default 'docker-desktop'."
