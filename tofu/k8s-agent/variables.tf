@@ -43,3 +43,9 @@ variable "agent_chart_version" {
   description = "Octopus K8s Agent helm chart version constraint."
   default     = "2.*"
 }
+
+variable "nfs_csi_chart_version" {
+  type        = string
+  description = "csi-driver-nfs helm chart version constraint. Applied via helm upgrade --install — idempotent across worktrees, so any worktree can run apply safely."
+  default     = "v4.*"
+}

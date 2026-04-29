@@ -82,6 +82,7 @@ resource "helm_release" "octopus_agent" {
   }
 
   # PVC binding needs the NFS CSI driver to be live before the tentacle pod
-  # tries to attach its volume.
-  depends_on = [helm_release.nfs_csi_driver]
+  # tries to attach its volume. The driver is installed idempotently via
+  # null_resource + `helm upgrade --install` (see nfs_csi.tf).
+  depends_on = [null_resource.nfs_csi_driver]
 }
