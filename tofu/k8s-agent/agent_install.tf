@@ -20,10 +20,16 @@ locals {
   agent_target_name = "octopus-tentacle-${local.target_kind}"
 }
 
+resource "kubernetes_namespace_v1" "agent" {
+  metadata {
+    name = "octopus-agent-${local.agent_target_name}"
+  }
+}
+
 resource "helm_release" "octopus_agent" {
   name             = local.agent_target_name
-  namespace        = "octopus-agent-${local.agent_target_name}"
-  create_namespace = true
+  namespace        = kubernetes_namespace_v1.agent.metadata[0].name
+  create_namespace = false
 
   repository = "oci://registry-1.docker.io/octopusdeploy"
   chart      = "kubernetes-agent"
