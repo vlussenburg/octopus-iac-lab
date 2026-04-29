@@ -3,8 +3,8 @@ terraform {
 
   required_providers {
     octopusdeploy = {
-      source  = "OctopusDeployLabs/octopusdeploy"
-      version = "~> 0.43"
+      source  = "OctopusDeploy/octopusdeploy"
+      version = "~> 1.12"
     }
     helm = {
       source  = "hashicorp/helm"
