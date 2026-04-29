@@ -9,6 +9,7 @@ COMPOSE := docker compose --env-file .env -f compose/docker-compose.yml
 COMPOSE_PROJECT := selfhost-setup
 
 CP_DIR := tofu/control-plane
+PH_DIR := tofu/platform-hub
 APP_DIR := tofu/app-randomquotes
 AGENT_DIR := tofu/k8s-agent
 
@@ -26,6 +27,7 @@ endef
         up down logs ps nuke \
         master-key mint-api-key reset \
         cp-init cp-plan cp-apply cp-destroy cp-fmt cp-validate \
+        ph-init ph-plan ph-apply ph-destroy ph-fmt ph-validate \
         app-init app-plan app-apply app-destroy app-fmt app-validate \
         agent-init agent-plan agent-apply agent-destroy agent-fmt agent-validate \
         fmt validate apply destroy
@@ -34,9 +36,10 @@ help:
 	@echo "compose/              : up | down | logs | ps | nuke      (HA: db + 2 octopus nodes + nginx LB)"
 	@echo "bootstrap             : master-key (first-time) | mint-api-key | reset (full rebuild)"
 	@echo "tofu/control-plane/   : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
+	@echo "tofu/platform-hub/    : ph-init | ph-plan | ph-apply | ph-destroy | ph-fmt | ph-validate"
 	@echo "tofu/app-randomquotes/: app-init | app-plan | app-apply | app-destroy | app-fmt | app-validate"
 	@echo "tofu/k8s-agent/       : agent-init | agent-plan | agent-apply | agent-destroy | agent-fmt | agent-validate"
-	@echo "convenience           : fmt (all) | validate (all) | apply (cp,app,agent) | destroy (rev)"
+	@echo "convenience           : fmt (all) | validate (all) | apply (cp,ph,app,agent) | destroy (rev)"
 
 # --- compose/ -------------------------------------------------------------
 
@@ -87,6 +90,26 @@ cp-fmt:
 cp-validate:
 	cd $(CP_DIR) && tofu validate
 
+# --- tofu/platform-hub/ ---------------------------------------------------
+
+ph-init:
+	cd $(PH_DIR) && tofu init
+
+ph-plan:
+	$(load_env) cd $(PH_DIR) && tofu plan
+
+ph-apply:
+	$(load_env) cd $(PH_DIR) && tofu apply
+
+ph-destroy:
+	$(load_env) cd $(PH_DIR) && tofu destroy
+
+ph-fmt:
+	cd $(PH_DIR) && tofu fmt -recursive
+
+ph-validate:
+	cd $(PH_DIR) && tofu validate
+
 # --- tofu/app-randomquotes/ -----------------------------------------------
 
 app-init:
@@ -129,15 +152,15 @@ agent-validate:
 
 # --- convenience ----------------------------------------------------------
 
-fmt: cp-fmt app-fmt agent-fmt
-validate: cp-validate app-validate agent-validate
+fmt: cp-fmt ph-fmt app-fmt agent-fmt
+validate: cp-validate ph-validate app-validate agent-validate
 
-# Apply must run cp first then app — app reads cp state. Agent is independent
-# but reads cp state too, so it goes after cp.
-apply: cp-apply app-apply agent-apply
+# Apply must run cp first then app — app reads cp state. Platform-hub and agent
+# are independent of app but logically belong after cp.
+apply: cp-apply ph-apply app-apply agent-apply
 
 # Destroy in reverse.
-destroy: agent-destroy app-destroy cp-destroy
+destroy: agent-destroy app-destroy ph-destroy cp-destroy
 
 # --- bootstrap helpers ----------------------------------------------------
 
@@ -198,7 +221,7 @@ reset:
 	-@kubectl delete ns octopus-agent-docker-desktop --ignore-not-found 2>/dev/null
 	@until ! kubectl get ns octopus-agent-docker-desktop 2>/dev/null | grep -q Terminating; do printf '.'; sleep 2; done; echo
 	@echo "==> remove tofu state"
-	rm -f $(CP_DIR)/terraform.tfstate* $(APP_DIR)/terraform.tfstate* $(AGENT_DIR)/terraform.tfstate*
+	rm -f $(CP_DIR)/terraform.tfstate* $(PH_DIR)/terraform.tfstate* $(APP_DIR)/terraform.tfstate* $(AGENT_DIR)/terraform.tfstate*
 	@echo "==> wipe compose volumes (project-scoped — also catches orphans from prior runs)"
 	-$(COMPOSE) down -v --remove-orphans
 	@echo "==> belt-and-suspenders: anything labelled with the compose project goes"

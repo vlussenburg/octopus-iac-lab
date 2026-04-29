@@ -11,11 +11,9 @@ secrets.auto.tfvars
 *.tfstate
 *.tfstate.*
 .terraform/
+.terraform.lock.hcl
 crash.log
 crash.*.log
 
 # macOS
 .DS_Store
-
-# Note: .terraform.lock.hcl is intentionally NOT ignored — it pins provider
-# versions and should be committed.
