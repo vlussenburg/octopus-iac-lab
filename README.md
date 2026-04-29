@@ -71,27 +71,30 @@ The local target is `continue-on-error: true` — if the tunnel's down or the se
 
 ### Exposing local Octopus to GitHub Actions
 
-Local Octopus runs on `localhost:8090`, which GitHub Actions runners can't reach. **Cloudflare Tunnel** is the cleanest solution — free, stable URL on your own domain, automatic TLS:
+Local Octopus runs on `localhost:8090`, which GitHub Actions runners can't reach. **Tailscale Funnel** is the lightest setup — free for personal use, stable URL across sessions, no DNS work:
+
+```bash
+brew install tailscale
+sudo tailscaled install-system-daemon                              # if not already running
+tailscale up                                                       # signs you in
+# In admin.tailscale.com → Access controls, ensure Funnel is enabled.
+tailscale funnel --bg --https=443 http://localhost:8090
+```
+
+The funnel URL is printed by the command — `https://<host>.<tailnet>.ts.net`. Set that as `OCTOPUS_LOCAL_URL` in GitHub Actions secrets once. CI deploys to local whenever the funnel is up; the local matrix leg cleanly skips (with a warning) when it's not.
+
+Halibut polling (`:10943`) is still over the docker-desktop loopback for the agent; the funnel is only for the API path GHA needs.
+
+Alternative: **Cloudflare Tunnel** if you want a custom domain (free, requires the domain in Cloudflare, slightly more setup):
 
 ```bash
 brew install cloudflared
-cloudflared tunnel login                                          # picks the Cloudflare zone for your domain
+cloudflared tunnel login
 cloudflared tunnel create octopus-iac-lab
 cloudflared tunnel route dns octopus-iac-lab octopus.example.com
-cat > ~/.cloudflared/config.yml <<EOF
-tunnel: octopus-iac-lab
-credentials-file: $HOME/.cloudflared/<UUID>.json
-ingress:
-  - hostname: octopus.example.com
-    service: http://localhost:8090
-  - service: http_status:404
-EOF
+# config.yml ingress: octopus.example.com → http://localhost:8090
 cloudflared tunnel run octopus-iac-lab
 ```
-
-Set `OCTOPUS_LOCAL_URL=https://octopus.example.com` in GitHub Actions secrets once. CI deploys to local whenever the tunnel is up; the local matrix leg is skipped (with a warning) when it's not. Halibut polling (`:10943`) is still over the docker-desktop loopback; the tunnel is only for the API path GHA needs.
-
-Alternative: **Tailscale Funnel** (free, but URL is `<host>.<tailnet>.ts.net`, no custom domain).
 
 ## Wiping the lab
 
