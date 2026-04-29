@@ -18,14 +18,12 @@ define load_env
 	[ -f .env ] || { echo "Missing .env — copy .env.example and fill it in."; exit 1; }; \
 	source .env; set +a; \
 	[ -n "$$OCTOPUS_URL" ] || { echo "OCTOPUS_URL is unset in .env (e.g. http://localhost:8090 or https://<id>.octopus.app)"; exit 1; }; \
-	case "$$OCTOPUS_URL" in *octopus.app*) target=saas ;; *) target=local ;; esac; \
 	export TF_VAR_octopus_url="$$OCTOPUS_URL" \
 	       TF_VAR_octopus_api_key="$$OCTOPUS_API_KEY" \
 	       TF_VAR_github_pat="$$GITHUB_PAT" \
 	       TF_VAR_octopus_url_from_cluster="$${OCTOPUS_URL_FROM_CLUSTER:-http://host.docker.internal:8090}" \
 	       TF_VAR_octopus_polling_url_from_cluster="$${OCTOPUS_POLLING_URL_FROM_CLUSTER:-https://host.docker.internal:10943}" \
-	       TF_VAR_enable_platform_hub="$${OCTOPUS_PLATFORM_HUB_ENABLED:-true}" \
-	       TF_VAR_agent_target_name="$${OCTOPUS_AGENT_TARGET_NAME:-octopus-tentacle-$$target}";
+	       TF_VAR_enable_platform_hub="$${OCTOPUS_PLATFORM_HUB_ENABLED:-true}";
 endef
 
 .PHONY: help \
@@ -245,14 +243,16 @@ reset:
 	@echo "==> WARNING: full reset destroys local Octopus DB, K8s agent state, and tofu state."
 	@read -p "    Continue? [y/N] " ans && [ "$$ans" = "y" ] || [ "$$ans" = "yes" ] || { echo "aborted"; exit 1; }
 	@echo "==> uninstall this worktree's helm release + the shared CSI driver (ignore errors if absent)"
-	@source .env && case "$$OCTOPUS_URL" in *octopus.app*) target=saas ;; *) target=local ;; esac; \
-	  AGENT="$${OCTOPUS_AGENT_TARGET_NAME:-octopus-tentacle-$$target}"; NS="octopus-agent-$$AGENT"; \
-	  helm uninstall $$AGENT -n $$NS 2>/dev/null || true; \
-	  helm uninstall csi-driver-nfs -n kube-system 2>/dev/null || true; \
-	  echo "==> force-clean stuck pods + namespace (ignore errors)"; \
-	  kubectl -n $$NS delete pod --all --force --grace-period=0 2>/dev/null || true; \
-	  kubectl delete ns $$NS --ignore-not-found 2>/dev/null || true; \
-	  until ! kubectl get ns $$NS 2>/dev/null | grep -q Terminating; do printf '.'; sleep 2; done; echo
+	@AGENT=$$(cd $(AGENT_DIR) && tofu output -raw agent_release_name 2>/dev/null); \
+	  NS=$$(cd $(AGENT_DIR) && tofu output -raw agent_namespace 2>/dev/null); \
+	  if [ -n "$$AGENT" ] && [ -n "$$NS" ]; then \
+	    helm uninstall $$AGENT -n $$NS 2>/dev/null || true; \
+	    echo "==> force-clean stuck pods + namespace (ignore errors)"; \
+	    kubectl -n $$NS delete pod --all --force --grace-period=0 2>/dev/null || true; \
+	    kubectl delete ns $$NS --ignore-not-found 2>/dev/null || true; \
+	    until ! kubectl get ns $$NS 2>/dev/null | grep -q Terminating; do printf '.'; sleep 2; done; echo; \
+	  fi; \
+	  helm uninstall csi-driver-nfs -n kube-system 2>/dev/null || true
 	@echo "==> remove tofu state"
 	rm -f $(SPACE_DIR)/terraform.tfstate* $(CP_DIR)/terraform.tfstate* $(PH_DIR)/terraform.tfstate* $(APP_DIR)/terraform.tfstate* $(AGENT_DIR)/terraform.tfstate*
 	@echo "==> wipe compose volumes (--remove-orphans catches containers from a different topology, e.g. switching HA → single-node)"

@@ -3,7 +3,8 @@ output "agent_release_name" {
 }
 
 output "agent_namespace" {
-  value = helm_release.octopus_agent.namespace
+  value       = helm_release.octopus_agent.namespace
+  description = "K8s namespace owning this worktree's agent pod. `make reset` reads this to clean up the right namespace."
 }
 
 output "agent_chart_version" {

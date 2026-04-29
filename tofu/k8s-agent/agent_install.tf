@@ -11,11 +11,19 @@ locals {
   # since Dev/Production are stable in this lab.
   agent_environments = ["Dev", "Production"]
   agent_roles        = ["k8s"]
+
+  # Two worktrees can target the same Docker Desktop K8s — one against a
+  # local self-host, one against an Octopus Cloud SaaS instance. The agent
+  # pod's config is per-Octopus-target, so each worktree needs a distinct
+  # helm release and namespace. Derive the suffix from the URL so the
+  # right pod stays attached to the right Octopus.
+  target_kind       = strcontains(var.octopus_url, "octopus.app") ? "saas" : "local"
+  agent_target_name = "octopus-tentacle-${local.target_kind}"
 }
 
 resource "helm_release" "octopus_agent" {
-  name             = var.agent_target_name
-  namespace        = "octopus-agent-${var.agent_target_name}"
+  name             = local.agent_target_name
+  namespace        = "octopus-agent-${local.agent_target_name}"
   create_namespace = true
 
   repository = "oci://registry-1.docker.io/octopusdeploy"
@@ -55,7 +63,7 @@ resource "helm_release" "octopus_agent" {
 
   set {
     name  = "agent.name"
-    value = var.agent_target_name
+    value = local.agent_target_name
   }
 
   set {

@@ -32,11 +32,6 @@ variable "octopus_polling_url_from_cluster" {
   default     = "https://host.docker.internal:10943"
 }
 
-variable "agent_target_name" {
-  type        = string
-  description = "Name of the deployment target Octopus registers for this agent. Auto-derived from OCTOPUS_URL by the Makefile — octopus-tentacle-{local,saas}."
-}
-
 variable "agent_chart_version" {
   type        = string
   description = "Octopus K8s Agent helm chart version constraint."
