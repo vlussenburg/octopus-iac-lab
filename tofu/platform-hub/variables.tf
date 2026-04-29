@@ -9,6 +9,12 @@ variable "octopus_api_key" {
   sensitive   = true
 }
 
+variable "enable_platform_hub" {
+  type        = bool
+  description = "Platform Hub is Enterprise-tier on SaaS. Set false to skip the resources entirely (count = 0)."
+  default     = true
+}
+
 variable "github_pat" {
   type        = string
   description = "GitHub PAT (classic, repo scope). Same one cp uses for the CaC credential."

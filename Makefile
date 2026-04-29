@@ -20,7 +20,10 @@ define load_env
 	[ -n "$$OCTOPUS_URL" ] || { echo "OCTOPUS_URL is unset in .env (e.g. http://localhost:8090 or https://<id>.octopus.app)"; exit 1; }; \
 	export TF_VAR_octopus_url="$$OCTOPUS_URL" \
 	       TF_VAR_octopus_api_key="$$OCTOPUS_API_KEY" \
-	       TF_VAR_github_pat="$$GITHUB_PAT";
+	       TF_VAR_github_pat="$$GITHUB_PAT" \
+	       TF_VAR_octopus_url_from_cluster="$${OCTOPUS_URL_FROM_CLUSTER:-http://host.docker.internal:8090}" \
+	       TF_VAR_octopus_polling_url_from_cluster="$${OCTOPUS_POLLING_URL_FROM_CLUSTER:-https://host.docker.internal:10943}" \
+	       TF_VAR_enable_platform_hub="$${OCTOPUS_PLATFORM_HUB_ENABLED:-true}";
 endef
 
 .PHONY: help \

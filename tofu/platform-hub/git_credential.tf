@@ -3,6 +3,7 @@
 # Platform Hub features that need their own credential — e.g. accounts that
 # resolve secrets from Git.
 resource "octopusdeploy_platform_hub_git_credential" "github_pat" {
+  count       = var.enable_platform_hub ? 1 : 0
   name        = "GitHub PAT (platform-hub)"
   description = "PAT used by Platform Hub features that perform Git operations."
   username    = var.github_username
