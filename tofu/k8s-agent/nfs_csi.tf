@@ -4,10 +4,10 @@
 #
 # `helm upgrade --install` is idempotent — installs if missing, upgrades if
 # present, no-ops if already at the target version. That makes apply safe
-# from any worktree without coordination. Destroy is intentionally a no-op:
-# leave the shared driver running, since another worktree's agent may still
-# need it. Explicit cleanup lives in `make reset` (helm uninstall) or just
-# `helm uninstall csi-driver-nfs -n kube-system`.
+# even when two stacks targeting different Octopus instances share the same
+# K8s cluster. Destroy is intentionally a no-op: leave the shared driver
+# running, since another agent on the cluster may still need it. Explicit
+# cleanup lives in `make reset` or `helm uninstall csi-driver-nfs -n kube-system`.
 resource "null_resource" "nfs_csi_driver" {
   triggers = {
     chart_version = var.nfs_csi_chart_version

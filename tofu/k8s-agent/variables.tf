@@ -40,6 +40,6 @@ variable "agent_chart_version" {
 
 variable "nfs_csi_chart_version" {
   type        = string
-  description = "csi-driver-nfs helm chart version constraint. Applied via helm upgrade --install — idempotent across worktrees, so any worktree can run apply safely."
+  description = "csi-driver-nfs helm chart version constraint. Applied via helm upgrade --install — idempotent, so multiple Octopus targets can share one cluster's driver."
   default     = "v4.*"
 }
