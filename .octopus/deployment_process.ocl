@@ -9,16 +9,23 @@ step "deploy-k8s-manifests" {
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                # Namespace is derived from the machine + environment so a
+                # local Octopus and a SaaS Octopus deploying to the same
+                # cluster don't clobber each other, and Dev / Production
+                # land in distinct namespaces too. Machine name is
+                # `octopus-tentacle-{local,saas}` (set by the agent's helm
+                # release in tofu/k8s-agent/), so stripping the prefix
+                # yields just `local` or `saas`.
                 apiVersion: v1
                 kind: Namespace
                 metadata:
-                  name: randomquotes
+                  name: randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Environment.Name | ToLower}
                 ---
                 apiVersion: apps/v1
                 kind: Deployment
                 metadata:
                   name: randomquotes
-                  namespace: randomquotes
+                  namespace: randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Environment.Name | ToLower}
                   labels:
                     app: randomquotes
                 spec:
@@ -48,7 +55,7 @@ step "deploy-k8s-manifests" {
                 kind: Service
                 metadata:
                   name: randomquotes
-                  namespace: randomquotes
+                  namespace: randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Environment.Name | ToLower}
                 spec:
                   type: LoadBalancer
                   selector:
