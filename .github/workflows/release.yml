@@ -101,9 +101,13 @@ jobs:
           packages: |
             randomquotes-image:${{ env.IMAGE_TAG }}
 
+      # Deploy fans out across every tenant carrying the `app/randomquotes`
+      # tag — Octopus resolves the set; CI doesn't enumerate. Add a tenant
+      # in HCL with that tag and the next pipeline picks it up automatically.
       - name: Deploy to Dev
         uses: OctopusDeploy/deploy-release-action@v3
         with:
           project: ${{ env.PROJECT }}
           release_number: ${{ env.RELEASE_NUMBER }}
           environments: Dev
+          tenant_tags: app/randomquotes

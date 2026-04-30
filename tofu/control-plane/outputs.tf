@@ -24,3 +24,12 @@ output "ghcr_feed_id" {
   value       = octopusdeploy_docker_container_registry.ghcr.id
   description = "Octopus feed ID for GHCR. Referenced by the deployment process's image package reference."
 }
+
+output "tenant_ids" {
+  value = {
+    acme_corp = octopusdeploy_tenant.acme_corp.id
+    globex    = octopusdeploy_tenant.globex.id
+    initech   = octopusdeploy_tenant.initech.id
+  }
+  description = "Per-tenant IDs consumed by the app stack to wire tenant_project links."
+}

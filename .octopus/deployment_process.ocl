@@ -9,27 +9,33 @@ step "deploy-k8s-manifests" {
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
-                # Namespace is derived from the machine + environment so a
-                # local Octopus and a SaaS Octopus deploying to the same
-                # cluster don't clobber each other, and Dev / Production
-                # land in distinct namespaces too. Machine name is
-                # `octopus-tentacle-{local,saas}` (set by the agent's helm
-                # release in tofu/k8s-agent/), so stripping the prefix
-                # yields just `local` or `saas`.
                 apiVersion: v1
                 kind: Namespace
                 metadata:
-                  name: randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Environment.Name | ToLower}
+                  name: randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
+                ---
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: randomquotes-config
+                  namespace: randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
+                data:
+                  config.json: |
+                    {
+                      "tenant": "#{Octopus.Deployment.Tenant.Name}",
+                      "mood": "#{Featured.Mood}",
+                      "watermark": "#{Branding.Watermark}"
+                    }
                 ---
                 apiVersion: apps/v1
                 kind: Deployment
                 metadata:
                   name: randomquotes
-                  namespace: randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Environment.Name | ToLower}
+                  namespace: randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
                   labels:
                     app: randomquotes
                 spec:
-                  replicas: 2
+                  replicas: #{Replicas}
                   selector:
                     matchLabels:
                       app: randomquotes
@@ -50,12 +56,20 @@ step "deploy-k8s-manifests" {
                             limits:
                               cpu: "250m"
                               memory: "128Mi"
+                          volumeMounts:
+                            - name: config
+                              mountPath: /usr/share/nginx/html/config.json
+                              subPath: config.json
+                      volumes:
+                        - name: config
+                          configMap:
+                            name: randomquotes-config
                 ---
                 apiVersion: v1
                 kind: Service
                 metadata:
                   name: randomquotes
-                  namespace: randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Environment.Name | ToLower}
+                  namespace: randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
                 spec:
                   type: LoadBalancer
                   selector:
@@ -64,7 +78,7 @@ step "deploy-k8s-manifests" {
                     - protocol: TCP
                       port: 80
                       targetPort: 80
-                                                EOT
+                EOT
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
         }
@@ -81,4 +95,3 @@ step "deploy-k8s-manifests" {
         }
     }
 }
-

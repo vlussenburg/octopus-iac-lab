@@ -11,6 +11,7 @@ locals {
   # since Dev/Production are stable in this lab.
   agent_environments = ["Dev", "Production"]
   agent_roles        = ["k8s"]
+  agent_tenants      = ["acme-corp", "globex", "initech"]
 
   # The agent pod's config is per-Octopus — server URL and bearer token are
   # baked in at install time. When two stacks target the same K8s cluster
@@ -84,6 +85,22 @@ resource "helm_release" "octopus_agent" {
   set_list {
     name  = "agent.deploymentTarget.initial.tags"
     value = local.agent_roles
+  }
+
+  # Register this target as a participant for every tenant. The project is
+  # tenanted, so deployments must select a tenant — the agent serves all
+  # three from the same pod (their per-tenant variation comes from
+  # variables.ocl, not from agent identity).
+  set_list {
+    name  = "agent.deploymentTarget.initial.tenants"
+    value = local.agent_tenants
+  }
+
+  # The chart needs to know how to scope tenanted participation; "Tenanted"
+  # means this target only matches deployments that pick a tenant.
+  set {
+    name  = "agent.deploymentTarget.initial.tenantedDeploymentParticipation"
+    value = "Tenanted"
   }
 
   # KLOS (live status / kubernetes monitor) deliberately disabled — it needs

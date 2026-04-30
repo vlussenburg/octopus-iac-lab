@@ -14,7 +14,7 @@ resource "octopusdeploy_project" "randomquotes" {
   project_group_id                  = local.cp.project_group_id
   lifecycle_id                      = local.cp.lifecycle_id
   default_guided_failure_mode       = "EnvironmentDefault"
-  tenanted_deployment_participation = "Untenanted"
+  tenanted_deployment_participation = "Tenanted"
   is_version_controlled             = true
 
   git_library_persistence_settings {
@@ -23,4 +23,18 @@ resource "octopusdeploy_project" "randomquotes" {
     base_path         = var.cac_base_path
     git_credential_id = local.cp.git_credential_id
   }
+}
+
+# Connect each tenant to the project and to both environments. Without this,
+# Octopus refuses to create a tenant-scoped release for that tenant — even if
+# the tenant exists.
+resource "octopusdeploy_tenant_project" "tenants" {
+  for_each = local.cp.tenant_ids
+
+  tenant_id  = each.value
+  project_id = octopusdeploy_project.randomquotes.id
+  environment_ids = [
+    local.cp.environment_ids.dev,
+    local.cp.environment_ids.production,
+  ]
 }
