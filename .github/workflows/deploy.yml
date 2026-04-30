@@ -17,7 +17,7 @@ on:
 env:
   # OctopusDeploy/*-action@v3 want the space *name* (not slug or ID). Stable
   # by virtue of being set in HCL — same property we'd get from the slug.
-  OCTOPUS_SPACE: IaC Sandbox
+  OCTOPUS_SPACE: "IaC Sandbox"
   IMAGE: ghcr.io/${{ github.repository_owner }}/octopus-iac-lab
   PROJECT: randomquotes
 
@@ -101,6 +101,11 @@ jobs:
         with:
           project: ${{ env.PROJECT }}
           release_number: ${{ needs.build.outputs.version }}
+          # CaC project — Octopus reads .octopus/*.ocl from this Git ref
+          # at release-creation time. We pin to the commit that triggered
+          # the run so the deployment process snapshot matches the image
+          # tag, even if main moves on while CI's running.
+          git_ref: ${{ github.sha }}
 
       - name: Deploy to Dev
         uses: OctopusDeploy/deploy-release-action@v3
