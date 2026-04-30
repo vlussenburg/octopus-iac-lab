@@ -1,7 +1,6 @@
 name = "Maintenance Mode Off"
 description = "Take the chosen tenant out of maintenance: clear the overlay and scale the deployment back to its tier's replica count."
 default_guided_failure_mode = "EnvironmentDefault"
-environment_scope = "FromProjectLifecycles"
 multi_tenancy_mode = "Tenanted"
 
 connectivity_policy {
@@ -14,8 +13,27 @@ run_retention_policy {
 }
 
 process {
-    step "exit-maintenance" {
-        name = "Exit maintenance"
+    step "patch-config" {
+        name = "Patch ConfigMap (maintenance message cleared)"
+        properties = {
+            Octopus.Action.TargetRoles = "k8s"
+        }
+
+        action {
+            action_type = "Octopus.KubernetesDeployConfigMap"
+            properties = {
+                Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Octopus.Machine.Name | Substring 17}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+                Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
+                Octopus.Action.KubernetesContainers.ConfigMapValues = <<-JSON
+                    {"config.json":"{\"tenant\":\"#{Octopus.Deployment.Tenant.Name}\",\"mood\":\"#{Featured.Mood}\",\"watermark\":\"#{Branding.Watermark}\",\"maintenance\":\"\"}"}
+                    JSON
+            }
+        }
+    }
+
+    step "scale-up" {
+        name = "Scale back to tier's replica count"
         properties = {
             Octopus.Action.TargetRoles = "k8s"
         }
@@ -26,30 +44,12 @@ process {
                 Octopus.Action.RunOnServer = "false"
                 Octopus.Action.Script.ScriptSource = "Inline"
                 Octopus.Action.Script.Syntax = "Bash"
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Octopus.Machine.Name | Substring 17}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
                 Octopus.Action.Script.ScriptBody = <<-EOT
                     set -euo pipefail
-                    NS="randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
-                    echo "==> exiting maintenance for $NS"
-
-                    cat <<MANIFEST | kubectl apply -f -
-                    apiVersion: v1
-                    kind: ConfigMap
-                    metadata:
-                      name: randomquotes-config
-                      namespace: $NS
-                    data:
-                      config.json: |
-                        {
-                          "tenant": "#{Octopus.Deployment.Tenant.Name}",
-                          "mood": "#{Featured.Mood}",
-                          "watermark": "#{Branding.Watermark}",
-                          "maintenance": ""
-                        }
-                    MANIFEST
-
-                    kubectl scale deployment/randomquotes -n "$NS" --replicas=#{Replicas}
-                    kubectl rollout restart deployment/randomquotes -n "$NS"
-                    kubectl rollout status deployment/randomquotes -n "$NS" --timeout=2m
+                    kubectl scale deployment/randomquotes --replicas=#{Replicas}
+                    kubectl rollout restart deployment/randomquotes
+                    kubectl rollout status deployment/randomquotes --timeout=2m
                 EOT
             }
         }

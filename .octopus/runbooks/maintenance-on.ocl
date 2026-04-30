@@ -1,7 +1,6 @@
 name = "Maintenance Mode On"
 description = "Show a maintenance overlay on the chosen tenant's app and scale the deployment to 1 replica. The message comes from the prompted Maintenance.Message variable."
 default_guided_failure_mode = "EnvironmentDefault"
-environment_scope = "FromProjectLifecycles"
 multi_tenancy_mode = "Tenanted"
 
 connectivity_policy {
@@ -14,8 +13,27 @@ run_retention_policy {
 }
 
 process {
-    step "enter-maintenance" {
-        name = "Enter maintenance"
+    step "patch-config" {
+        name = "Patch ConfigMap (maintenance message on)"
+        properties = {
+            Octopus.Action.TargetRoles = "k8s"
+        }
+
+        action {
+            action_type = "Octopus.KubernetesDeployConfigMap"
+            properties = {
+                Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Octopus.Machine.Name | Substring 17}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+                Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
+                Octopus.Action.KubernetesContainers.ConfigMapValues = <<-JSON
+                    {"config.json":"{\"tenant\":\"#{Octopus.Deployment.Tenant.Name}\",\"mood\":\"#{Featured.Mood}\",\"watermark\":\"#{Branding.Watermark}\",\"maintenance\":\"#{Maintenance.Message}\"}"}
+                    JSON
+            }
+        }
+    }
+
+    step "scale-down" {
+        name = "Scale to 1 replica"
         properties = {
             Octopus.Action.TargetRoles = "k8s"
         }
@@ -26,30 +44,12 @@ process {
                 Octopus.Action.RunOnServer = "false"
                 Octopus.Action.Script.ScriptSource = "Inline"
                 Octopus.Action.Script.Syntax = "Bash"
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Octopus.Machine.Name | Substring 17}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
                 Octopus.Action.Script.ScriptBody = <<-EOT
                     set -euo pipefail
-                    NS="randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
-                    echo "==> entering maintenance for $NS"
-
-                    cat <<MANIFEST | kubectl apply -f -
-                    apiVersion: v1
-                    kind: ConfigMap
-                    metadata:
-                      name: randomquotes-config
-                      namespace: $NS
-                    data:
-                      config.json: |
-                        {
-                          "tenant": "#{Octopus.Deployment.Tenant.Name}",
-                          "mood": "#{Featured.Mood}",
-                          "watermark": "#{Branding.Watermark}",
-                          "maintenance": "#{Maintenance.Message}"
-                        }
-                    MANIFEST
-
-                    kubectl scale deployment/randomquotes -n "$NS" --replicas=1
-                    kubectl rollout restart deployment/randomquotes -n "$NS"
-                    kubectl rollout status deployment/randomquotes -n "$NS" --timeout=2m
+                    kubectl scale deployment/randomquotes --replicas=1
+                    kubectl rollout restart deployment/randomquotes
+                    kubectl rollout status deployment/randomquotes --timeout=2m
                 EOT
             }
         }
