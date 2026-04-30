@@ -1,6 +1,6 @@
 # Two tag sets describe the demo's tenant variations:
-#   - mood:    which kind of quotes the tenant prefers
-#   - tier:    s/m/l, drives replica count + watermark
+#   - mood: which kind of quotes the tenant prefers
+#   - tier: free/pro/enterprise, drives replica count + watermark
 # Tag references in tenant_tags use canonical "TagSetName/TagName" form.
 
 resource "octopusdeploy_tag_set" "mood" {
@@ -49,20 +49,20 @@ resource "octopusdeploy_tag" "app_randomquotes" {
   tag_set_id = octopusdeploy_tag_set.app.id
 }
 
-resource "octopusdeploy_tag" "tier_s" {
-  name       = "s"
+resource "octopusdeploy_tag" "tier_free" {
+  name       = "free"
   color      = "#9E9E9E"
   tag_set_id = octopusdeploy_tag_set.tier.id
 }
 
-resource "octopusdeploy_tag" "tier_m" {
-  name       = "m"
+resource "octopusdeploy_tag" "tier_pro" {
+  name       = "pro"
   color      = "#42A5F5"
   tag_set_id = octopusdeploy_tag_set.tier.id
 }
 
-resource "octopusdeploy_tag" "tier_l" {
-  name       = "l"
+resource "octopusdeploy_tag" "tier_enterprise" {
+  name       = "enterprise"
   color      = "#43A047"
   tag_set_id = octopusdeploy_tag_set.tier.id
 }
@@ -76,7 +76,7 @@ resource "octopusdeploy_tenant" "acme_corp" {
   description = "Looney Tunes-flavoured megacorp. Enterprise tier, comedy mood."
   tenant_tags = [
     "${octopusdeploy_tag_set.app.name}/${octopusdeploy_tag.app_randomquotes.name}",
-    "${octopusdeploy_tag_set.tier.name}/${octopusdeploy_tag.tier_l.name}",
+    "${octopusdeploy_tag_set.tier.name}/${octopusdeploy_tag.tier_enterprise.name}",
     "${octopusdeploy_tag_set.mood.name}/${octopusdeploy_tag.mood_comedy.name}",
   ]
 }
@@ -86,7 +86,7 @@ resource "octopusdeploy_tenant" "globex" {
   description = "Hank Scorpio's tech empire. Pro tier, hustle mood."
   tenant_tags = [
     "${octopusdeploy_tag_set.app.name}/${octopusdeploy_tag.app_randomquotes.name}",
-    "${octopusdeploy_tag_set.tier.name}/${octopusdeploy_tag.tier_m.name}",
+    "${octopusdeploy_tag_set.tier.name}/${octopusdeploy_tag.tier_pro.name}",
     "${octopusdeploy_tag_set.mood.name}/${octopusdeploy_tag.mood_silicon_valley.name}",
   ]
 }
@@ -96,7 +96,7 @@ resource "octopusdeploy_tenant" "initech" {
   description = "Stapler-bound TPS pushers. Free tier, stoic mood."
   tenant_tags = [
     "${octopusdeploy_tag_set.app.name}/${octopusdeploy_tag.app_randomquotes.name}",
-    "${octopusdeploy_tag_set.tier.name}/${octopusdeploy_tag.tier_s.name}",
+    "${octopusdeploy_tag_set.tier.name}/${octopusdeploy_tag.tier_free.name}",
     "${octopusdeploy_tag_set.mood.name}/${octopusdeploy_tag.mood_stoic.name}",
   ]
 }

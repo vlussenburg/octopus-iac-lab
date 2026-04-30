@@ -78,7 +78,7 @@ Downstream stacks read upstream outputs via `terraform_remote_state` with `backe
 
 ### Tenants + namespaces
 
-Three tenants (`acme-corp`/`globex`/`initech`), each tagged with `tier/{S,M,L}` (drives replicas), `mood/{comedy,silicon-valley,stoic}` (drives quote pool), and the `app/randomquotes` participation tag. Combined with two envs and two `Source` values (local/saas), this fans out to **12 namespaces** of the form `randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}`.
+Three tenants (`acme-corp`/`globex`/`initech`), each tagged with `tier/{free,pro,enterprise}` (drives replicas + watermark), `mood/{comedy,silicon-valley,stoic}` (drives quote pool), and the `app/randomquotes` participation tag. Combined with two envs and two `Source` values (local/saas), this fans out to **12 namespaces** of the form `randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}`.
 
 `Source` is supplied via the `Lab Defaults` library variable set, which differs per Octopus instance — it's not derived from the URL via Substring (we tried; library variable set is cleaner).
 

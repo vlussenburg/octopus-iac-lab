@@ -1,12 +1,12 @@
 variable "Replicas" {
     value "3" {
-        tenant_tag = ["tier/l"]
+        tenant_tag = ["tier/enterprise"]
     }
     value "2" {
-        tenant_tag = ["tier/m"]
+        tenant_tag = ["tier/pro"]
     }
     value "1" {
-        tenant_tag = ["tier/s"]
+        tenant_tag = ["tier/free"]
     }
 }
 
@@ -49,7 +49,7 @@ variable "Brand.Color" {
 variable "Branding.Watermark" {
     value "" {}
     value "FREE TIER" {
-        tenant_tag = ["tier/s"]
+        tenant_tag = ["tier/free"]
     }
 }
 
