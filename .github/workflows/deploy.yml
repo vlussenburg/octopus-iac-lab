@@ -6,13 +6,14 @@ on:
     paths:
       - 'app/**'                           # Dockerfile, index.html, k8s manifests
       - '.octopus/deployment_process.ocl'  # release process changes — redeploy
-      - '.github/workflows/deploy.yml'     # changes to the workflow itself
   pull_request:
     branches: [main]
     paths:
       - 'app/**'
       - '.octopus/deployment_process.ocl'
-      - '.github/workflows/deploy.yml'
+  # Manual trigger — use the Actions tab or `gh workflow run deploy.yml` when
+  # iterating on the workflow itself or want to force a release.
+  workflow_dispatch:
 
 env:
   # OctopusDeploy/*-action@v3 want the space *name* (not slug or ID). Stable
