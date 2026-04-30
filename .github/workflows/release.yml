@@ -90,9 +90,6 @@ jobs:
     env:
       OCTOPUS_URL: ${{ secrets[matrix.url_secret] }}
       OCTOPUS_API_KEY: ${{ secrets[matrix.key_secret] }}
-      # Image tag = whatever the build pushed. Release number = image tag
-      # plus the OCL commit SHA so re-releases of the same image (process
-      # changes only) get unique release numbers without retagging the image.
       IMAGE_TAG: ${{ needs.resolve.outputs.version }}
       RELEASE_NUMBER: ${{ needs.resolve.outputs.version }}-${{ needs.resolve.outputs.short_sha }}
     steps:
@@ -102,12 +99,12 @@ jobs:
           project: ${{ env.PROJECT }}
           release_number: ${{ env.RELEASE_NUMBER }}
           git_ref: ${{ needs.resolve.outputs.sha }}
-          # Image.Tag is a prompted variable (.octopus/variables.ocl); the
-          # deployment process pulls #{Image.Tag} from GHCR. Octopus's
-          # prompt machinery wants the value at create AND deploy time —
-          # passed in both steps.
-          variables: |
-            Image.Tag: ${{ env.IMAGE_TAG }}
+          # The image is a package reference on the K8s step
+          # (.octopus/deployment_process.ocl). Passing it here freezes the
+          # version into the release's variable snapshot — promoting Dev →
+          # Production replays the same image, immutable, no prompt.
+          packages: |
+            randomquotes-image:${{ env.IMAGE_TAG }}
 
       - name: Deploy to Dev
         uses: OctopusDeploy/deploy-release-action@v3
@@ -115,5 +112,3 @@ jobs:
           project: ${{ env.PROJECT }}
           release_number: ${{ env.RELEASE_NUMBER }}
           environments: Dev
-          variables: |
-            Image.Tag: ${{ env.IMAGE_TAG }}
