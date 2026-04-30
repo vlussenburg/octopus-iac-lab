@@ -17,6 +17,10 @@ resource "octopusdeploy_project" "randomquotes" {
   tenanted_deployment_participation = "Tenanted"
   is_version_controlled             = true
 
+  # Per-Octopus values that can't live in shared OCL — Source (local|saas)
+  # is set there. Resolves naturally as #{Source} in deployment + runbook OCL.
+  included_library_variable_sets = [local.cp.lab_source_set_id]
+
   git_library_persistence_settings {
     url               = var.cac_repo_url
     default_branch    = var.cac_branch

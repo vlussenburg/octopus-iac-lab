@@ -23,7 +23,7 @@ process {
             action_type = "Octopus.KubernetesDeployConfigMap"
             properties = {
                 Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
-                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Octopus.Machine.Name | Substring 17}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
                 Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
                 Octopus.Action.KubernetesContainers.ConfigMapValues = <<-JSON
                     {"config.json":"{\"tenant\":\"#{Octopus.Deployment.Tenant.Name}\",\"mood\":\"#{Featured.Mood}\",\"watermark\":\"#{Branding.Watermark}\",\"maintenance\":\"#{Maintenance.Message}\"}"}
@@ -44,7 +44,7 @@ process {
                 Octopus.Action.RunOnServer = "false"
                 Octopus.Action.Script.ScriptSource = "Inline"
                 Octopus.Action.Script.Syntax = "Bash"
-                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Octopus.Machine.Name | Substring 17}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
                 Octopus.Action.Script.ScriptBody = <<-EOT
                     set -euo pipefail
                     kubectl scale deployment/randomquotes --replicas=1

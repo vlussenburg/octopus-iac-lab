@@ -12,13 +12,13 @@ step "deploy-k8s-manifests" {
                 apiVersion: v1
                 kind: Namespace
                 metadata:
-                  name: randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
+                  name: randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
                 ---
                 apiVersion: v1
                 kind: ConfigMap
                 metadata:
                   name: randomquotes-config
-                  namespace: randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
+                  namespace: randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
                 data:
                   config.json: |
                     {
@@ -32,7 +32,7 @@ step "deploy-k8s-manifests" {
                 kind: Deployment
                 metadata:
                   name: randomquotes
-                  namespace: randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
+                  namespace: randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
                   labels:
                     app: randomquotes
                 spec:
@@ -70,7 +70,7 @@ step "deploy-k8s-manifests" {
                 kind: Service
                 metadata:
                   name: randomquotes
-                  namespace: randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
+                  namespace: randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
                 spec:
                   type: LoadBalancer
                   selector:

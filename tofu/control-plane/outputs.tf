@@ -33,3 +33,8 @@ output "tenant_ids" {
   }
   description = "Per-tenant IDs consumed by the app stack to wire tenant_project links."
 }
+
+output "lab_source_set_id" {
+  value       = octopusdeploy_library_variable_set.lab_source.id
+  description = "Library variable set carrying per-Octopus values (Source). The app stack includes it on the project."
+}
