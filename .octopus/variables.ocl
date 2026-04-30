@@ -1,12 +1,3 @@
-variable "Source" {
-    value "local" {
-        machine = ["octopus-tentacle-local"]
-    }
-    value "saas" {
-        machine = ["octopus-tentacle-saas"]
-    }
-}
-
 variable "Replicas" {
     value "3" {
         tenant_tag = ["tier/l"]

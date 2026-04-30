@@ -28,7 +28,7 @@ endef
 
 .PHONY: help \
         up down logs ps nuke \
-        master-key mint-api-key ensure-api-key ocl-validate \
+        master-key mint-api-key ensure-api-key \
         space-init space-plan space-apply space-destroy space-fmt space-validate \
         cp-init cp-plan cp-apply cp-destroy cp-fmt cp-validate \
         ph-init ph-plan ph-apply ph-destroy ph-fmt ph-validate \
@@ -39,7 +39,6 @@ endef
 help:
 	@echo "compose/              : up | down | logs | ps | nuke      (local self-host only)"
 	@echo "bootstrap             : master-key (first-time) | mint-api-key (local-only)"
-	@echo "OCL                   : ocl-validate                          (parse .octopus/ via local Octopus)"
 	@echo "deploys come from CI: push to main on github → .github/workflows/deploy.yml"
 	@echo "tofu/space/           : space-init | space-plan | space-apply | space-destroy | space-fmt | space-validate"
 	@echo "tofu/control-plane/   : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
@@ -235,32 +234,6 @@ mint-api-key:
 		echo "OCTOPUS_API_KEY=$$KEY" >> .env; \
 	fi; \
 	echo "OCTOPUS_API_KEY written to .env (purpose=\"make mint-api-key\")"
-
-# Push the current commit to a throwaway `_ocl-validate` branch and ask
-# the local Octopus to parse the .octopus/ OCL files for it. CaC projects
-# expose parse errors via /api/<space>/projects/<id>/<branch>/{variables,
-# deploymentprocesses,deploymentsettings} — we hit each and surface the
-# error message inline. Local-only target; requires the local Octopus to
-# be running and reachable, and OCTOPUS_URL to point at it.
-ocl-validate:
-	@$(load_env) \
-	  case "$$OCTOPUS_URL" in *octopus.app*) echo "ocl-validate is local-only — switch to the local worktree."; exit 1 ;; esac; \
-	  echo "==> push current HEAD to _ocl-validate"; \
-	  git push origin HEAD:_ocl-validate --force >/dev/null 2>&1; \
-	  SPACE_ID=$$(curl -sf -H "X-Octopus-ApiKey: $$OCTOPUS_API_KEY" "$$OCTOPUS_URL/api/spaces" \
-	    | jq -r '.Items[] | select(.Slug == "iac-sandbox") | .Id'); \
-	  fail=0; \
-	  for what in variables deploymentprocesses deploymentsettings; do \
-	    echo "==> parse .octopus/$$(echo $$what | sed 's/s$$//' | sed 's/deploymentproces/deployment_process/' | sed 's/deploymentsetting/deployment_settings/').ocl"; \
-	    BODY=$$(curl -s -H "X-Octopus-ApiKey: $$OCTOPUS_API_KEY" "$$OCTOPUS_URL/api/$$SPACE_ID/projects/randomquotes/_ocl-validate/$$what"); \
-	    if echo "$$BODY" | jq -e '.Errors' >/dev/null 2>&1; then \
-	      echo "$$BODY" | jq -r '.Errors[]' | sed 's/^/    /'; \
-	      fail=1; \
-	    else \
-	      echo "    ok"; \
-	    fi; \
-	  done; \
-	  exit $$fail
 
 # Probe the current OCTOPUS_API_KEY against /api/users/me. If unauthorised:
 #   - local: silently mint a fresh key (admin/Password01! login still works
