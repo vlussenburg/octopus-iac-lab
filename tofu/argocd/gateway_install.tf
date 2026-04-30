@@ -10,7 +10,6 @@
 locals {
   cp = data.terraform_remote_state.control_plane.outputs
 
-  target_kind          = strcontains(var.octopus_url, "octopus.app") ? "saas" : "local"
   gateway_release_name = "octopus-argo-gateway-${local.target_kind}"
 
   # Environments the Gateway scopes Argo Application discovery against.

@@ -18,7 +18,9 @@ resource "argocd_account_token" "octopus" {
 
 resource "kubernetes_namespace_v1" "gateway" {
   metadata {
-    name = "octopus-argo-gateway"
+    # Per-Octopus suffixed: both worktrees install gateways into the same
+    # cluster, so each gets its own namespace.
+    name = "octopus-argo-gateway-${local.target_kind}"
   }
 }
 

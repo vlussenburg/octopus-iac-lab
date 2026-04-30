@@ -40,6 +40,10 @@ terraform {
       source  = "oboukili/argocd"
       version = "~> 6.1"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
   }
 }
 
@@ -95,6 +99,7 @@ locals {
   is_saas               = strcontains(var.octopus_url, "octopus.app")
   install_argocd_final  = coalesce(var.install_argocd, !local.is_saas)
   argocd_namespace_name = var.argocd_namespace
+  target_kind           = local.is_saas ? "saas" : "local"
 }
 
 # --- cross-stack reads ------------------------------------------------------
