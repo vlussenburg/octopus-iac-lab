@@ -16,14 +16,14 @@ locals {
   # Mirrors the k8s-agent install — Dev + Production.
   gateway_environments = ["Dev", "Production"]
 
-  # SaaS exposes gRPC at :443 multiplexed with HTTPS (the public LB does
-  # protocol-aware routing). Self-host compose exposes :8443 separately.
-  # User can override via var.octopus_grpc_url for any non-default tunnel.
+  # Both SaaS and self-host expose Octopus gRPC on :8443. SaaS terminates
+  # TLS with a public cert; self-host uses a self-signed cert. User can
+  # override via var.octopus_grpc_url for any non-default tunnel.
   octopus_host = replace(replace(var.octopus_url, "https://", ""), "http://", "")
   octopus_grpc_url_resolved = coalesce(
     var.octopus_grpc_url,
     local.target_kind == "saas"
-    ? "grpc://${local.octopus_host}:443"
+    ? "grpc://${local.octopus_host}:8443"
     : "grpc://host.docker.internal:8443",
   )
 
