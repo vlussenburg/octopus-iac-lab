@@ -1,21 +1,22 @@
 # octopus-iac-lab
 
-A personal lab for scaffolding and configuring a **self-hosted Octopus Server** entirely as code, with **Config-as-Code (CaC)** turned on so project state lives in Git rather than the Octopus database.
+A personal lab for scaffolding and configuring **Octopus Deploy** entirely as code, with **Config-as-Code (CaC)** turned on so project state lives in Git rather than the Octopus database. The same OCL + tofu drives both a **local self-hosted** Octopus and an **Octopus Cloud SaaS** instance — kept in lock-step from sibling worktrees.
 
 ## Why this exists
 
-- I wanted IaC-driven setup of Octopus (envs, lifecycles, project groups, projects, Git credentials, K8s agent).
-- I wanted CaC enabled from minute one — so the project's deployment process serialises out to OCL files in Git, not into the SQL database.
+- I wanted IaC-driven setup of Octopus (space, envs, lifecycles, project group, library vars, tenants, GHCR feed, K8s agent).
+- I wanted CaC enabled from minute one — so the project's deployment process and runbooks serialise out to OCL files in Git, not into the SQL database.
 - This is intentionally a "prissy techy" setup. No customer is shipping their first Octopus install this way; the goal is to learn the IaC + CaC surface end-to-end against my own sandbox.
 
 ## Layout
 
 ```
 octopus-iac-lab/
-├── compose/      # docker-compose stack — the local Octopus Server
-├── tofu/         # OpenTofu — three stacks (control-plane, app, k8s-agent)
-├── app/          # the actual app artefacts (Dockerfile, index.html, k8s/)
-└── .octopus/     # OCL files — owned by Octopus + git via CaC
+├── compose/      # docker-compose stack — local Octopus Server (local worktree only)
+├── tofu/         # OpenTofu — five stacks (space, control-plane, platform-hub, app-randomquotes, k8s-agent)
+├── app/          # the actual app artefacts (Dockerfile, index.html); k8s/ kept as a stale reference
+├── assets/       # tenant logos uploaded by control-plane
+└── .octopus/     # OCL files — owned by Octopus + git via CaC (deployment process, runbooks, variables)
 ```
 
 Each folder has its own `README.md`. Non-sensitive lab config lives in committed `tofu/<stack>/defaults.auto.tfvars`. Secrets live in `.env` (gitignored).
@@ -28,37 +29,42 @@ Local self-hosted Octopus, defined right here in [`compose/docker-compose.yml`](
 |---|---|
 | URL | `http://localhost:8090` |
 | Admin login | `admin` / `Password01!` |
-| Space | `Default` (`Spaces-1`) |
+| Space | `IaC Sandbox` (slug `iac-sandbox`, created by `tofu/space/`) |
 | Polling (Halibut) | `host.docker.internal:10943` |
 | gRPC (KLOS, off by default) | `host.docker.internal:8443` |
 
+The SaaS worktree points at `https://<id>.octopus.app` instead and skips `compose/` entirely.
+
 ## Bootstrap
 
-1. Copy `.env.example` → `.env` and fill in `MASTER_KEY` (generate with `openssl rand -base64 16`).
-2. Start the server: `make up`
-3. Log in at <http://localhost:8090>, mint an API key (Profile → My API Keys), paste `compose/license.xml` under Configuration → License.
+1. Copy `.env.example` → `.env` and fill in `MASTER_KEY` (`openssl rand -base64 16`), `OCTOPUS_URL` (`http://localhost:8090` or your SaaS URL).
+2. Local only: start the server: `make up` and paste `compose/license.xml` (or drop it in before `make up` — install.sh picks it up via base64 env var).
+3. Log in, mint an API key (Profile → My API Keys).
 4. Create a GitHub PAT with `repo` scope. Add `OCTOPUS_API_KEY` + `GITHUB_PAT` to `.env`.
 5. From the repo root:
    ```bash
-   make cp-init && make cp-apply         # control-plane: envs, lifecycle, project group, Git credential
-   make app-init && make app-apply       # randomquotes project (CaC-enabled)
-   make agent-init && make agent-apply   # NFS CSI + Octopus K8s Agent (needs Docker Desktop K8s)
+   make space-init && make space-apply   # the IaC Sandbox Space (kill-switch)
+   make cp-init    && make cp-apply      # envs, lifecycle, library vars, GHCR feed, tenants, tenant logos
+   make ph-init    && make ph-apply      # Platform Hub Git wiring (skip via OCTOPUS_PLATFORM_HUB_ENABLED=false on SaaS without the feature)
+   make app-init   && make app-apply     # randomquotes project (CaC-enabled, tenanted)
+   make agent-init && make agent-apply   # NFS CSI + nginx-ingress + Octopus K8s Agent (needs Docker Desktop K8s)
    ```
-   Or just `make apply` to chain all three.
+   Or just `make apply` to chain all five.
 
-After `make app-apply`, the deployment process in [`.octopus/deployment_process.ocl`](.octopus/deployment_process.ocl) is live in Octopus. After `make agent-apply`, the K8s agent registers as a deployment target with role `k8s` — which the deployment step targets. Creating + deploying a release deploys [`app/k8s/`](app/k8s/) into the local cluster.
+After `make app-apply`, the deployment process in [`.octopus/deployment_process.ocl`](.octopus/deployment_process.ocl) and runbooks in [`.octopus/runbooks/`](.octopus/runbooks/) are live. After `make agent-apply`, the K8s agent registers as a deployment target tagged `k8s` and tenant-participating. CI then builds + deploys the image into 12 tenant×env namespaces.
 
 ## Auth notes
 
-- **Octopus → GitHub (CaC)**: GitHub PAT with `repo` scope.
+- **Octopus → GitHub (CaC + Platform Hub)**: GitHub PAT with `repo` scope.
 - **Agent → Octopus**: admin API key as Bearer (Octopus accepts API keys for `Authorization: Bearer`). Localhost-lab choice; for anything real, scope a service account.
 - **Stale API key recovery**: `make apply` and `make destroy` first probe `OCTOPUS_API_KEY` against `/api/users/me`. If rejected on local, the Makefile mints a fresh key and updates `.env`. On SaaS it fails with a UI link — SaaS keys can't be minted programmatically without a browser session.
 
 ## Deploys
 
-Deploys come from CI ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)). Push to `main` → image built and pushed to GHCR → release created on each Octopus and deployed to `Dev`. Promotion to `Production` is a manual step in the Octopus UI.
+Deploys come from CI. Two workflows:
 
-The workflow fans out via a job matrix to two targets — **SaaS** and **Local** — using one set of secrets each:
+- [`.github/workflows/build.yml`](.github/workflows/build.yml) — push to `main`, image built and pushed to `ghcr.io/vlussenburg/octopus-iac-lab`, then fans out via a job matrix to call `release.yml` once per Octopus target.
+- [`.github/workflows/release.yml`](.github/workflows/release.yml) — reusable workflow. Creates a release on the chosen Octopus and deploys it tenanted via `OctopusDeploy/deploy-release-tenanted-action@v3` to `Dev`. Promotion to `Production` is a manual step in the Octopus UI.
 
 | Secret | Value |
 |---|---|
@@ -96,11 +102,21 @@ cloudflared tunnel route dns octopus-iac-lab octopus.example.com
 cloudflared tunnel run octopus-iac-lab
 ```
 
+## Reaching the deployed app
+
+The k8s-agent stack installs nginx-ingress into `ingress-nginx`. Each deploy creates an `Ingress` for `#{Source}-#{tenant}-#{env}.localtest.me` (resolves to 127.0.0.1). One port-forward serves all 12 tenant×env combinations:
+
+```bash
+kubectl port-forward svc/ingress-nginx-controller 80:80 -n ingress-nginx
+open http://local-acme-corp-dev.localtest.me
+open http://saas-globex-production.localtest.me
+```
+
 ## Wiping the lab
 
 Two scopes — pick what you want gone.
 
-- **Just the terraform-managed Octopus state** (envs, lifecycle, project, Platform Hub config, agent registration, K8s namespace + helm release): `make destroy`. Reverse chain runs through every stack and ends with the Space being deleted, which cascades on the Octopus side. Works identically against local self-host and SaaS.
+- **Just the terraform-managed Octopus state** (Space + everything inside it: envs, lifecycle, project, Platform Hub config, tenants, agent registration, K8s namespace + helm release): `make destroy`. Reverse chain runs `agent → app → ph → cp → space`. Destroying the Space is the catch-all — it cascades on the Octopus side. Works identically against local self-host and SaaS. The agent stack's destroy-time `null_resource` removes the registered deployment target before `helm uninstall` so it doesn't orphan and block env deletion.
 
 - **Plus the local Octopus DB itself** (master key, audit log, user accounts, the works):
   ```bash
@@ -109,12 +125,13 @@ Two scopes — pick what you want gone.
   ```
   The next `make up && make apply` runs against a fresh database. The previous API key in `.env` is now invalid against the new DB — `make apply`'s first step (`ensure-api-key`) detects that and re-mints automatically.
 
-- **Full cluster cleanup** (orphan CSI driver, leftover empty namespaces if any): the agent stack's destroy already removes its own namespace and pod. The shared NFS CSI driver is intentionally left running — it's installed via `helm upgrade --install` so it survives `make destroy` and serves any other agents on the cluster. Remove it explicitly when you're tearing the cluster down:
+- **Full cluster cleanup** (orphan CSI driver + nginx-ingress controller): the agent stack's destroy removes its own namespace and pod. The shared NFS CSI driver and nginx-ingress controller are intentionally left running — they're installed via `helm upgrade --install` so they survive `make destroy` and serve any other agents on the cluster. Remove explicitly when you're tearing the cluster down:
   ```bash
   helm uninstall csi-driver-nfs -n kube-system
+  helm uninstall ingress-nginx -n ingress-nginx
   ```
 
 ## Not in scope
 
 - No production guidance — this is a sandbox.
-- No reference to the `octopus-ttc` demo. App artefacts in `app/` were copied from there but the lab is otherwise standalone.
+- No reference to the `octopus-ttc` demo. App artefacts in `app/` were originally copied from there but the lab is otherwise standalone. `app/k8s/` is no longer wired through; manifests are inlined in `.octopus/deployment_process.ocl`.

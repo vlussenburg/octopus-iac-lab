@@ -11,6 +11,10 @@ Wires Octopus Platform Hub at the Git repo that holds policy YAML.
 
 The actual policy *content* (YAML files Platform Hub reads) is committed to this repo under `.octopus/` — not managed here.
 
+## Optional
+
+Gated by `OCTOPUS_PLATFORM_HUB_ENABLED` (default `true` in the Makefile). Set to `false` in `.env` if your target Octopus doesn't have Platform Hub (older self-host or some SaaS instances) — `make apply` will skip this stack and the rest still works.
+
 ## Run
 
 ```bash

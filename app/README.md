@@ -1,14 +1,12 @@
 # app/
 
-The Random Quotes K8s sample app — the artefact Octopus deploys. Mirrors the contents of `octopus-ttc/{app,k8s}` so the lab has its own self-contained copy.
+The Random Quotes K8s sample app — the artefact Octopus deploys.
 
 | File | Purpose |
 |------|---------|
-| [`Dockerfile`](Dockerfile) | nginx + static `index.html`, with a `VERSION` build-arg that gets baked into the page footer. |
-| [`index.html`](index.html) | The actual page — random quotes, rotating in the browser. |
-| [`k8s/namespace.yaml`](k8s/namespace.yaml) | Creates the `randomquotes` namespace. |
-| [`k8s/deployment.yaml`](k8s/deployment.yaml) | 2-replica Deployment. Image set to `octopussamples/randomquotes-k8s:latest` so the lab works without a private image-pull secret. |
-| [`k8s/service.yaml`](k8s/service.yaml) | LoadBalancer Service on port 80. |
+| [`Dockerfile`](Dockerfile) | nginx + static `index.html`, with a `VERSION` build-arg that gets baked into the page footer. Built + pushed to `ghcr.io/vlussenburg/octopus-iac-lab` by [`../.github/workflows/build.yml`](../.github/workflows/build.yml). |
+| [`index.html`](index.html) | The actual page. Reads `/config.json` at startup for tenant/mood/icon/colour/watermark/maintenance overrides — that file is materialised by Octopus at deploy time via a ConfigMap. Honours a `maintenance` overlay used by the `Maintenance Mode On` runbook. |
+| `k8s/` | **Stale.** Original namespace/deployment/service YAMLs. The deployment process now inlines its own manifests (Deployment + Service + Ingress + ConfigMap mount) in [`../.octopus/deployment_process.ocl`](../.octopus/deployment_process.ocl), so this folder isn't read by anything. Kept as a reference of the original octopus-ttc shape. |
 
 ## Build locally (optional)
 
@@ -18,8 +16,11 @@ docker run --rm -p 8080:80 randomquotes:dev
 open http://localhost:8080
 ```
 
-## How Octopus uses these manifests
+## How Octopus uses this
 
-The deployment step in [`../.octopus/deployment_process.ocl`](../.octopus/) references these YAML files. When the step runs on a K8s deployment target, it applies them into the `randomquotes` namespace.
+[`../.octopus/deployment_process.ocl`](../.octopus/deployment_process.ocl) has two steps:
 
-When you want to switch from the public sample image to your own build, edit `k8s/deployment.yaml` and add an image-pull secret if needed.
+1. **Deploy ConfigMap** — `Octopus.KubernetesDeployConfigMap` writes `config.json` (tenant/mood/icon/colour/watermark + empty maintenance) into a ConfigMap named `randomquotes-config`.
+2. **Deploy Manifests** — `Octopus.KubernetesDeployRawYaml` applies an inline Deployment (image pulled from the GHCR feed via the `randomquotes-image` package reference), Service, and Ingress for `#{Source}-#{tenant}-#{env}.localtest.me`. The ConfigMap is mounted into the pod at `/usr/share/nginx/html/config.json`.
+
+The `Maintenance Mode On` runbook ([`../.octopus/runbooks/maintenance-on.ocl`](../.octopus/runbooks/maintenance-on.ocl)) patches the same ConfigMap with `maintenance = #{Maintenance.Message}` and scales the Deployment to 1 replica; `Maintenance Mode Off` clears the message and scales back to the tier's `#{Replicas}` value.

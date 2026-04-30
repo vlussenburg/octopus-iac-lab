@@ -5,7 +5,7 @@ Local Octopus Server stack — the runtime that the [`../tofu/`](../tofu/) scaff
 | File | Purpose |
 |------|---------|
 | [`docker-compose.yml`](docker-compose.yml) | SQL Server 2022 + Octopus Server, host port `8090`. Apple-Silicon ready (both images forced to `linux/amd64`; turn on Docker Desktop → "Use Rosetta" for native-ish speed). |
-| `license.xml` | Octofront licence. **Gitignored.** Pasted via Octopus UI under Configuration → License after first login — not loaded by docker-compose. |
+| `license.xml` | Octofront licence. **Gitignored.** If present at `make up`, the Makefile base64-encodes it and exports `OCTOPUS_SERVER_BASE64_LICENSE` so the image's `install.sh` applies it on first boot. If absent, paste it via the UI under Configuration → License after first login. |
 
 Reads `MASTER_KEY` from the repo-root `.env`.
 
@@ -26,7 +26,7 @@ First boot takes ~60–90s. Then:
 open http://localhost:8090
 ```
 
-Login: `admin` / `Password01!`. Paste `license.xml` under Configuration → License.
+Login: `admin` / `Password01!`. If you didn't drop a `license.xml` in before `make up`, paste one under Configuration → License now.
 
 ## Why these choices
 
