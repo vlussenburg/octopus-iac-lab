@@ -17,9 +17,10 @@ Octopus's Argo CD integration uses annotations (`argo.octopus.com/project`, `...
 |------|--------------|
 | [`main.tf`](main.tf) | Providers (octopusdeploy + helm + kubernetes + kubectl + argocd) and `terraform_remote_state` for space/cp/app |
 | [`variables.tf`](variables.tf) | Inputs — chart versions, Octopus URL, optional gRPC URL override |
-| [`argocd_install.tf`](argocd_install.tf) | argo-cd helm release. Configures the `octopus` account (apiKey-only) + RBAC policy. `configs.params.server.insecure=true` so argocd-server doesn't double-TLS behind nginx-ingress. |
+| [`argocd_install.tf`](argocd_install.tf) | argo-cd helm release (count-gated by `install_argocd` — local owns it, SaaS piggybacks). Configures the `octopus` account (apiKey-only) + RBAC policy. `configs.params.server.insecure=true` so argocd-server doesn't double-TLS behind nginx-ingress. |
 | [`argocd_account.tf`](argocd_account.tf) | `argocd_account_token` resource mints a 30-day JWT for the `octopus` account. Materialised as a Kubernetes Secret in the gateway namespace; ditto the Octopus access token. |
-| [`gateway_install.tf`](gateway_install.tf) | Octopus Argo CD Gateway helm release. Per-Octopus suffixed (`octopus-argo-gateway-{local,saas}`) — both worktrees can install gateways into the same cluster against different Octopi. |
+| [`gateway_install.tf`](gateway_install.tf) | Octopus Argo CD Gateway helm release. Per-Octopus suffixed release name AND namespace (`octopus-argo-gateway-{local,saas}`). gRPC port pinned to `:8443` for both self-host and SaaS. |
+| [`gateway_deregister.tf`](gateway_deregister.tf) | Destroy-time `null_resource` that DELETEs the `ArgoCDGateways-N` registration record from Octopus before `helm uninstall`. Provider-gap pattern, mirrors `tofu/k8s-agent/deregister.tf`. Without it, the next install fails with "An ArgoCDGateway with this name already exists." |
 | [`ingress.tf`](ingress.tf) | Ingress to the argo UI at `argocd.localtest.me:8080` via the cluster's nginx-ingress. |
 | [`applications.tf`](applications.tf) | `module.randomquotes_argo_app` × 6 — instantiates the local `octopus-argocd-application` module once per (tenant × env). |
 | [`outputs.tf`](outputs.tf) | URL, admin-password kubectl one-liner, application names |
@@ -41,10 +42,17 @@ The `argocd` provider authenticates as admin during the apply via the auto-gener
 
 ## Local self-host vs SaaS
 
-The Gateway's outbound gRPC connection to Octopus needs a reachable endpoint:
+Both work out of the box on `:8443`. SaaS gRPC terminates with a public cert; self-host (compose's :8443 port) accepts the chart's default trust config without further wiring. Override `var.octopus_grpc_url` if you have a non-default tunnel.
 
-- **SaaS**: defaults to `grpc://<id>.octopus.app:443` over the public LB's protocol-aware routing. Works out of the box.
-- **Local self-host**: defaults to `grpc://host.docker.internal:8443`, which compose exposes — but the Octopus container serves a self-signed cert. The Gateway will reject that until you mount the cert as a Secret and point at it via `gateway.serverCertificateSecretName`. Override `OCTOPUS_GRPC_PLAINTEXT=true` if you have a plaintext-terminating proxy. Local-self-host gRPC connectivity is left as a TODO; the rest of the stack (ArgoCD, Applications, the JWT/token mint) all works fine — only the Octopus → Gateway link is bumpy.
+## Two-worktree symmetry
+
+ArgoCD itself is shared cluster infra — only one worktree owns the helm release. By default the local worktree installs it; the saas worktree skips with `install_argocd = false` and reads the same admin secret. Override per-stack with `TF_VAR_install_argocd=true|false` if you want to flip ownership.
+
+Per-Octopus things are suffixed `local` / `saas` so both worktrees coexist:
+- Gateway helm release: `octopus-argo-gateway-{local,saas}`
+- Gateway namespace: `octopus-argo-gateway-{local,saas}`
+- Argo Application names: `randomquotes-{tenant}-{env}-{local,saas}`
+- Argo destination namespaces: `argo-randomquotes-{local,saas}-{tenant}-{env}`
 
 ## Run
 
