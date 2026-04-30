@@ -1,0 +1,29 @@
+# App-of-Apps root for the local-Octopus worktree. Argo syncs this →
+# discovers the six leaf Application YAMLs at the source path → applies
+# them. Each leaf's argo.octopus.com/* annotations get forwarded to
+# Local Octopus by the gateway named `argocd-local`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: randomquotes-root-local
+  namespace: argocd
+  labels:
+    lab.octopus.com/source: local
+    lab.octopus.com/role: app-of-apps-root
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/vlussenburg/octopus-iac-lab
+    path: gitops/applications/randomquotes/local
+    targetRevision: HEAD
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ApplyOutOfSyncOnly=true

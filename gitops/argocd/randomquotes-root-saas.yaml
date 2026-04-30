@@ -1,0 +1,28 @@
+# App-of-Apps root for the SaaS-Octopus worktree. Same shape as
+# randomquotes-root-local; points at the parallel saas folder. The
+# gateway named `argocd-saas` claims its leaves on Octopus Cloud's behalf.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: randomquotes-root-saas
+  namespace: argocd
+  labels:
+    lab.octopus.com/source: saas
+    lab.octopus.com/role: app-of-apps-root
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/vlussenburg/octopus-iac-lab
+    path: gitops/applications/randomquotes/saas
+    targetRevision: HEAD
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ApplyOutOfSyncOnly=true

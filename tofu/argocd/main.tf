@@ -32,14 +32,11 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 2.30"
     }
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = ">= 1.14"
-    }
     argocd = {
       source  = "oboukili/argocd"
       version = "~> 6.1"
     }
+    # null is used by the gateway module's destroy-time deregister.
     null = {
       source  = "hashicorp/null"
       version = "~> 3.2"
@@ -54,11 +51,6 @@ provider "octopusdeploy" {
 }
 
 provider "kubernetes" {
-  config_path    = "~/.kube/config"
-  config_context = var.kube_context
-}
-
-provider "kubectl" {
   config_path    = "~/.kube/config"
   config_context = var.kube_context
 }

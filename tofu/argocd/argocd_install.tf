@@ -70,6 +70,56 @@ resource "helm_release" "argocd" {
           "server.insecure" = true
         }
       }
+
+      # Seed a single bootstrap Application as part of the helm install.
+      # It syncs `gitops/argocd/`, which contains the per-Octopus root
+      # Applications (App-of-Apps pattern) AND the argocd-server Ingress.
+      # That's how the cluster gets ALL the lab's per-tenant Argo apps
+      # without tofu touching a single kubectl_manifest — pure GitOps from
+      # the moment ArgoCD comes up.
+      extraObjects = [
+        {
+          apiVersion = "argoproj.io/v1alpha1"
+          kind       = "Application"
+          metadata = {
+            name      = "argocd-bootstrap"
+            namespace = var.argocd_namespace
+            labels = {
+              "lab.octopus.com/role" = "argocd-bootstrap"
+            }
+            # Without this, helm's pre-install/upgrade hook will be GC'd
+            # by Argo on the next sync; with it, this Application is a
+            # plain resource that survives.
+            annotations = {
+              "argocd.argoproj.io/sync-options" = "Prune=false"
+            }
+          }
+          spec = {
+            project = "default"
+            source = {
+              repoURL        = "https://github.com/vlussenburg/octopus-iac-lab"
+              path           = "gitops/argocd"
+              targetRevision = "HEAD"
+              directory = {
+                recurse = false
+              }
+            }
+            destination = {
+              server    = "https://kubernetes.default.svc"
+              namespace = var.argocd_namespace
+            }
+            syncPolicy = {
+              automated = {
+                prune    = true
+                selfHeal = true
+              }
+              syncOptions = [
+                "ApplyOutOfSyncOnly=true",
+              ]
+            }
+          }
+        }
+      ]
     })
   ]
 }
