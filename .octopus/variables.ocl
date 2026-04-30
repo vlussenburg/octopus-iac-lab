@@ -1,3 +1,9 @@
 variable "Image.Tag" {
-    value "#{Octopus.Release.Number | Replace \"-.*$\" \"\"}"
+    value "" {
+        prompt {
+            description = "Container image tag in GHCR. Set per release by CI; same image can ship across multiple Octopus releases when only the deployment process changes."
+            label = "Image Tag"
+            required = true
+        }
+    }
 }

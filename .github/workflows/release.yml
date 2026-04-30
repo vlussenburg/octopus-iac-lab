@@ -17,7 +17,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '.octopus/deployment_process.ocl'
+      - '.octopus/**'  # process, variables, settings, policies — any CaC change re-releases
   workflow_dispatch:
     inputs:
       version:
@@ -90,23 +90,30 @@ jobs:
     env:
       OCTOPUS_URL: ${{ secrets[matrix.url_secret] }}
       OCTOPUS_API_KEY: ${{ secrets[matrix.key_secret] }}
+      # Image tag = whatever the build pushed. Release number = image tag
+      # plus the OCL commit SHA so re-releases of the same image (process
+      # changes only) get unique release numbers without retagging the image.
+      IMAGE_TAG: ${{ needs.resolve.outputs.version }}
+      RELEASE_NUMBER: ${{ needs.resolve.outputs.version }}-${{ needs.resolve.outputs.short_sha }}
     steps:
       - name: Create release
-        id: create_release
         uses: OctopusDeploy/create-release-action@v3
         with:
           project: ${{ env.PROJECT }}
-          # Release number is `<image-version>-<short-sha>`. The image part
-          # makes "what code" obvious; the SHA part disambiguates re-releases
-          # that ship the same image with a new OCL snapshot. Image.Tag is
-          # derived from the release number in .octopus/variables.ocl, so
-          # nothing else here needs to know about the image tag.
-          release_number: ${{ needs.resolve.outputs.version }}-${{ needs.resolve.outputs.short_sha }}
+          release_number: ${{ env.RELEASE_NUMBER }}
           git_ref: ${{ needs.resolve.outputs.sha }}
+          # Image.Tag is a prompted variable (.octopus/variables.ocl); the
+          # deployment process pulls #{Image.Tag} from GHCR. Octopus's
+          # prompt machinery wants the value at create AND deploy time —
+          # passed in both steps.
+          variables: |
+            Image.Tag: ${{ env.IMAGE_TAG }}
 
       - name: Deploy to Dev
         uses: OctopusDeploy/deploy-release-action@v3
         with:
           project: ${{ env.PROJECT }}
-          release_number: ${{ steps.create_release.outputs.release_number }}
+          release_number: ${{ env.RELEASE_NUMBER }}
           environments: Dev
+          variables: |
+            Image.Tag: ${{ env.IMAGE_TAG }}
