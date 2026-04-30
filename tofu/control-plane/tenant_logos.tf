@@ -1,9 +1,6 @@
-# Upload a brand-coloured SVG logo per tenant via the Octopus API. The
+# Upload a brand-coloured PNG logo per tenant via the Octopus API. The
 # provider's octopusdeploy_tenant resource doesn't expose a logo attribute,
 # so we drop down to a curl POST against /api/{space}/tenants/{id}/logo.
-#
-# Trigger keys include the file's sha256 — re-uploads only happen when the
-# SVG content changes, so plan/apply is a no-op on subsequent runs.
 
 locals {
   tenant_logos = {
