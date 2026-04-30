@@ -9,15 +9,15 @@ locals {
   tenant_logos = {
     acme-corp = {
       tenant_id = octopusdeploy_tenant.acme_corp.id
-      file      = "${path.module}/../../assets/tenant-logos/acme-corp.svg"
+      file      = "${path.module}/../../assets/tenant-logos/acme-corp.png"
     }
     globex = {
       tenant_id = octopusdeploy_tenant.globex.id
-      file      = "${path.module}/../../assets/tenant-logos/globex.svg"
+      file      = "${path.module}/../../assets/tenant-logos/globex.png"
     }
     initech = {
       tenant_id = octopusdeploy_tenant.initech.id
-      file      = "${path.module}/../../assets/tenant-logos/initech.svg"
+      file      = "${path.module}/../../assets/tenant-logos/initech.png"
     }
   }
 }
@@ -35,7 +35,7 @@ resource "null_resource" "tenant_logo" {
   provisioner "local-exec" {
     command = <<-EOT
       curl -sf -H "X-Octopus-ApiKey: ${self.triggers.api_key}" \
-        -F "fileToUpload=@${each.value.file};type=image/svg+xml" \
+        -F "fileToUpload=@${each.value.file};type=image/png" \
         "${self.triggers.octopus_url}/api/tenants/${self.triggers.tenant_id}/logo" >/dev/null
       echo "uploaded logo for ${each.key}"
     EOT
