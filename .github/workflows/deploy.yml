@@ -3,11 +3,21 @@ name: CI / Octopus Release
 on:
   push:
     branches: [main]
+    paths:
+      - 'app/**'                           # Dockerfile, index.html, k8s manifests
+      - '.octopus/deployment_process.ocl'  # release process changes — redeploy
+      - '.github/workflows/deploy.yml'     # changes to the workflow itself
   pull_request:
     branches: [main]
+    paths:
+      - 'app/**'
+      - '.octopus/deployment_process.ocl'
+      - '.github/workflows/deploy.yml'
 
 env:
-  OCTOPUS_SPACE: iac-sandbox
+  # OctopusDeploy/*-action@v3 want the space *name* (not slug or ID). Stable
+  # by virtue of being set in HCL — same property we'd get from the slug.
+  OCTOPUS_SPACE: IaC Sandbox
   IMAGE: ghcr.io/${{ github.repository_owner }}/octopus-iac-lab
   PROJECT: randomquotes
 
