@@ -7,11 +7,12 @@
   <style>
     body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
     .card { max-width: 600px; padding: 2rem; text-align: center; }
-    .tenant-badge { font-size: 0.85rem; color: #888; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1rem; }
+    .brand-icon { font-size: 4rem; line-height: 1; margin-bottom: 0.5rem; }
+    .tenant-badge { font-size: 0.85rem; color: var(--brand-color, #888); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1.5rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--brand-color, transparent); display: inline-block; }
     blockquote { font-size: 1.5rem; font-style: italic; margin: 0 0 1rem; }
     cite { color: #aaa; }
-    button { margin-top: 1.5rem; padding: 0.6rem 1.5rem; background: #e94560; border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 1rem; }
-    button:hover { background: #c73652; }
+    button { margin-top: 1.5rem; padding: 0.6rem 1.5rem; background: var(--brand-color, #e94560); border: none; color: #1a1a2e; font-weight: 600; border-radius: 4px; cursor: pointer; font-size: 1rem; transition: filter 0.15s; }
+    button:hover { filter: brightness(1.1); }
     footer { margin-top: 2rem; font-size: 0.75rem; color: #555; }
     .watermark { position: fixed; bottom: 1rem; right: 1rem; font-size: 0.75rem; color: #ff9800; letter-spacing: 0.2em; padding: 0.3rem 0.6rem; border: 1px solid #ff9800; border-radius: 4px; }
     .maintenance { position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #2c1810; color: #ffb74d; text-align: center; padding: 2rem; z-index: 100; }
@@ -22,6 +23,7 @@
 </head>
 <body>
   <div class="card">
+    <div class="brand-icon" id="brandIcon"></div>
     <div class="tenant-badge" id="tenant"></div>
     <blockquote id="quote"></blockquote>
     <cite id="author"></cite>
@@ -61,7 +63,7 @@
       { q: "The impediment to action advances action. What stands in the way becomes the way.", a: "Marcus Aurelius", mood: "stoic" },
     ];
 
-    let cfg = { tenant: "", mood: "", watermark: "", maintenance: "" };
+    let cfg = { tenant: "", mood: "", icon: "", color: "", watermark: "", maintenance: "" };
     let pool = quotes;
     let i = 0;
 
@@ -85,6 +87,8 @@
           document.getElementById("maintenance").style.display = "flex";
           return;
         }
+        if (cfg.color) document.documentElement.style.setProperty("--brand-color", cfg.color);
+        if (cfg.icon) document.getElementById("brandIcon").textContent = cfg.icon;
         if (cfg.mood) pool = quotes.filter(q => q.mood === cfg.mood);
         if (pool.length === 0) pool = quotes; // fallback if mood matches nothing
         i = Math.floor(Math.random() * pool.length);

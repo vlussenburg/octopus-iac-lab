@@ -22,6 +22,30 @@ variable "Featured.Mood" {
     }
 }
 
+variable "Brand.Icon" {
+    value "🃏" {
+        tenant_tag = ["mood/comedy"]
+    }
+    value "🚀" {
+        tenant_tag = ["mood/silicon-valley"]
+    }
+    value "🧘" {
+        tenant_tag = ["mood/stoic"]
+    }
+}
+
+variable "Brand.Color" {
+    value "#F5C518" {
+        tenant_tag = ["mood/comedy"]
+    }
+    value "#00B0FF" {
+        tenant_tag = ["mood/silicon-valley"]
+    }
+    value "#7E57C2" {
+        tenant_tag = ["mood/stoic"]
+    }
+}
+
 variable "Branding.Watermark" {
     value "" {}
     value "FREE TIER" {

@@ -26,7 +26,7 @@ process {
                 Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
                 Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
                 Octopus.Action.KubernetesContainers.ConfigMapValues = <<-JSON
-                    {"config.json":"{\"tenant\":\"#{Octopus.Deployment.Tenant.Name}\",\"mood\":\"#{Featured.Mood}\",\"watermark\":\"#{Branding.Watermark}\",\"maintenance\":\"#{Maintenance.Message}\"}"}
+                    {"config.json":"{\"tenant\":\"#{Octopus.Deployment.Tenant.Name}\",\"mood\":\"#{Featured.Mood}\",\"icon\":\"#{Brand.Icon}\",\"color\":\"#{Brand.Color}\",\"watermark\":\"#{Branding.Watermark}\",\"maintenance\":\"#{Maintenance.Message}\"}"}
                     JSON
             }
         }
