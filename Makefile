@@ -49,19 +49,13 @@ help:
 
 # --- compose/ -------------------------------------------------------------
 
-# If compose/license.xml exists, base64-encode it and pass through as
-# OCTOPUS_SERVER_BASE64_LICENSE — install.sh in the Octopus image picks it up
-# and applies the licence on boot. Otherwise the licence step is skipped and
-# you can paste one in the UI.
+# Licence is read straight from .env as OCTOPUS_SERVER_BASE64_LICENSE — docker
+# compose's --env-file picks it up and the Octopus image's install.sh applies
+# it on boot. Encode once with `base64 -i license.xml | tr -d '\n'` and paste
+# into .env. If the var is unset/empty the licence step is skipped (paste via
+# UI under Configuration → License).
 up:
-	@if [ -f compose/license.xml ]; then \
-		export OCTOPUS_SERVER_BASE64_LICENSE=$$(base64 -i compose/license.xml | tr -d '\n'); \
-		echo "Loading licence from compose/license.xml"; \
-		$(COMPOSE) up -d; \
-	else \
-		echo "No compose/license.xml — booting without a licence"; \
-		$(COMPOSE) up -d; \
-	fi
+	$(COMPOSE) up -d
 
 down:
 	$(COMPOSE) down

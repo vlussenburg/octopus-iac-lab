@@ -36,7 +36,7 @@ First-time bootstrap order: `make up` → log in at `localhost:8090` → mint AP
 
 ### Layout
 
-1. **`compose/`** — docker-compose runtime (SQL Server 2022 + Octopus Server, both pinned `linux/amd64`). Host port `8090`. Reads `MASTER_KEY` from `.env`. License is base64-injected at boot if `compose/license.xml` is present, otherwise pasted via UI. Local worktree only — the SaaS worktree has no compose stack.
+1. **`compose/`** — docker-compose runtime (SQL Server 2022 + Octopus Server, both pinned `linux/amd64`). Host port `8090`. Reads `MASTER_KEY` from `.env`. Optional `OCTOPUS_SERVER_BASE64_LICENSE` in `.env` is applied by `install.sh` on first boot (otherwise paste via UI). Local worktree only — the SaaS worktree has no compose stack.
 2. **`tofu/`** — five independent OpenTofu stacks, each with its own local `terraform.tfstate`. Intentionally split, not modules.
 3. **`.octopus/`** — OCL files owned by Octopus. Octopus serialises deployment process / settings / variables / runbooks here on every UI save and commits via the configured Git credential. **Folder name is fixed** — Octopus rejects anything other than `.octopus`.
 
@@ -54,7 +54,7 @@ Downstream stacks read upstream outputs via `terraform_remote_state` with `backe
 
 ### Secrets vs config split
 
-- `.env` (gitignored): `MASTER_KEY`, `OCTOPUS_URL`, `OCTOPUS_API_KEY`, `GITHUB_PAT`. Optionally `OCTOPUS_PLATFORM_HUB_ENABLED`, `OCTOPUS_URL_FROM_CLUSTER`, `OCTOPUS_POLLING_URL_FROM_CLUSTER`.
+- `.env` (gitignored): `MASTER_KEY`, `OCTOPUS_URL`, `OCTOPUS_API_KEY`, `GITHUB_PAT`. Optionally `OCTOPUS_SERVER_BASE64_LICENSE`, `OCTOPUS_PLATFORM_HUB_ENABLED`, `OCTOPUS_URL_FROM_CLUSTER`, `OCTOPUS_POLLING_URL_FROM_CLUSTER`.
 - `tofu/<stack>/defaults.auto.tfvars` (committed): non-sensitive lab values (space name, CaC repo URL/branch/base path, agent name, chart version, etc.).
 - The Makefile is the only thing that bridges `.env` → `TF_VAR_*`. Don't add `terraform.tfvars` files for these.
 

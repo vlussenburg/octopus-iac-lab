@@ -38,7 +38,7 @@ The SaaS worktree points at `https://<id>.octopus.app` instead and skips `compos
 ## Bootstrap
 
 1. Copy `.env.example` → `.env` and fill in `MASTER_KEY` (`openssl rand -base64 16`), `OCTOPUS_URL` (`http://localhost:8090` or your SaaS URL).
-2. Local only: start the server: `make up` and paste `compose/license.xml` (or drop it in before `make up` — install.sh picks it up via base64 env var).
+2. Local only: start the server: `make up`. To skip the UI licence-paste step, base64 your licence XML (`base64 -i license.xml | tr -d '\n'`) and set it as `OCTOPUS_SERVER_BASE64_LICENSE` in `.env` before `make up`. Otherwise paste it via the UI under Configuration → License after first login.
 3. Log in, mint an API key (Profile → My API Keys).
 4. Create a GitHub PAT with `repo` scope. Add `OCTOPUS_API_KEY` + `GITHUB_PAT` to `.env`.
 5. From the repo root:

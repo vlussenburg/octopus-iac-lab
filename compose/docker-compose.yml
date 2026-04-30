@@ -38,9 +38,8 @@ services:
       OCTOPUS_SERVER_NODE_NAME: "OctopusServer"
       MASTER_KEY: "${MASTER_KEY}"
       # If set, install.sh runs `Octopus.Server license --licenseBase64=…` on
-      # boot. Empty = skip (paste in UI). The Makefile's `up` target encodes
-      # compose/license.xml on the fly when it exists, so this stays empty
-      # unless explicitly overridden.
+      # boot. Empty = skip (paste in UI). Sourced from .env via --env-file;
+      # encode once with `base64 -i license.xml | tr -d '\n'`.
       OCTOPUS_SERVER_BASE64_LICENSE: "${OCTOPUS_SERVER_BASE64_LICENSE:-}"
     ports:
       - "8090:8080"      # HTTP API + UI
