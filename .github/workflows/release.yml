@@ -1,31 +1,36 @@
 name: CI / Octopus Release
 
-# Creates + deploys a release on each Octopus target. Three triggers:
-#   1. Successful build.yml (app code changed → ship the new image)
-#   2. push to main touching .octopus/deployment_process.ocl (process
-#      changed → re-release pointing the new snapshot at the existing image)
-#   3. workflow_dispatch (manual force / iterate on this workflow)
-#
-# In paths (2) and (3) there's no upstream version to inherit, so we resolve
-# the most recent non-`latest` tag from GHCR.
+# Three call paths:
+#   1. workflow_call from build.yml — app code changed; build passes its
+#      version + sha directly. No GHCR querying, no version-reset races.
+#   2. push to main on .octopus/** — process / variables changed; we resolve
+#      the latest existing image from GHCR (no new image to pin to).
+#   3. workflow_dispatch — manual; either the operator passes a version or
+#      we fall back to the GHCR-latest resolution like (2).
 
 on:
-  workflow_run:
-    workflows: ["CI / Build Image"]
-    types: [completed]
-    branches: [main]
+  workflow_call:
+    inputs:
+      version:
+        description: "Image tag to release (e.g. 1.0.42). Required from build.yml."
+        type: string
+        required: true
+      sha:
+        description: "Commit SHA the release pins to (used as Octopus git_ref)."
+        type: string
+        required: true
   push:
     branches: [main]
     paths:
-      - '.octopus/**'  # process, variables, settings, policies — any CaC change re-releases
+      - '.octopus/**'
   workflow_dispatch:
     inputs:
       version:
-        description: "Image version to release. Defaults to the most recent tag in GHCR."
+        description: "Image tag to release. Defaults to most-recent GHCR tag."
+        type: string
         required: false
 
 env:
-  # OctopusDeploy/*-action@v3 want the space *name*. Stable in HCL.
   OCTOPUS_SPACE: "IaC Sandbox"
   PROJECT: randomquotes
 
@@ -33,8 +38,6 @@ jobs:
   resolve:
     name: Resolve image version
     runs-on: ubuntu-latest
-    # Skip when the upstream build failed.
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     outputs:
       version: ${{ steps.v.outputs.version }}
       sha: ${{ steps.v.outputs.sha }}
@@ -46,28 +49,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # SHA: workflow_run carries the upstream's head_sha; push and
-          # workflow_dispatch use github.sha. Octopus uses this as git_ref
-          # for the CaC OCL snapshot.
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            SHA="${{ github.event.workflow_run.head_sha }}"
-          else
-            SHA="${{ github.sha }}"
-          fi
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHA:0:7}" >> "$GITHUB_OUTPUT"
+          # Inputs win when set (workflow_call always sets them; dispatch
+          # may); otherwise fall back to GHCR's most-recent non-latest tag.
+          INPUT_VERSION="${{ inputs.version }}"
+          INPUT_SHA="${{ inputs.sha }}"
 
-          # Version: dispatch input wins; otherwise pick the highest non-`latest` tag.
-          DISPATCH_INPUT="${{ inputs.version }}"
-          if [ -n "$DISPATCH_INPUT" ]; then
-            VERSION="$DISPATCH_INPUT"
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
           else
             VERSION=$(gh api "/users/${{ github.repository_owner }}/packages/container/octopus-iac-lab/versions" \
               --jq '[.[].metadata.container.tags // [] | .[]] | map(select(. != "latest")) | sort_by(.) | reverse | .[0]' \
               || true)
-            [ -n "$VERSION" ] && [ "$VERSION" != "null" ] || { echo "no non-latest image versions found in GHCR — has the build job run yet?"; exit 1; }
+            [ -n "$VERSION" ] && [ "$VERSION" != "null" ] || { echo "no non-latest image versions in GHCR — has the build job run yet?"; exit 1; }
           fi
+
+          SHA="${INPUT_SHA:-${{ github.sha }}}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHA:0:7}" >> "$GITHUB_OUTPUT"
           echo "Releasing $VERSION at sha $SHA"
 
   release:
@@ -99,10 +98,6 @@ jobs:
           project: ${{ env.PROJECT }}
           release_number: ${{ env.RELEASE_NUMBER }}
           git_ref: ${{ needs.resolve.outputs.sha }}
-          # The image is a package reference on the K8s step
-          # (.octopus/deployment_process.ocl). Passing it here freezes the
-          # version into the release's variable snapshot — promoting Dev →
-          # Production replays the same image, immutable, no prompt.
           packages: |
             randomquotes-image:${{ env.IMAGE_TAG }}
 

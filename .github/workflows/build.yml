@@ -47,7 +47,10 @@ jobs:
 
       - name: Set version
         id: version
-        run: echo "version=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+        # Pin a 1.1.x base so we don't collide with 1.0.x tags from earlier
+        # workflow incarnations sitting in GHCR. Bump the major prefix
+        # whenever this workflow file gets recreated.
+        run: echo "version=1.1.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -65,3 +68,14 @@ jobs:
             ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
             ${{ env.IMAGE }}:latest
           build-args: VERSION=${{ steps.version.outputs.version }}
+
+  # On main, hand the freshly-built image off to release.yml as a callable
+  # workflow. Explicit version + sha pass — no GHCR latest-tag-roulette.
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.build.outputs.version }}
+      sha: ${{ github.sha }}
+    secrets: inherit
