@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: randomquotes
-  namespace: randomquotes
   labels:
     app: randomquotes
 spec:
@@ -17,7 +16,7 @@ spec:
     spec:
       containers:
         - name: randomquotes
-          image: octopussamples/randomquotes-k8s:latest
+          image: ghcr.io/vlussenburg/octopus-iac-lab:latest
           ports:
             - containerPort: 80
           resources:

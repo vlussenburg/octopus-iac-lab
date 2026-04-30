@@ -1,6 +1,6 @@
 # tofu/
 
-Five OpenTofu stacks, each with its own state. Non-sensitive lab config (space name, CaC repo, etc.) lives in committed `defaults.auto.tfvars` per stack. Sensitive values (API key, GitHub PAT, Octopus URL) come in via `TF_VAR_*` from the root `.env`.
+Six OpenTofu stacks, each with its own state. Non-sensitive lab config (space name, CaC repo, etc.) lives in committed `defaults.auto.tfvars` per stack. Sensitive values (API key, GitHub PAT, Octopus URL) come in via `TF_VAR_*` from the root `.env`.
 
 | Stack | Owns | Why separate |
 |-------|------|--------------|
@@ -9,6 +9,9 @@ Five OpenTofu stacks, each with its own state. Non-sensitive lab config (space n
 | [`platform-hub/`](platform-hub/) | Octopus Platform Hub Git wiring (versioncontrol + git-credentials) | Optional — gated by `OCTOPUS_PLATFORM_HUB_ENABLED` so SaaS targets without the feature can opt out. |
 | [`app-randomquotes/`](app-randomquotes/) | The `randomquotes` project (CaC-enabled, tenanted) | App-specific. Reads control-plane outputs via `terraform_remote_state`. |
 | [`k8s-agent/`](k8s-agent/) | NFS CSI driver + nginx-ingress controller + Octopus K8s Agent helm release | Cluster-side install. Independent — useful to apply/destroy without touching the project. Also reads control-plane state. |
+| [`argocd/`](argocd/) | ArgoCD helm release + Octopus Argo CD Gateway helm release + 6 annotated Argo Applications | The GitOps half of the dual-delivery story. Surfaces Argo Applications back to Octopus via the Gateway + `argo.octopus.com/*` annotations. |
+
+Plus one local module under [`modules/octopus-argocd-application/`](modules/octopus-argocd-application/) — placeholders the future `octopusdeploy_argocd_application` provider resource that doesn't exist yet.
 
 Apply order is enforced by the Makefile:
 
@@ -18,12 +21,13 @@ make cp-apply        # control-plane (envs, lifecycle, tenants, etc.)
 make ph-apply        # platform-hub (skip if OCTOPUS_PLATFORM_HUB_ENABLED=false)
 make app-apply       # randomquotes project
 make agent-apply     # K8s agent + shared cluster infra (needs Docker Desktop K8s enabled)
+make argo-apply      # ArgoCD + Octopus Argo CD Gateway + Applications
 ```
 
 Or all in one:
 
 ```bash
-make apply           # space → cp → ph → app → agent
+make apply           # space → cp → ph → app → agent → argo
 ```
 
 ## Cross-stack state sharing

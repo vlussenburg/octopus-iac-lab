@@ -8,6 +8,7 @@ CP_DIR := tofu/control-plane
 PH_DIR := tofu/platform-hub
 APP_DIR := tofu/app-randomquotes
 AGENT_DIR := tofu/k8s-agent
+ARGO_DIR := tofu/argocd
 
 # Load .env (secrets + per-target URL/key) and export TF_VAR_* for OpenTofu.
 # Non-sensitive values come from each stack's committed defaults.auto.tfvars.
@@ -34,6 +35,7 @@ endef
         ph-init ph-plan ph-apply ph-destroy ph-fmt ph-validate \
         app-init app-plan app-apply app-destroy app-fmt app-validate \
         agent-init agent-plan agent-apply agent-destroy agent-fmt agent-validate \
+        argo-init argo-plan argo-apply argo-destroy argo-fmt argo-validate \
         fmt validate apply destroy rebuild
 
 help:
@@ -45,7 +47,8 @@ help:
 	@echo "tofu/platform-hub/    : ph-init | ph-plan | ph-apply | ph-destroy | ph-fmt | ph-validate"
 	@echo "tofu/app-randomquotes/: app-init | app-plan | app-apply | app-destroy | app-fmt | app-validate"
 	@echo "tofu/k8s-agent/       : agent-init | agent-plan | agent-apply | agent-destroy | agent-fmt | agent-validate"
-	@echo "convenience           : fmt (all) | validate (all) | apply (space,cp,ph,app,agent) | destroy (rev) | rebuild (destroy + apply, non-interactive)"
+	@echo "tofu/argocd/          : argo-init | argo-plan | argo-apply | argo-destroy | argo-fmt | argo-validate"
+	@echo "convenience           : fmt (all) | validate (all) | apply (space,cp,ph,app,agent,argo) | destroy (rev) | rebuild (destroy + apply, non-interactive)"
 
 # --- compose/ -------------------------------------------------------------
 
@@ -170,22 +173,44 @@ agent-fmt:
 agent-validate:
 	cd $(AGENT_DIR) && tofu validate
 
+# --- tofu/argocd/ ---------------------------------------------------------
+
+argo-init:
+	cd $(ARGO_DIR) && tofu init
+
+argo-plan:
+	$(load_env) cd $(ARGO_DIR) && tofu plan
+
+argo-apply:
+	$(load_env) cd $(ARGO_DIR) && tofu apply
+
+argo-destroy:
+	$(load_env) cd $(ARGO_DIR) && tofu destroy
+
+argo-fmt:
+	cd $(ARGO_DIR) && tofu fmt -recursive
+
+argo-validate:
+	cd $(ARGO_DIR) && tofu validate
+
 # --- convenience ----------------------------------------------------------
 
-fmt: space-fmt cp-fmt ph-fmt app-fmt agent-fmt
-validate: space-validate cp-validate ph-validate app-validate agent-validate
+fmt: space-fmt cp-fmt ph-fmt app-fmt agent-fmt argo-fmt
+validate: space-validate cp-validate ph-validate app-validate agent-validate argo-validate
 
-# Apply order: space → cp → ph → app → agent. Every downstream stack reads
-# space_id from tofu/space/ via terraform_remote_state, so space must apply
-# first. App reads cp outputs too. ensure-api-key runs first so a stale token
-# (e.g. after a local DB wipe) is auto-recovered before any tofu work starts.
-apply: ensure-api-key space-apply cp-apply ph-apply app-apply agent-apply
+# Apply order: space → cp → ph → app → agent → argo. Every downstream stack
+# reads space_id from tofu/space/ via terraform_remote_state, so space must
+# apply first. App reads cp outputs too. argo reads space + cp + app
+# (Application module references project slug from app stack). ensure-api-key
+# runs first so a stale token (e.g. after a local DB wipe) is auto-recovered
+# before any tofu work starts.
+apply: ensure-api-key space-apply cp-apply ph-apply app-apply agent-apply argo-apply
 
-# Destroy in reverse — agent first, space last. Destroying space cascades on
+# Destroy in reverse — argo first, space last. Destroying space cascades on
 # the Octopus side (deleting the Space removes all child resources), but the
 # *terraform state* of downstream stacks still references those resources, so
 # we destroy them in dependency order to keep state coherent.
-destroy: ensure-api-key agent-destroy app-destroy ph-destroy cp-destroy space-destroy
+destroy: ensure-api-key argo-destroy agent-destroy app-destroy ph-destroy cp-destroy space-destroy
 
 # Nuke-and-rebuild — non-interactive. Runs the full destroy chain then the
 # full apply chain, both with -auto-approve, so two worktrees can be
@@ -195,11 +220,11 @@ destroy: ensure-api-key agent-destroy app-destroy ph-destroy cp-destroy space-de
 # nuke without a second thought.
 rebuild: ensure-api-key
 	@$(load_env) \
-	for d in $(AGENT_DIR) $(APP_DIR) $(PH_DIR) $(CP_DIR) $(SPACE_DIR); do \
+	for d in $(ARGO_DIR) $(AGENT_DIR) $(APP_DIR) $(PH_DIR) $(CP_DIR) $(SPACE_DIR); do \
 	  echo "=== destroy $$d ==="; \
 	  ( cd $$d && tofu destroy -auto-approve ) || exit $$?; \
 	done; \
-	for d in $(SPACE_DIR) $(CP_DIR) $(PH_DIR) $(APP_DIR) $(AGENT_DIR); do \
+	for d in $(SPACE_DIR) $(CP_DIR) $(PH_DIR) $(APP_DIR) $(AGENT_DIR) $(ARGO_DIR); do \
 	  echo "=== apply $$d ==="; \
 	  ( cd $$d && tofu apply -auto-approve ) || exit $$?; \
 	done

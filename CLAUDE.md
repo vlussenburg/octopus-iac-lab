@@ -37,7 +37,7 @@ First-time bootstrap order: `make up` → log in at `localhost:8090` → mint AP
 ### Layout
 
 1. **`compose/`** — docker-compose runtime (SQL Server 2022 + Octopus Server, both pinned `linux/amd64`). Host port `8090`. Reads `MASTER_KEY` from `.env`. Optional `OCTOPUS_SERVER_BASE64_LICENSE` in `.env` is applied by `install.sh` on first boot (otherwise paste via UI). Local worktree only — the SaaS worktree has no compose stack.
-2. **`tofu/`** — five independent OpenTofu stacks, each with its own local `terraform.tfstate`. Intentionally split, not modules.
+2. **`tofu/`** — six independent OpenTofu stacks, each with its own local `terraform.tfstate`. Intentionally split, not modules. One reusable local module under `tofu/modules/octopus-argocd-application/` placeholders a future provider resource.
 3. **`.octopus/`** — OCL files owned by Octopus. Octopus serialises deployment process / settings / variables / runbooks here on every UI save and commits via the configured Git credential. **Folder name is fixed** — Octopus rejects anything other than `.octopus`.
 
 ### Cross-stack state sharing
@@ -51,6 +51,7 @@ Downstream stacks read upstream outputs via `terraform_remote_state` with `backe
 | `tofu/platform-hub/` | Octopus Platform Hub Git wiring (`/api/platformhub/versioncontrol` + `/api/platformhub/git-credentials`). Gated by `OCTOPUS_PLATFORM_HUB_ENABLED` (default `true`) so SaaS targets without the feature can opt out. |
 | `tofu/app-randomquotes/` | The `randomquotes` project resource only — `is_version_controlled = true`, `is_disabled = false`, `tenanted_deployment_participation = "Tenanted"`. The deployment process and runbooks are NOT declared in HCL — they live in `.octopus/deployment_process.ocl` and `.octopus/runbooks/*.ocl`. The library variable set from control-plane is included on the project. |
 | `tofu/k8s-agent/` | NFS CSI driver + nginx-ingress controller (shared cluster infra installed via `helm upgrade --install`, deliberately survives `make destroy`) + Octopus K8s Agent Helm release + a `kubernetes_namespace_v1` for the agent + a destroy-time `null_resource` that DELETEs the registered deployment target out of Octopus on `agent-destroy` (otherwise it orphans and blocks env deletion). The agent self-registers tagged with role `k8s` (which `deployment_process.ocl` targets), bound to Dev + Production, and tenant-participating. |
+| `tofu/argocd/` | ArgoCD helm release + Octopus Argo CD Gateway helm release + 6 annotated Argo `Application`s (one per tenant×env) materialised through the local `octopus-argocd-application` module. Per-Octopus suffixed Gateway release so both worktrees can install gateways into the same cluster without colliding. Demonstrates Octopus's pull-based GitOps integration alongside the existing push-based agent. |
 
 ### Secrets vs config split
 
@@ -84,7 +85,16 @@ Three tenants (`acme-corp`/`globex`/`initech`), each tagged with `tier/{free,pro
 
 ### Ingress
 
-Apps are reached via the cluster's nginx-ingress controller at `*.localtest.me` (which resolves to 127.0.0.1). One `kubectl port-forward svc/ingress-nginx-controller 80:80 -n ingress-nginx` covers all 12 tenant×env combinations. Hostnames are `#{Source}-#{tenant}-#{env}.localtest.me`.
+Apps are reached via the cluster's nginx-ingress controller at `*.localtest.me` (which resolves to 127.0.0.1). One `kubectl port-forward svc/ingress-nginx-controller 80:80 -n ingress-nginx` covers all 12 tenant×env combinations. Hostnames are `#{Source}-#{tenant}-#{env}.localtest.me`. The ArgoCD UI also rides this ingress at `argocd.localtest.me:8080`.
+
+### GitOps + push: two delivery paths into one project
+
+Two parallel deployment shapes drive the same `randomquotes` Octopus project:
+
+- **Push** (the K8s agent): Octopus runs the `deployment_process.ocl` steps directly; manifests are inlined in OCL. Deploys into `randomquotes-{source}-{tenant}-{env}` namespaces.
+- **GitOps** (Argo CD via the Octopus Gateway): Argo Applications carry `argo.octopus.com/{project,environment,tenant}` annotations; the Gateway watches the cluster and surfaces them under Infrastructure → Argo CD Instances. Source manifests live in `app/k8s/`. Deploys into `argo-randomquotes-{source}-{tenant}-{env}` namespaces (separate prefix avoids collision with the agent path).
+
+The `OctopusDeploy/octopusdeploy` provider has zero Argo CD resources as of v1.12 — `tofu/modules/octopus-argocd-application/` placeholders the schema we'd hope they'll ship, so the eventual migration is "swap the implementation, keep the call sites".
 
 ## Editing rules of thumb
 
@@ -92,4 +102,4 @@ Apps are reached via the cluster's nginx-ingress controller at `*.localtest.me` 
 - **Don't pre-populate `.octopus/`.** Let Octopus seed each file on first save so the schema matches the running server.
 - **`MASTER_KEY` is generated once.** Changing it after first boot makes existing encrypted data unreadable.
 - The `octopusdeploy` provider is `OctopusDeploy/octopusdeploy ~> 1.12` (the official one, not the older `OctopusDeployLabs/` fork). The k8s-agent stack additionally uses `helm` and `kubernetes` providers and requires Docker Desktop Kubernetes enabled.
-- `app/k8s/` exists but is **not used** by the deployment process — manifests are inlined in `.octopus/deployment_process.ocl`. The folder is kept as a reference of the original octopus-ttc shape.
+- `app/k8s/` is the source-of-truth for the **GitOps path** (Argo Applications sync from there). It's **not** used by the agent's deployment process, which inlines its own manifests in `.octopus/deployment_process.ocl`. Manifests there have no hardcoded namespace — Argo's `destination.namespace` and `CreateNamespace=true` syncOption handle materialisation per-Application.

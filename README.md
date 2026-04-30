@@ -13,7 +13,7 @@ A personal lab for scaffolding and configuring **Octopus Deploy** entirely as co
 ```
 octopus-iac-lab/
 ├── compose/      # docker-compose stack — local Octopus Server (local worktree only)
-├── tofu/         # OpenTofu — five stacks (space, control-plane, platform-hub, app-randomquotes, k8s-agent)
+├── tofu/         # OpenTofu — six stacks (space, control-plane, platform-hub, app-randomquotes, k8s-agent, argocd) + a local module under tofu/modules/
 ├── app/          # the actual app artefacts (Dockerfile, index.html); k8s/ kept as a stale reference
 ├── assets/       # tenant logos uploaded by control-plane
 └── .octopus/     # OCL files — owned by Octopus + git via CaC (deployment process, runbooks, variables)
@@ -48,8 +48,9 @@ The SaaS worktree points at `https://<id>.octopus.app` instead and skips `compos
    make ph-init    && make ph-apply      # Platform Hub Git wiring (skip via OCTOPUS_PLATFORM_HUB_ENABLED=false on SaaS without the feature)
    make app-init   && make app-apply     # randomquotes project (CaC-enabled, tenanted)
    make agent-init && make agent-apply   # NFS CSI + nginx-ingress + Octopus K8s Agent (needs Docker Desktop K8s)
+   make argo-init  && make argo-apply    # ArgoCD + Octopus Argo CD Gateway + 6 annotated Argo Applications
    ```
-   Or just `make apply` to chain all five.
+   Or just `make apply` to chain all six.
 
 After `make app-apply`, the deployment process in [`.octopus/deployment_process.ocl`](.octopus/deployment_process.ocl) and runbooks in [`.octopus/runbooks/`](.octopus/runbooks/) are live. After `make agent-apply`, the K8s agent registers as a deployment target tagged `k8s` and tenant-participating. CI then builds + deploys the image into 12 tenant×env namespaces.
 
@@ -104,13 +105,23 @@ cloudflared tunnel run octopus-iac-lab
 
 ## Reaching the deployed app
 
-The k8s-agent stack installs nginx-ingress into `ingress-nginx`. Each deploy creates an `Ingress` for `#{Source}-#{tenant}-#{env}.localtest.me` (resolves to 127.0.0.1). One port-forward serves all 12 tenant×env combinations:
+The k8s-agent stack installs nginx-ingress into `ingress-nginx`. Each deploy creates an `Ingress` for `#{Source}-#{tenant}-#{env}.localtest.me` (resolves to 127.0.0.1). One port-forward serves all 12 tenant×env combinations *and* the ArgoCD UI:
 
 ```bash
-kubectl port-forward svc/ingress-nginx-controller 80:80 -n ingress-nginx
-open http://local-acme-corp-dev.localtest.me
-open http://saas-globex-production.localtest.me
+kubectl port-forward svc/ingress-nginx-controller 8080:8080 -n ingress-nginx
+open http://local-acme-corp-dev.localtest.me:8080
+open http://saas-globex-production.localtest.me:8080
+open http://argocd.localtest.me:8080      # admin password: see argo-apply outputs
 ```
+
+## Two delivery paths into the same project
+
+`randomquotes` is set up to be deployed two ways at once:
+
+- **Push** (`tofu/k8s-agent/`): the agent runs `Octopus.KubernetesDeployRawYaml` from inlined manifests in `.octopus/deployment_process.ocl`. Namespaces: `randomquotes-{source}-{tenant}-{env}`.
+- **GitOps** (`tofu/argocd/`): six `Application`s annotated with `argo.octopus.com/{project,environment,tenant}` slugs sync from `app/k8s/`; the Octopus Argo CD Gateway watches the cluster and surfaces them under Infrastructure → Argo CD Instances. Namespaces: `argo-randomquotes-{source}-{tenant}-{env}`.
+
+Both can deploy concurrently to the same cluster — different namespace prefixes ensure they don't fight. Pick the comparison story you want to tell from one Octopus project.
 
 ## Wiping the lab
 
