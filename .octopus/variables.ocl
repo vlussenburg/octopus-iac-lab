@@ -23,6 +23,7 @@ variable "Featured.Mood" {
 }
 
 variable "Branding.Watermark" {
+    value "" {}
     value "FREE TIER" {
         tenant_tag = ["tier/s"]
     }
