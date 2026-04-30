@@ -71,7 +71,7 @@ step "deploy-k8s-manifests" {
 
         packages "randomquotes-image" {
             acquisition_location = "NotAcquired"
-            feed = "GHCR"
+            feed = "ghcr"
             package_id = "vlussenburg/octopus-iac-lab"
             properties = {
                 Extract = "False"
