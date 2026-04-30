@@ -72,13 +72,32 @@ step "deploy-k8s-manifests" {
                   name: randomquotes
                   namespace: randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
                 spec:
-                  type: LoadBalancer
+                  type: ClusterIP
                   selector:
                     app: randomquotes
                   ports:
                     - protocol: TCP
                       port: 80
                       targetPort: 80
+                ---
+                apiVersion: networking.k8s.io/v1
+                kind: Ingress
+                metadata:
+                  name: randomquotes
+                  namespace: randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}
+                spec:
+                  ingressClassName: nginx
+                  rules:
+                    - host: #{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.localtest.me
+                      http:
+                        paths:
+                          - path: /
+                            pathType: Prefix
+                            backend:
+                              service:
+                                name: randomquotes
+                                port:
+                                  number: 80
                 EOT
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"

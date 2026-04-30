@@ -43,3 +43,9 @@ variable "nfs_csi_chart_version" {
   description = "csi-driver-nfs helm chart version constraint. Applied via helm upgrade --install — idempotent, so multiple Octopus targets can share one cluster's driver."
   default     = "v4.*"
 }
+
+variable "nginx_ingress_chart_version" {
+  type        = string
+  description = "ingress-nginx helm chart version constraint. Single controller per cluster; same idempotent install pattern as NFS CSI."
+  default     = "4.*"
+}
