@@ -1,0 +1,105 @@
+name: CI / Octopus Release
+
+# Creates + deploys a release on each Octopus target. Three triggers:
+#   1. Successful build.yml (app code changed → ship the new image)
+#   2. push to main touching .octopus/deployment_process.ocl (process
+#      changed → re-release pointing the new snapshot at the existing image)
+#   3. workflow_dispatch (manual force / iterate on this workflow)
+#
+# In paths (2) and (3) there's no upstream version to inherit, so we resolve
+# the most recent non-`latest` tag from GHCR.
+
+on:
+  workflow_run:
+    workflows: ["CI / Build Image"]
+    types: [completed]
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - '.octopus/deployment_process.ocl'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image version to release. Defaults to the most recent tag in GHCR."
+        required: false
+
+env:
+  # OctopusDeploy/*-action@v3 want the space *name*. Stable in HCL.
+  OCTOPUS_SPACE: "IaC Sandbox"
+  PROJECT: randomquotes
+
+jobs:
+  resolve:
+    name: Resolve image version
+    runs-on: ubuntu-latest
+    # Skip when the upstream build failed.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      sha: ${{ steps.v.outputs.sha }}
+    steps:
+      - name: Pick version + sha
+        id: v
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # SHA: workflow_run carries the upstream's head_sha; push and
+          # workflow_dispatch use github.sha. Octopus uses this as git_ref
+          # for the CaC OCL snapshot.
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            SHA="${{ github.sha }}"
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+          # Version: dispatch input wins; otherwise pick the highest non-`latest` tag.
+          DISPATCH_INPUT="${{ inputs.version }}"
+          if [ -n "$DISPATCH_INPUT" ]; then
+            VERSION="$DISPATCH_INPUT"
+          else
+            VERSION=$(gh api "/users/${{ github.repository_owner }}/packages/container/octopus-iac-lab/versions" \
+              --jq '[.[].metadata.container.tags // [] | .[]] | map(select(. != "latest")) | sort_by(.) | reverse | .[0]' \
+              || true)
+            [ -n "$VERSION" ] && [ "$VERSION" != "null" ] || { echo "no non-latest image versions found in GHCR — has the build job run yet?"; exit 1; }
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing $VERSION at sha $SHA"
+
+  release:
+    name: Release → ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    needs: resolve
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: SaaS
+            url_secret: OCTOPUS_SAAS_URL
+            key_secret: OCTOPUS_SAAS_API_KEY
+            allow_failure: false
+          - target: Local
+            url_secret: OCTOPUS_LOCAL_URL
+            key_secret: OCTOPUS_LOCAL_API_KEY
+            allow_failure: true
+    env:
+      OCTOPUS_URL: ${{ secrets[matrix.url_secret] }}
+      OCTOPUS_API_KEY: ${{ secrets[matrix.key_secret] }}
+    steps:
+      - name: Create release
+        id: create_release
+        uses: OctopusDeploy/create-release-action@v3
+        with:
+          project: ${{ env.PROJECT }}
+          release_number: ${{ needs.resolve.outputs.version }}
+          git_ref: ${{ needs.resolve.outputs.sha }}
+
+      - name: Deploy to Dev
+        uses: OctopusDeploy/deploy-release-action@v3
+        with:
+          project: ${{ env.PROJECT }}
+          release_number: ${{ steps.create_release.outputs.release_number }}
+          environments: Dev
