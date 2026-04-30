@@ -96,16 +96,13 @@ jobs:
         uses: OctopusDeploy/create-release-action@v3
         with:
           project: ${{ env.PROJECT }}
-          # Release number must be unique per Octopus project. Image tag
-          # alone isn't unique when only OCL changed (same image, new
-          # process snapshot), so suffix with the short SHA to disambiguate.
+          # Release number is `<image-version>-<short-sha>`. The image part
+          # makes "what code" obvious; the SHA part disambiguates re-releases
+          # that ship the same image with a new OCL snapshot. Image.Tag is
+          # derived from the release number in .octopus/variables.ocl, so
+          # nothing else here needs to know about the image tag.
           release_number: ${{ needs.resolve.outputs.version }}-${{ needs.resolve.outputs.short_sha }}
           git_ref: ${{ needs.resolve.outputs.sha }}
-          # Pass the actual image tag as a prompted variable. The
-          # deployment process uses #{Image.Tag} (not Octopus.Release.Number)
-          # so two different release numbers can ship the same image.
-          variables: |
-            Image.Tag: ${{ needs.resolve.outputs.version }}
 
       - name: Deploy to Dev
         uses: OctopusDeploy/deploy-release-action@v3
