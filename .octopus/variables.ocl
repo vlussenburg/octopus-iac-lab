@@ -1,12 +1,12 @@
 variable "Source" {
     value "local" {
         scope {
-            machine = ["octopus-tentacle-local"]
+            machines = ["octopus-tentacle-local"]
         }
     }
     value "saas" {
         scope {
-            machine = ["octopus-tentacle-saas"]
+            machines = ["octopus-tentacle-saas"]
         }
     }
 }
@@ -14,17 +14,17 @@ variable "Source" {
 variable "Replicas" {
     value "3" {
         scope {
-            tenant_tag = ["tier/l"]
+            tenant_tags = ["tier/l"]
         }
     }
     value "2" {
         scope {
-            tenant_tag = ["tier/m"]
+            tenant_tags = ["tier/m"]
         }
     }
     value "1" {
         scope {
-            tenant_tag = ["tier/s"]
+            tenant_tags = ["tier/s"]
         }
     }
 }
@@ -32,17 +32,17 @@ variable "Replicas" {
 variable "Featured.Mood" {
     value "comedy" {
         scope {
-            tenant = ["acme-corp"]
+            tenants = ["acme-corp"]
         }
     }
     value "silicon-valley" {
         scope {
-            tenant = ["globex"]
+            tenants = ["globex"]
         }
     }
     value "stoic" {
         scope {
-            tenant = ["initech"]
+            tenants = ["initech"]
         }
     }
 }
@@ -50,7 +50,7 @@ variable "Featured.Mood" {
 variable "Branding.Watermark" {
     value "FREE TIER" {
         scope {
-            tenant_tag = ["tier/s"]
+            tenant_tags = ["tier/s"]
         }
     }
 }
