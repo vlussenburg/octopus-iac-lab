@@ -97,7 +97,7 @@ step "deploy-manifests" {
                                 name: randomquotes
                                 port:
                                   number: 80
-                    EOT
+                        EOT
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
         }
