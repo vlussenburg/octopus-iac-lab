@@ -104,10 +104,12 @@ jobs:
       # Deploy fans out across every tenant carrying the `app/randomquotes`
       # tag — Octopus resolves the set; CI doesn't enumerate. Add a tenant
       # in HCL with that tag and the next pipeline picks it up automatically.
+      # Tenanted deploys use a different action; `environment` is singular
+      # there, and `tenant_tags` is supported.
       - name: Deploy to Dev
-        uses: OctopusDeploy/deploy-release-action@v3
+        uses: OctopusDeploy/deploy-release-tenanted-action@v3
         with:
           project: ${{ env.PROJECT }}
           release_number: ${{ env.RELEASE_NUMBER }}
-          environments: Dev
+          environment: Dev
           tenant_tags: app/randomquotes
