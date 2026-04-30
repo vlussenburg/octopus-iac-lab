@@ -14,6 +14,10 @@
     button:hover { background: #c73652; }
     footer { margin-top: 2rem; font-size: 0.75rem; color: #555; }
     .watermark { position: fixed; bottom: 1rem; right: 1rem; font-size: 0.75rem; color: #ff9800; letter-spacing: 0.2em; padding: 0.3rem 0.6rem; border: 1px solid #ff9800; border-radius: 4px; }
+    .maintenance { position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #2c1810; color: #ffb74d; text-align: center; padding: 2rem; z-index: 100; }
+    .maintenance h1 { font-size: 3rem; margin: 0 0 1rem; letter-spacing: 0.05em; }
+    .maintenance p { font-size: 1.25rem; max-width: 600px; margin: 0; }
+    .maintenance .icon { font-size: 4rem; margin-bottom: 1rem; }
   </style>
 </head>
 <body>
@@ -26,6 +30,11 @@
     <footer id="version"></footer>
   </div>
   <div class="watermark" id="watermark" style="display: none"></div>
+  <div class="maintenance" id="maintenance" style="display: none">
+    <div class="icon">🚧</div>
+    <h1>BE RIGHT BACK</h1>
+    <p id="maintenanceMessage"></p>
+  </div>
   <script>
     const quotes = [
       // comedy
@@ -52,7 +61,7 @@
       { q: "The impediment to action advances action. What stands in the way becomes the way.", a: "Marcus Aurelius", mood: "stoic" },
     ];
 
-    let cfg = { tenant: "", mood: "", watermark: "" };
+    let cfg = { tenant: "", mood: "", watermark: "", maintenance: "" };
     let pool = quotes;
     let i = 0;
 
@@ -70,6 +79,12 @@
       .then(c => { cfg = c; })
       .catch(() => { /* no config — show all quotes */ })
       .finally(() => {
+        if (cfg.maintenance) {
+          // Maintenance overlay covers the rest of the page; nothing else to render.
+          document.getElementById("maintenanceMessage").textContent = cfg.maintenance;
+          document.getElementById("maintenance").style.display = "flex";
+          return;
+        }
         if (cfg.mood) pool = quotes.filter(q => q.mood === cfg.mood);
         if (pool.length === 0) pool = quotes; // fallback if mood matches nothing
         i = Math.floor(Math.random() * pool.length);

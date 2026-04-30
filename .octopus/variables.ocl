@@ -28,3 +28,13 @@ variable "Branding.Watermark" {
         tenant_tag = ["tier/s"]
     }
 }
+
+variable "Maintenance.Message" {
+    value "" {
+        prompt {
+            description = "Customer-facing message shown on the maintenance overlay. Set by the maintenance-on runbook; deploys leave it empty."
+            label = "Maintenance Message"
+            required = false
+        }
+    }
+}

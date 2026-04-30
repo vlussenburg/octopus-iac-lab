@@ -24,7 +24,8 @@ step "deploy-k8s-manifests" {
                     {
                       "tenant": "#{Octopus.Deployment.Tenant.Name}",
                       "mood": "#{Featured.Mood}",
-                      "watermark": "#{Branding.Watermark}"
+                      "watermark": "#{Branding.Watermark}",
+                      "maintenance": ""
                     }
                 ---
                 apiVersion: apps/v1

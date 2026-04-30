@@ -1,0 +1,57 @@
+name = "Maintenance Mode On"
+description = "Show a maintenance overlay on the chosen tenant's app and scale the deployment to 1 replica. The message comes from the prompted Maintenance.Message variable."
+default_guided_failure_mode = "EnvironmentDefault"
+environment_scope = "FromProjectLifecycles"
+multi_tenancy_mode = "Tenanted"
+
+connectivity_policy {
+    allow_deployments_to_no_targets = false
+}
+
+run_retention_policy {
+    quantity_to_keep = 5
+    type = "Count"
+}
+
+process {
+    step "enter-maintenance" {
+        name = "Enter maintenance"
+        properties = {
+            Octopus.Action.TargetRoles = "k8s"
+        }
+
+        action {
+            action_type = "Octopus.KubernetesRunScript"
+            properties = {
+                Octopus.Action.RunOnServer = "false"
+                Octopus.Action.Script.ScriptSource = "Inline"
+                Octopus.Action.Script.Syntax = "Bash"
+                Octopus.Action.Script.ScriptBody = <<-EOT
+                    set -euo pipefail
+                    NS="randomquotes-#{Octopus.Machine.Name | Replace "octopus-tentacle-" ""}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+                    echo "==> entering maintenance for $NS"
+
+                    cat <<MANIFEST | kubectl apply -f -
+                    apiVersion: v1
+                    kind: ConfigMap
+                    metadata:
+                      name: randomquotes-config
+                      namespace: $NS
+                    data:
+                      config.json: |
+                        {
+                          "tenant": "#{Octopus.Deployment.Tenant.Name}",
+                          "mood": "#{Featured.Mood}",
+                          "watermark": "#{Branding.Watermark}",
+                          "maintenance": "#{Maintenance.Message}"
+                        }
+                    MANIFEST
+
+                    kubectl scale deployment/randomquotes -n "$NS" --replicas=1
+                    kubectl rollout restart deployment/randomquotes -n "$NS"
+                    kubectl rollout status deployment/randomquotes -n "$NS" --timeout=2m
+                EOT
+            }
+        }
+    }
+}
