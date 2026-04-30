@@ -21,13 +21,13 @@ variable "Replicas" {
 
 variable "Featured.Mood" {
     value "comedy" {
-        tenant = ["acme-corp"]
+        tenant_tag = ["mood/comedy"]
     }
     value "silicon-valley" {
-        tenant = ["globex"]
+        tenant_tag = ["mood/silicon-valley"]
     }
     value "stoic" {
-        tenant = ["initech"]
+        tenant_tag = ["mood/stoic"]
     }
 }
 
