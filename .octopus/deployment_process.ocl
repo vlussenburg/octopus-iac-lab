@@ -69,11 +69,6 @@ step "deploy-k8s-manifests" {
             Octopus.Action.Script.ScriptSource = "Inline"
         }
 
-        # Image reference snapshotted into the release. Octopus resolves the
-        # package version at release-create time from the GHCR feed (CI passes
-        # it as `packages: randomquotes-image:<version>`) and freezes it in
-        # the release's variable snapshot — so promoting Dev → Production
-        # replays the same image, no prompt, immutable.
         packages "randomquotes-image" {
             acquisition_location = "NotAcquired"
             feed = "GHCR"
@@ -86,3 +81,4 @@ step "deploy-k8s-manifests" {
         }
     }
 }
+
