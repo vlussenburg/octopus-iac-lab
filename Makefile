@@ -34,7 +34,7 @@ endef
         ph-init ph-plan ph-apply ph-destroy ph-fmt ph-validate \
         app-init app-plan app-apply app-destroy app-fmt app-validate \
         agent-init agent-plan agent-apply agent-destroy agent-fmt agent-validate \
-        fmt validate apply destroy
+        fmt validate apply destroy rebuild
 
 help:
 	@echo "compose/              : up | down | logs | ps | nuke      (local self-host only)"
@@ -45,7 +45,7 @@ help:
 	@echo "tofu/platform-hub/    : ph-init | ph-plan | ph-apply | ph-destroy | ph-fmt | ph-validate"
 	@echo "tofu/app-randomquotes/: app-init | app-plan | app-apply | app-destroy | app-fmt | app-validate"
 	@echo "tofu/k8s-agent/       : agent-init | agent-plan | agent-apply | agent-destroy | agent-fmt | agent-validate"
-	@echo "convenience           : fmt (all) | validate (all) | apply (space,cp,ph,app,agent) | destroy (rev)"
+	@echo "convenience           : fmt (all) | validate (all) | apply (space,cp,ph,app,agent) | destroy (rev) | rebuild (destroy + apply, non-interactive)"
 
 # --- compose/ -------------------------------------------------------------
 
@@ -186,6 +186,23 @@ apply: ensure-api-key space-apply cp-apply ph-apply app-apply agent-apply
 # *terraform state* of downstream stacks still references those resources, so
 # we destroy them in dependency order to keep state coherent.
 destroy: ensure-api-key agent-destroy app-destroy ph-destroy cp-destroy space-destroy
+
+# Nuke-and-rebuild — non-interactive. Runs the full destroy chain then the
+# full apply chain, both with -auto-approve, so two worktrees can be
+# rebuilt in parallel without each prompting for confirmation:
+#   make -C ../octopus-iac-lab-saas rebuild & make rebuild & wait
+# Sandbox semantics — don't add this target to anything you can't afford to
+# nuke without a second thought.
+rebuild: ensure-api-key
+	@$(load_env) \
+	for d in $(AGENT_DIR) $(APP_DIR) $(PH_DIR) $(CP_DIR) $(SPACE_DIR); do \
+	  echo "=== destroy $$d ==="; \
+	  ( cd $$d && tofu destroy -auto-approve ) || exit $$?; \
+	done; \
+	for d in $(SPACE_DIR) $(CP_DIR) $(PH_DIR) $(APP_DIR) $(AGENT_DIR); do \
+	  echo "=== apply $$d ==="; \
+	  ( cd $$d && tofu apply -auto-approve ) || exit $$?; \
+	done
 
 # --- bootstrap helpers ----------------------------------------------------
 
