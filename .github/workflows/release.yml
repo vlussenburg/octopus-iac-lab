@@ -38,6 +38,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       sha: ${{ steps.v.outputs.sha }}
+      short_sha: ${{ steps.v.outputs.short_sha }}
     steps:
       - name: Pick version + sha
         id: v
@@ -54,6 +55,7 @@ jobs:
             SHA="${{ github.sha }}"
           fi
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHA:0:7}" >> "$GITHUB_OUTPUT"
 
           # Version: dispatch input wins; otherwise pick the highest non-`latest` tag.
           DISPATCH_INPUT="${{ inputs.version }}"
@@ -94,8 +96,16 @@ jobs:
         uses: OctopusDeploy/create-release-action@v3
         with:
           project: ${{ env.PROJECT }}
-          release_number: ${{ needs.resolve.outputs.version }}
+          # Release number must be unique per Octopus project. Image tag
+          # alone isn't unique when only OCL changed (same image, new
+          # process snapshot), so suffix with the short SHA to disambiguate.
+          release_number: ${{ needs.resolve.outputs.version }}-${{ needs.resolve.outputs.short_sha }}
           git_ref: ${{ needs.resolve.outputs.sha }}
+          # Pass the actual image tag as a prompted variable. The
+          # deployment process uses #{Image.Tag} (not Octopus.Release.Number)
+          # so two different release numbers can ship the same image.
+          variables: |
+            Image.Tag: ${{ needs.resolve.outputs.version }}
 
       - name: Deploy to Dev
         uses: OctopusDeploy/deploy-release-action@v3
