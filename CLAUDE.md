@@ -37,7 +37,8 @@ First-time bootstrap order: `make up` → log in at `localhost:8090` → mint AP
 ### Layout
 
 1. **`compose/`** — docker-compose runtime (SQL Server 2022 + Octopus Server, both pinned `linux/amd64`). Host port `8090`. Reads `MASTER_KEY` from `.env`. Optional `OCTOPUS_SERVER_BASE64_LICENSE` in `.env` is applied by `install.sh` on first boot (otherwise paste via UI). Local worktree only — the SaaS worktree has no compose stack.
-2. **`tofu/`** — six independent OpenTofu stacks, each with its own local `terraform.tfstate`. Intentionally split, not modules. One reusable local module under `tofu/modules/octopus-argocd-application/` placeholders a future provider resource.
+2. **`tofu/`** — six independent OpenTofu stacks, each with its own local `terraform.tfstate`. Intentionally split, not modules. One reusable local module under `tofu/modules/octopus-argocd-gateway/` placeholders a future provider resource (`octopusdeploy_argocd_gateway`).
+3. **`gitops/`** — Argo CD's source of truth: App-of-Apps roots (one per worktree) and 12 per-tenant leaf `Application` YAMLs. Edits here propagate to the cluster on the next Argo poll, no `tofu apply`.
 3. **`.octopus/`** — OCL files owned by Octopus. Octopus serialises deployment process / settings / variables / runbooks here on every UI save and commits via the configured Git credential. **Folder name is fixed** — Octopus rejects anything other than `.octopus`.
 
 ### Cross-stack state sharing
@@ -51,7 +52,7 @@ Downstream stacks read upstream outputs via `terraform_remote_state` with `backe
 | `tofu/platform-hub/` | Octopus Platform Hub Git wiring (`/api/platformhub/versioncontrol` + `/api/platformhub/git-credentials`). Gated by `OCTOPUS_PLATFORM_HUB_ENABLED` (default `true`) so SaaS targets without the feature can opt out. |
 | `tofu/app-randomquotes/` | The `randomquotes` project resource only — `is_version_controlled = true`, `is_disabled = false`, `tenanted_deployment_participation = "Tenanted"`. The deployment process and runbooks are NOT declared in HCL — they live in `.octopus/deployment_process.ocl` and `.octopus/runbooks/*.ocl`. The library variable set from control-plane is included on the project. |
 | `tofu/k8s-agent/` | NFS CSI driver + nginx-ingress controller (shared cluster infra installed via `helm upgrade --install`, deliberately survives `make destroy`) + Octopus K8s Agent Helm release + a `kubernetes_namespace_v1` for the agent + a destroy-time `null_resource` that DELETEs the registered deployment target out of Octopus on `agent-destroy` (otherwise it orphans and blocks env deletion). The agent self-registers tagged with role `k8s` (which `deployment_process.ocl` targets), bound to Dev + Production, and tenant-participating. |
-| `tofu/argocd/` | ArgoCD helm release + Octopus Argo CD Gateway helm release + 6 annotated Argo `Application`s (one per tenant×env) materialised through the local `octopus-argocd-application` module. Per-Octopus suffixed Gateway release so both worktrees can install gateways into the same cluster without colliding. Demonstrates Octopus's pull-based GitOps integration alongside the existing push-based agent. |
+| `tofu/argocd/` | Minimum-footprint stack — owns only the **control plane** of the Octopus↔Argo connection: ArgoCD helm install (gated `install_argocd`, local owns), the `octopus`-account JWT mint, and the Octopus Argo CD Gateway via the `octopus-argocd-gateway` local module. The helm install also seeds a single bootstrap Application via `extraObjects`. Everything else — App-of-Apps roots, ingress, 12 leaf Applications — lives in [`gitops/`](../gitops/) and is reconciled from git, not tofu state. |
 
 ### Secrets vs config split
 

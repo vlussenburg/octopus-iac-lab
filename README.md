@@ -14,6 +14,7 @@ A personal lab for scaffolding and configuring **Octopus Deploy** entirely as co
 octopus-iac-lab/
 ├── compose/      # docker-compose stack — local Octopus Server (local worktree only)
 ├── tofu/         # OpenTofu — six stacks (space, control-plane, platform-hub, app-randomquotes, k8s-agent, argocd) + a local module under tofu/modules/
+├── gitops/       # Argo CD's source of truth — App-of-Apps roots + 12 per-tenant leaf Applications
 ├── app/          # the actual app artefacts (Dockerfile, index.html); k8s/ kept as a stale reference
 ├── assets/       # tenant logos uploaded by control-plane
 └── .octopus/     # OCL files — owned by Octopus + git via CaC (deployment process, runbooks, variables)
@@ -119,7 +120,7 @@ open http://argocd.localtest.me:8080      # admin password: see argo-apply outpu
 `randomquotes` is set up to be deployed two ways at once:
 
 - **Push** (`tofu/k8s-agent/`): the agent runs `Octopus.KubernetesDeployRawYaml` from inlined manifests in `.octopus/deployment_process.ocl`. Namespaces: `randomquotes-{source}-{tenant}-{env}`.
-- **GitOps** (`tofu/argocd/`): six `Application`s annotated with `argo.octopus.com/{project,environment,tenant}` slugs sync from `app/k8s/`; the Octopus Argo CD Gateway watches the cluster and surfaces them under Infrastructure → Argo CD Instances. Namespaces: `argo-randomquotes-{source}-{tenant}-{env}`.
+- **GitOps** (`tofu/argocd/` + `gitops/`): the 12 Argo Applications live as YAML files under [`gitops/applications/randomquotes/{local,saas}/`](gitops/applications/randomquotes/) — that's the source of truth, edit them and push. tofu only manages the **control plane** (ArgoCD install, the JWT, and the Octopus Argo CD Gateway connection). The cluster bootstraps itself from git via an App-of-Apps root. Each leaf is annotated with `argo.octopus.com/{project,environment,tenant}` so the Gateway forwards it to the right Octopus. Namespaces: `argo-randomquotes-{source}-{tenant}-{env}`.
 
 Both can deploy concurrently to the same cluster — different namespace prefixes ensure they don't fight. Pick the comparison story you want to tell from one Octopus project.
 
