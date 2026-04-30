@@ -1,0 +1,30 @@
+# GitOps source of truth — Argo CD reconciles to this. Edit + push to update.
+# argo.octopus.com/* annotations are claimed by Octopus's Argo CD Gateway
+# and surface this Application against the matching project/env/tenant.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: randomquotes-initech-dev-local
+  namespace: argocd
+  annotations:
+    argo.octopus.com/project: randomquotes
+    argo.octopus.com/environment: dev
+    argo.octopus.com/tenant: initech
+  labels:
+    lab.octopus.com/source: local
+    lab.octopus.com/tenant: initech
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/vlussenburg/octopus-iac-lab
+    path: app/k8s
+    targetRevision: HEAD
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-randomquotes-local-initech-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

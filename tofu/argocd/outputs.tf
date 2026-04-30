@@ -8,22 +8,22 @@ output "argocd_admin_password_command" {
   value       = "kubectl -n ${local.argocd_namespace_name} get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
 }
 
-output "gateway_release_name" {
-  description = "Helm release name for the Octopus Argo CD Gateway. Per-Octopus suffixed."
-  value       = local.gateway_release_name
+output "gateway_name" {
+  description = "Octopus-side name of the registered Argo CD Gateway."
+  value       = module.gateway.name
 }
 
 output "gateway_namespace" {
-  description = "Namespace the Gateway pod lives in."
-  value       = kubernetes_namespace_v1.gateway.metadata[0].name
+  description = "Namespace the Gateway pod runs in."
+  value       = module.gateway.namespace
 }
 
-output "argocd_application_count" {
-  description = "Number of Argo Applications materialised through the local module — should equal tenants × environments."
-  value       = length(module.randomquotes_argo_app)
+output "app_of_apps_root" {
+  description = "Argo App-of-Apps root Application created for this worktree. Argo materialises the six leaf Applications from gitops/applications/randomquotes/<source>/ on next sync."
+  value       = "randomquotes-root-${local.target_kind}"
 }
 
-output "argocd_application_names" {
-  description = "Names of the registered Argo Applications. Each carries argo.octopus.com/* annotations the Gateway forwards to Octopus."
-  value       = sort([for app in module.randomquotes_argo_app : app.name])
+output "leaf_apps_source_path" {
+  description = "Repo path the App-of-Apps root watches. Edits here propagate to the cluster on Argo's next poll."
+  value       = "gitops/applications/randomquotes/${local.target_kind}"
 }
