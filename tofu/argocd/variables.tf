@@ -33,6 +33,12 @@ variable "kube_context" {
   default     = "docker-desktop"
 }
 
+variable "install_argocd" {
+  description = "If true, this worktree's stack installs ArgoCD itself (helm release, namespace, ingress, admin secret data source). If false, ArgoCD is assumed to already exist in the cluster — managed by the OTHER worktree — and we just install our own per-Octopus Gateway + Applications. Two worktrees can't both own the same helm release; whoever applies first sets `install_argocd = true`, the other sets `false`. Defaults to true on local self-host, false on SaaS (the SaaS worktree comes second by convention)."
+  type        = bool
+  default     = null
+}
+
 variable "argocd_chart_version" {
   description = "argo-cd helm chart version. https://github.com/argoproj/argo-helm/releases."
   type        = string

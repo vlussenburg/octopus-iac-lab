@@ -102,7 +102,7 @@ resource "helm_release" "octopus_argo_gateway" {
 
   set {
     name  = "gateway.argocd.serverGrpcUrl"
-    value = "grpc://argocd-server.${kubernetes_namespace_v1.argocd.metadata[0].name}.svc.cluster.local:443"
+    value = "grpc://argocd-server.${local.argocd_namespace_name}.svc.cluster.local:443"
   }
 
   # argocd-server inside the cluster runs without TLS in our config

@@ -1,21 +1,27 @@
-# ArgoCD itself. Standard upstream chart, with two lab-specific tweaks:
-#   1. `octopus` account configured with apiKey-only capability — that's
-#      what the Gateway authenticates as.
-#   2. RBAC policy granting `octopus` the minimum permissions the Gateway
-#      needs (per https://octopus.com/docs/argo-cd/instances/terraform-bootstrap).
+# ArgoCD itself — shared cluster infra. Owned by exactly ONE worktree at a
+# time (default: the local self-host worktree; SaaS piggybacks). The other
+# worktree sets `install_argocd = false` and references the same namespace
+# via the `argocd_namespace_name` local.
 #
-# The chart's `configs.cm` and `configs.rbac` blocks render into the
-# argocd-cm / argocd-rbac-cm ConfigMaps; argocd-server reads them at startup.
+# Two lab-specific tweaks to the upstream chart:
+#   1. `octopus` account configured with apiKey-only capability — that's
+#      what each Gateway authenticates as.
+#   2. RBAC policy granting `octopus` the minimum permissions the Gateways
+#      need (per https://octopus.com/docs/argo-cd/instances/terraform-bootstrap).
 
 resource "kubernetes_namespace_v1" "argocd" {
+  count = local.install_argocd_final ? 1 : 0
+
   metadata {
     name = var.argocd_namespace
   }
 }
 
 resource "helm_release" "argocd" {
+  count = local.install_argocd_final ? 1 : 0
+
   name             = "argocd"
-  namespace        = kubernetes_namespace_v1.argocd.metadata[0].name
+  namespace        = kubernetes_namespace_v1.argocd[0].metadata[0].name
   create_namespace = false
 
   repository = "https://argoproj.github.io/argo-helm"
@@ -32,7 +38,7 @@ resource "helm_release" "argocd" {
     yamlencode({
       configs = {
         cm = {
-          # `octopus` is the account the Gateway authenticates as. apiKey
+          # `octopus` is the account each Gateway authenticates as. apiKey
           # capability is sufficient — the Gateway only consumes JWTs, it
           # doesn't ever log in interactively.
           "accounts.octopus" = "apiKey"
@@ -69,12 +75,15 @@ resource "helm_release" "argocd" {
 }
 
 # The chart auto-generates an admin password into argocd-initial-admin-secret
-# on first install. We use it to authenticate the argocd provider.
+# on first install. We use it to authenticate the argocd provider — works
+# the same whether THIS worktree installed argocd or the other one did.
 data "kubernetes_secret_v1" "argocd_admin_initial" {
   metadata {
     name      = "argocd-initial-admin-secret"
-    namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    namespace = local.argocd_namespace_name
   }
 
+  # Only depend on the helm release if WE installed it. Otherwise the
+  # secret is assumed to already exist (the other worktree owns it).
   depends_on = [helm_release.argocd]
 }

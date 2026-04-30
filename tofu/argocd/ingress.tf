@@ -8,9 +8,11 @@
 # argocd-server runs HTTP-only (configs.params.server.insecure=true), so this
 # is a vanilla http→http ingress.
 resource "kubernetes_ingress_v1" "argocd" {
+  count = local.install_argocd_final ? 1 : 0
+
   metadata {
     name      = "argocd-server"
-    namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    namespace = local.argocd_namespace_name
   }
 
   spec {
@@ -35,5 +37,4 @@ resource "kubernetes_ingress_v1" "argocd" {
     }
   }
 
-  depends_on = [helm_release.argocd]
 }

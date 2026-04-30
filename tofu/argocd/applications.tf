@@ -26,7 +26,11 @@ module "randomquotes_argo_app" {
   for_each = local.argo_app_matrix
   source   = "../modules/octopus-argocd-application"
 
-  name                  = "randomquotes-${each.key}"
+  # Per-Octopus suffix on the Application name itself: both worktrees
+  # populate the same shared argocd namespace, so collision-free names
+  # matter. local: `randomquotes-acme-corp-dev-local`,
+  # saas:  `randomquotes-acme-corp-dev-saas`.
+  name                  = "randomquotes-${each.key}-${local.target_kind}"
   destination_namespace = "argo-randomquotes-${local.target_kind}-${each.key}"
 
   octopus_project_slug     = "randomquotes"
@@ -44,7 +48,7 @@ module "randomquotes_argo_app" {
 
   # Argo Applications live in the argocd namespace itself (the Application
   # CRD object), but DEPLOY into per-tenant×env namespaces above.
-  namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+  namespace = local.argocd_namespace_name
 
   providers = {
     kubectl = kubectl

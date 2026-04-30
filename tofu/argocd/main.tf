@@ -70,7 +70,7 @@ provider "helm" {
 # Authenticates with the auto-generated admin password from the standard
 # argocd-initial-admin-secret. We read it via a kubernetes data source.
 provider "argocd" {
-  port_forward_with_namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+  port_forward_with_namespace = local.argocd_namespace_name
   username                    = "admin"
   password                    = data.kubernetes_secret_v1.argocd_admin_initial.data["password"]
   insecure                    = true
@@ -85,6 +85,16 @@ provider "argocd" {
   kubernetes {
     config_context = var.kube_context
   }
+}
+
+# Default `install_argocd` derives from worktree kind: local owns the install,
+# saas piggybacks. Override per-stack with TF_VAR_install_argocd=true|false.
+# `argocd_namespace_name` is a plain string so callers downstream don't have
+# to conditionally reference `kubernetes_namespace_v1.argocd[0]` vs nothing.
+locals {
+  is_saas               = strcontains(var.octopus_url, "octopus.app")
+  install_argocd_final  = coalesce(var.install_argocd, !local.is_saas)
+  argocd_namespace_name = var.argocd_namespace
 }
 
 # --- cross-stack reads ------------------------------------------------------
