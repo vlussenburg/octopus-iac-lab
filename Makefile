@@ -41,7 +41,7 @@ endef
 help:
 	@echo "compose/              : up | down | logs | ps | nuke      (local self-host only)"
 	@echo "bootstrap             : master-key (first-time) | mint-api-key (local-only)"
-	@echo "deploys come from CI: push to main on github → .github/workflows/deploy.yml"
+	@echo "deploys come from CI: push to main on github → .github/workflows/build.yml → release.yml"
 	@echo "tofu/space/           : space-init | space-plan | space-apply | space-destroy | space-fmt | space-validate"
 	@echo "tofu/control-plane/   : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
 	@echo "tofu/platform-hub/    : ph-init | ph-plan | ph-apply | ph-destroy | ph-fmt | ph-validate"

@@ -5,8 +5,8 @@ name: CI / Build Image
 # changes to .octopus/ or gitops/ don't fire this.
 #
 # (Note: Octopus's `Octopus.ArgoCDUpdateImageTags` step writes image tags
-# into `gitops/k8s/{env}/deployment.yaml`, which sits outside this filter,
-# so the build → release → image-update loop can't form.)
+# into the helm chart values under `gitops/`, which sits outside this
+# filter, so the build → release → image-update loop can't form.)
 
 on:
   push:
