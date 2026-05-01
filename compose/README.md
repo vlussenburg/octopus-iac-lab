@@ -34,3 +34,16 @@ Login: `admin` / `Password01!`. If you didn't set `OCTOPUS_SERVER_BASE64_LICENSE
 - **`linux/amd64` pinned on both images** — the Octopus image isn't published for arm64; Rosetta makes this acceptable on M-series Macs.
 - **Named volumes** (`mssql-data`, `octopus-repository`, `octopus-artifacts`, `octopus-tasklogs`) — survive container recreation. `make nuke` is the only way to drop them.
 - **`MASTER_KEY` lives in `.env`** — this key encrypts secrets in the Octopus DB. Changing it after first boot makes existing encrypted data unreadable, so it's generated once and held still.
+- **SQL Server memory cap** (`MSSQL_MEMORY_LIMIT_MB=4096`, `mem_limit: 5g`) — without it the engine grows its buffer pool unbounded and starves Octopus + Docker Desktop K8s. Bump up if you grow Docker Desktop's overall allocation.
+
+## Resource sizing
+
+Docker Desktop allocates a single memory pool across the compose stack AND the Docker Desktop Kubernetes cluster (which hosts the K8s agent + ArgoCD + nginx-ingress + the deployed apps). Default 8 GB is tight once the lab is fully wired:
+
+| Consumer | Approx need |
+|---|---|
+| `db` (SQL Server) | 4 GB cap, ~3 GB working |
+| `octopus` | ~2 GB |
+| Docker Desktop K8s + ArgoCD + agents + apps | 3–4 GB |
+
+**Recommendation: Docker Desktop → Settings → Resources → bump memory to 12–16 GB.** Then optionally raise `MSSQL_MEMORY_LIMIT_MB` here in step.

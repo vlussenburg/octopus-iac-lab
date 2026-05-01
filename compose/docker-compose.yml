@@ -11,10 +11,18 @@ services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     platform: linux/amd64
+    # SQL Server's default behaviour is to grow the buffer pool until it
+    # owns most of the container's available memory, which on this lab
+    # squeezes Octopus + Docker Desktop K8s into a noisy fight. Cap the
+    # engine explicitly. Tune up if you bump Docker Desktop's overall
+    # allocation (Settings → Resources). 4 GB is comfortable for
+    # 12 tenants × 2 envs × the gateway event stream.
+    mem_limit: 5g
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "Octop@s!Sandb0x"
       MSSQL_PID: "Developer"
+      MSSQL_MEMORY_LIMIT_MB: "4096"
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Octop@s!Sandb0x' -C -Q 'SELECT 1' || exit 1"]
       interval: 10s
