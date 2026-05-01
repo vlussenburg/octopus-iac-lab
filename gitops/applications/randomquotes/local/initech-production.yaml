@@ -10,6 +10,10 @@ metadata:
     argo.octopus.com/project: randomquotes
     argo.octopus.com/environment: production
     argo.octopus.com/tenant: initech
+    # Tells Octopus's update-argo-cd-application-image-tags step where the
+    # image reference lives in the helm values, so it can bump the tag
+    # without touching anything else.
+    argo.octopus.com/image-replace-paths: "ghcr.io/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
   labels:
     lab.octopus.com/source: local
     lab.octopus.com/tenant: initech
@@ -17,8 +21,21 @@ spec:
   project: default
   source:
     repoURL: https://github.com/vlussenburg/octopus-iac-lab
-    path: gitops/k8s/production
+    path: gitops/charts/randomquotes
     targetRevision: HEAD
+    helm:
+      releaseName: randomquotes
+      valuesObject:
+        replicaCount: 1
+        tenant: initech
+        mood: stoic
+        icon: "🧘"
+        brandColor: "#7E57C2"
+        watermark: "FREE TIER"
+        host: argo-local-initech-production.localtest.me
+        image:
+          repository: vlussenburg/octopus-iac-lab
+          tag: "1.1.16"
   destination:
     server: https://kubernetes.default.svc
     namespace: argo-randomquotes-local-initech-production

@@ -19,21 +19,23 @@ gitops/
 ├── applications/
 │   └── randomquotes/
 │       ├── local/                           # one Application per (tenant, env), surfaced to Local Octopus
-│       │   ├── acme-corp-dev.yaml           #   spec.source.path → gitops/k8s/dev
-│       │   ├── acme-corp-production.yaml    #   spec.source.path → gitops/k8s/production
-│       │   ├── globex-dev.yaml
+│       │   ├── acme-corp-dev.yaml           #   helm source → gitops/charts/randomquotes + per-tenant values
+│       │   ├── acme-corp-production.yaml    #   (mood, icon, color, host, replicas, image.tag — all in
+│       │   ├── globex-dev.yaml              #    the leaf's spec.source.helm.valuesObject)
 │       │   ├── globex-production.yaml
 │       │   ├── initech-dev.yaml
 │       │   └── initech-production.yaml
 │       └── saas/                            # same six, surfaced to Octopus Cloud
 │           └── …
-└── k8s/                                     # the actual workload manifests (Deployment + Service)
-    ├── dev/                                 # Octopus's update-argo-cd-application-image-tags step writes
-    │   ├── deployment.yaml                  #   here on Dev deploys (matches Apps with .../environment: dev).
-    │   └── service.yaml
-    └── production/                          # Same step writes here on Production deploys (matches Apps with
-        ├── deployment.yaml                  #   .../environment: production). Per-env separation is enforced
-        └── service.yaml                     #   by spec.source.path on each leaf Application.
+└── charts/
+    └── randomquotes/                        # one helm chart, 12 deployments — every leaf Application
+        ├── Chart.yaml                       #   instantiates the chart with its own valuesObject overrides
+        ├── values.yaml                      #   (tenant, mood, icon, brandColor, watermark, host, image.tag,
+        └── templates/                       #   replicaCount). Octopus's update-argo-cd-application-image-
+            ├── deployment.yaml              #   tags step bumps `image.tag` in each leaf's valuesObject via
+            ├── service.yaml                 #   the argo.octopus.com/image-replace-paths annotation, so dev
+            ├── configmap.yaml               #   and prod stay independent.
+            └── ingress.yaml
 ```
 
 ## How the Applications get into Argo
@@ -63,13 +65,22 @@ Reference: <https://octopus.com/docs/argo-cd/annotations>
 
 - **Application name**: `randomquotes-{tenant}-{env}-{worktree}` — the worktree suffix prevents collision in the shared `argocd` namespace where both worktrees' Applications live.
 - **Destination namespace**: `argo-randomquotes-{worktree}-{tenant}-{env}` — the `argo-` prefix keeps these out of the way of the K8s agent's `randomquotes-{worktree}-{tenant}-{env}` namespaces (the push-based path).
-- **Source path**: `gitops/k8s/{env}` — dev and production each have their own folder, so a Dev release can't accidentally update prod's manifests and vice versa.
+- **Source**: every leaf Application points at `gitops/charts/randomquotes` and supplies its own `helm.valuesObject` (tenant, mood, icon, brandColor, watermark, host, replicaCount, image.tag). The chart renders 4 Kubernetes objects per Application: Deployment + Service + ConfigMap + Ingress. The ConfigMap carries the per-tenant `config.json` that `index.html` reads at startup, so each tenant's UI is properly skinned.
 
 ## Promoting Dev → Production
 
-Octopus owns the progression. The `Octopus.ArgoCDUpdateImageTags` step runs on every env it's deployed to and only writes into the matching `gitops/k8s/{env}/` folder (because the Argo Applications for that env have `spec.source.path` pinned to that folder). So the flow is:
+Octopus owns the progression. The `Octopus.ArgoCDUpdateImageTags` step runs on whichever env Octopus deploys to and only updates the leaf Application(s) matching that env (via `argo.octopus.com/environment` annotation). So:
 
-1. Push to `app/**` → `build.yml` builds new image → calls `release.yml` → Octopus release created and deployed to **Dev** → Argo step writes to `gitops/k8s/dev/deployment.yaml` → Argo dev Apps sync.
-2. To promote: deploy the same Octopus release to **Production** (UI button or another `release.yml` run targeting Prod). Argo step now writes to `gitops/k8s/production/deployment.yaml` → Argo prod Apps sync.
+1. Push to `app/**` → `build.yml` builds new image → calls `release.yml` → Octopus release created and deployed to **Dev** → Argo step bumps `image.tag` in the 6 dev leaf Applications under `gitops/applications/randomquotes/{local,saas}/*-dev.yaml` → Argo dev Apps sync.
+2. To promote: deploy the same Octopus release to **Production** (UI button or another `release.yml` run targeting Prod). Argo step now bumps `image.tag` in the 6 prod leaves → Argo prod Apps sync.
 
-The two folders never get touched by the same Octopus deploy — env separation is enforced by the Argo Application `spec.source.path` pin, not by manual file copies.
+Per-env separation is enforced by Octopus matching annotations on the Applications, not by file paths. Both env's leaves point at the same chart but advance their own `image.tag` independently.
+
+## Reaching the deployed app
+
+Each leaf renders an Ingress with `host: argo-{worktree}-{tenant}-{env}.localtest.me` (e.g. `argo-local-acme-corp-dev.localtest.me`). One port-forward of the cluster's nginx-ingress controller serves all 12:
+
+```bash
+kubectl port-forward svc/ingress-nginx-controller 8080:8080 -n ingress-nginx
+open http://argo-local-acme-corp-dev.localtest.me:8080
+```

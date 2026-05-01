@@ -1,0 +1,11 @@
+apiVersion: v2
+name: randomquotes
+description: |
+  Per-tenant deployment of the randomquotes app for the GitOps path.
+  Each Argo Application overrides values (tenant, mood, icon, brandColor,
+  watermark, replicaCount, host, image.tag) so 12 Apps share the same
+  chart but render distinct Deployment + ConfigMap + Ingress per
+  (worktree, tenant, env).
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

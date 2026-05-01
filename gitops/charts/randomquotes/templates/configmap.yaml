@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: randomquotes-config
+data:
+  # config.json is mounted into the nginx container at
+  # /usr/share/nginx/html/config.json — index.html fetches it on load.
+  # `maintenance` stays empty here; the Maintenance Mode runbooks on the
+  # K8s agent path use it, but this Argo path doesn't (yet).
+  config.json: |
+    {
+      "tenant": {{ .Values.tenant | quote }},
+      "mood": {{ .Values.mood | quote }},
+      "icon": {{ .Values.icon | quote }},
+      "color": {{ .Values.brandColor | quote }},
+      "watermark": {{ .Values.watermark | quote }},
+      "maintenance": ""
+    }

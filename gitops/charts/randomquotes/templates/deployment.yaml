@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: randomquotes
+  labels:
+    app: randomquotes
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: randomquotes
+  template:
+    metadata:
+      labels:
+        app: randomquotes
+      annotations:
+        # Roll the pod when the ConfigMap content changes — k8s doesn't
+        # auto-restart on volume-mount updates.
+        configmap-checksum: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: randomquotes
+          image: ghcr.io/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          ports:
+            - containerPort: 80
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/nginx/html/config.json
+              subPath: config.json
+      volumes:
+        - name: config
+          configMap:
+            name: randomquotes-config
