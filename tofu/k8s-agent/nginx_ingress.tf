@@ -7,6 +7,10 @@
 # other LBs, and 8080 is the conventional dev-friendly high port. Browse
 # any tenant at  http://<source>-<tenant>-<env>.localtest.me:8080.
 # (`*.localtest.me` resolves to 127.0.0.1, so no /etc/hosts edits.)
+#
+# HTTPS is disabled (`controller.service.enableHttps=false`) — we don't
+# terminate TLS for the lab and keeping :8443 free lets the Octopus compose
+# container bind it for the gateway gRPC port without a host-port collision.
 resource "null_resource" "nginx_ingress" {
   triggers = {
     chart_version = var.nginx_ingress_chart_version
@@ -22,7 +26,7 @@ resource "null_resource" "nginx_ingress" {
         --kube-context "${var.kube_context}" \
         --set controller.service.type=LoadBalancer \
         --set controller.service.ports.http=8080 \
-        --set controller.service.ports.https=8443 \
+        --set controller.service.enableHttps=false \
         --atomic --wait
     EOT
   }
