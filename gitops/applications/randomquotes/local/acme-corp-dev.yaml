@@ -32,7 +32,7 @@ spec:
         icon: "🃏"
         brandColor: "#F5C518"
         watermark: ""
-        maintenance: ""
+        maintenance: "Argo maintenance test 🚧 (manual)"
         host: argo-local-acme-corp-dev.localtest.me
         image:
           repository: vlussenburg/octopus-iac-lab
