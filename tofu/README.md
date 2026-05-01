@@ -11,7 +11,7 @@ Six OpenTofu stacks, each with its own state. Non-sensitive lab config (space na
 | [`k8s-agent/`](k8s-agent/) | NFS CSI driver + nginx-ingress controller + Octopus K8s Agent helm release | Cluster-side install. Independent — useful to apply/destroy without touching the project. Also reads control-plane state. |
 | [`argocd/`](argocd/) | ArgoCD helm release + Octopus Argo CD Gateway helm release + 6 annotated Argo Applications | The GitOps half of the dual-delivery story. Surfaces Argo Applications back to Octopus via the Gateway + `argo.octopus.com/*` annotations. |
 
-Plus one local module under [`modules/octopus-argocd-application/`](modules/octopus-argocd-application/) — placeholders the future `octopusdeploy_argocd_application` provider resource that doesn't exist yet.
+Plus one local module under [`modules/octopus-argocd-gateway/`](modules/octopus-argocd-gateway/) — placeholders the future `octopusdeploy_argocd_gateway` provider resource that doesn't exist yet.
 
 Apply order is enforced by the Makefile:
 

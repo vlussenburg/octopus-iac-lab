@@ -15,7 +15,7 @@ octopus-iac-lab/
 ├── compose/      # docker-compose stack — local Octopus Server (local worktree only)
 ├── tofu/         # OpenTofu — six stacks (space, control-plane, platform-hub, app-randomquotes, k8s-agent, argocd) + a local module under tofu/modules/
 ├── gitops/       # Argo CD's source of truth — App-of-Apps roots + 12 per-tenant leaf Applications
-├── app/          # the actual app artefacts (Dockerfile, index.html); k8s/ kept as a stale reference
+├── app/          # the actual app artefacts (Dockerfile, index.html)
 ├── assets/       # tenant logos uploaded by control-plane
 └── .octopus/     # OCL files — owned by Octopus + git via CaC (deployment process, runbooks, variables)
 ```

@@ -34,7 +34,8 @@ Login: `admin` / `Password01!`. If you didn't set `OCTOPUS_SERVER_BASE64_LICENSE
 - **`linux/amd64` pinned on both images** — the Octopus image isn't published for arm64; Rosetta makes this acceptable on M-series Macs.
 - **Named volumes** (`mssql-data`, `octopus-repository`, `octopus-artifacts`, `octopus-tasklogs`) — survive container recreation. `make nuke` is the only way to drop them.
 - **`MASTER_KEY` lives in `.env`** — this key encrypts secrets in the Octopus DB. Changing it after first boot makes existing encrypted data unreadable, so it's generated once and held still.
-- **SQL Server memory cap** (`MSSQL_MEMORY_LIMIT_MB=4096`, `mem_limit: 5g`) — without it the engine grows its buffer pool unbounded and starves Octopus + Docker Desktop K8s. Bump up if you grow Docker Desktop's overall allocation.
+- **SQL Server memory cap** (`MSSQL_MEMORY_LIMIT_MB=6144`, `mem_limit: 8g`) — without it the engine grows its buffer pool unbounded and starves Octopus + Docker Desktop K8s. Sized for Docker Desktop at 16 GB; bump in step if you grow that allocation.
+- **Octopus host port `18443:8443`** for gRPC — Docker Desktop reserves `*:8443` on macOS, so we bind 18443 on the host. The container still listens on 8443, and the Argo Gateway uses `grpc://host.docker.internal:18443`.
 
 ## Resource sizing
 

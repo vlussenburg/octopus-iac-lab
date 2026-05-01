@@ -93,9 +93,9 @@ Apps are reached via the cluster's nginx-ingress controller at `*.localtest.me` 
 Two parallel deployment shapes drive the same `randomquotes` Octopus project:
 
 - **Push** (the K8s agent): Octopus runs the `deployment_process.ocl` steps directly; manifests are inlined in OCL. Deploys into `randomquotes-{source}-{tenant}-{env}` namespaces.
-- **GitOps** (Argo CD via the Octopus Gateway): Argo Applications carry `argo.octopus.com/{project,environment,tenant}` annotations; the Gateway watches the cluster and surfaces them under Infrastructure → Argo CD Instances. Source manifests live in `gitops/k8s/{dev,production}/` — per-env folders so prod is gated by manual file promotion, not by Octopus auto-syncing. Deploys into `argo-randomquotes-{source}-{tenant}-{env}` namespaces (separate prefix avoids collision with the agent path).
+- **GitOps** (Argo CD via the Octopus Gateway): Argo Applications carry `argo.octopus.com/{project,environment,tenant}` annotations; the Gateway watches the cluster and surfaces them under Infrastructure → Argo CD Instances. Source manifests live in `gitops/k8s/{dev,production}/` — per-env folders. Octopus's `Octopus.ArgoCDUpdateImageTags` step runs on whichever env the deployment targets and writes only to that env's folder (the leaf Apps' `spec.source.path` enforces the separation). Promotion = deploying the same Octopus release to the next env. Deploys into `argo-randomquotes-{source}-{tenant}-{env}` namespaces (separate prefix avoids collision with the agent path).
 
-The `OctopusDeploy/octopusdeploy` provider has zero Argo CD resources as of v1.12 — `tofu/modules/octopus-argocd-application/` placeholders the schema we'd hope they'll ship, so the eventual migration is "swap the implementation, keep the call sites".
+The `OctopusDeploy/octopusdeploy` provider has zero Argo CD resources as of v1.12 — `tofu/modules/octopus-argocd-gateway/` placeholders the schema we'd hope they'll ship for the Gateway connection, so the eventual migration is "swap the implementation, keep the call sites".
 
 ## Editing rules of thumb
 

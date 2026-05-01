@@ -28,12 +28,12 @@ gitops/
 │       └── saas/                            # same six, surfaced to Octopus Cloud
 │           └── …
 └── k8s/                                     # the actual workload manifests (Deployment + Service)
-    ├── dev/                                 # Octopus's update-argo-cd-application-image-tags step writes here
-    │   ├── deployment.yaml                  #   on every Dev release. Promotion to prod is a manual git op
-    │   └── service.yaml                     #   (e.g. `cp gitops/k8s/dev/* gitops/k8s/production/`).
-    └── production/                          # Untouched by automated steps. Hand-promote to gate prod deploys.
-        ├── deployment.yaml
-        └── service.yaml
+    ├── dev/                                 # Octopus's update-argo-cd-application-image-tags step writes
+    │   ├── deployment.yaml                  #   here on Dev deploys (matches Apps with .../environment: dev).
+    │   └── service.yaml
+    └── production/                          # Same step writes here on Production deploys (matches Apps with
+        ├── deployment.yaml                  #   .../environment: production). Per-env separation is enforced
+        └── service.yaml                     #   by spec.source.path on each leaf Application.
 ```
 
 ## How the Applications get into Argo
