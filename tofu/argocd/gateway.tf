@@ -5,14 +5,14 @@
 
 locals {
   # SaaS exposes Octopus gRPC on :8443 with a public TLS cert. Self-host
-  # compose exposes :8443 with a self-signed cert. Both work without
-  # additional cert wiring at the chart level.
+  # compose maps host :18443 → container :8443 (Docker Desktop reserves
+  # *:8443 on macOS, so we dodge by binding 18443 on the host).
   octopus_host = replace(replace(var.octopus_url, "https://", ""), "http://", "")
   octopus_grpc_url_resolved = coalesce(
     var.octopus_grpc_url,
     local.is_saas
     ? "grpc://${local.octopus_host}:8443"
-    : "grpc://host.docker.internal:8443",
+    : "grpc://host.docker.internal:18443",
   )
 
   # The HTTP URL pods use to reach Octopus. SaaS = public URL (works from

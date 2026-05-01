@@ -14,15 +14,15 @@ services:
     # SQL Server's default behaviour is to grow the buffer pool until it
     # owns most of the container's available memory, which on this lab
     # squeezes Octopus + Docker Desktop K8s into a noisy fight. Cap the
-    # engine explicitly. Tune up if you bump Docker Desktop's overall
-    # allocation (Settings → Resources). 4 GB is comfortable for
-    # 12 tenants × 2 envs × the gateway event stream.
-    mem_limit: 5g
+    # engine + container explicitly. Tune up if you bump Docker Desktop's
+    # overall allocation (Settings → Resources). With Docker Desktop at
+    # 16 GB this leaves comfortable headroom for Octopus + K8s.
+    mem_limit: 8g
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "Octop@s!Sandb0x"
       MSSQL_PID: "Developer"
-      MSSQL_MEMORY_LIMIT_MB: "4096"
+      MSSQL_MEMORY_LIMIT_MB: "6144"
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Octop@s!Sandb0x' -C -Q 'SELECT 1' || exit 1"]
       interval: 10s
@@ -52,7 +52,10 @@ services:
     ports:
       - "8090:8080"      # HTTP API + UI
       - "10943:10943"    # Halibut — Polling Tentacle / K8s Agent comms (TLS)
-      - "8443:8443"      # gRPC — Kubernetes Monitor (KLOS), enable when needed
+      - "18443:8443"     # gRPC — KLOS / Argo CD Gateway. Host 18443 dodges
+                         # Docker Desktop's own *:8443 binding; container is
+                         # still 8443. Argo Gateway connects via
+                         # grpc://host.docker.internal:18443.
     volumes:
       - octopus-repository:/repository
       - octopus-artifacts:/artifacts
