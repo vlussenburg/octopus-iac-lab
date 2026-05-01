@@ -98,8 +98,14 @@ jobs:
           project: ${{ env.PROJECT }}
           release_number: ${{ env.RELEASE_NUMBER }}
           git_ref: ${{ needs.resolve.outputs.sha }}
+          # `packages` format is step_name:package_ref_name:version. Without
+          # the step prefix, Octopus doesn't match the pin and falls back to
+          # SelectionMode=immediate (=GHCR latest), so a release named X-sha
+          # ends up snapshotting whatever's currently latest in the feed
+          # rather than the version we wanted to pin.
           packages: |
-            randomquotes-image:${{ env.IMAGE_TAG }}
+            deploy-manifests:randomquotes-image:${{ env.IMAGE_TAG }}
+            update-argo-cd-application-image-tags:octopus-iac-lab:${{ env.IMAGE_TAG }}
 
       # Deploy fans out across every tenant carrying the `app/randomquotes`
       # tag — Octopus resolves the set; CI doesn't enumerate. Add a tenant
