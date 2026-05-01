@@ -9,7 +9,7 @@ image:
   # uses the argo.octopus.com/image-replace-paths annotation on each leaf
   # to know where the tag lives in this template.
   repository: vlussenburg/octopus-iac-lab
-  tag: latest
+  tag: 1.1.18
 
 replicaCount: 1
 
