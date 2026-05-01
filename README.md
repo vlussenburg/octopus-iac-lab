@@ -106,14 +106,24 @@ cloudflared tunnel run octopus-iac-lab
 
 ## Reaching the deployed app
 
-The k8s-agent stack installs nginx-ingress into `ingress-nginx`. Each deploy creates an `Ingress` for `#{Source}-#{tenant}-#{env}.localtest.me` (resolves to 127.0.0.1). One port-forward serves all 12 tenant×env combinations *and* the ArgoCD UI:
+The k8s-agent stack installs nginx-ingress into `ingress-nginx`. Each deploy gets an `Ingress` for a `*.localtest.me` host (resolves to 127.0.0.1). One port-forward serves the entire lab — every tenant on both delivery paths, plus the ArgoCD UI:
 
 ```bash
 kubectl port-forward svc/ingress-nginx-controller 8080:8080 -n ingress-nginx
+
+# K8s agent path (Octopus push) — host = {worktree}-{tenant}-{env}.localtest.me
 open http://local-acme-corp-dev.localtest.me:8080
 open http://saas-globex-production.localtest.me:8080
+
+# ArgoCD path (GitOps pull) — host = argo-{worktree}-{tenant}-{env}.localtest.me
+open http://argo-local-acme-corp-dev.localtest.me:8080
+open http://argo-saas-globex-production.localtest.me:8080
+
+# ArgoCD UI itself
 open http://argocd.localtest.me:8080      # admin password: see argo-apply outputs
 ```
+
+Side-by-side comparison: each tenant is reachable on **both** paths simultaneously, so `local-acme-corp-dev.localtest.me` (push) and `argo-local-acme-corp-dev.localtest.me` (pull) render the same tenant flavour from two different delivery pipelines.
 
 ## Two delivery paths into the same project
 
