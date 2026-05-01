@@ -3,16 +3,25 @@ name: CI / Build Image
 # Builds + pushes the randomquotes image to GHCR. Triggers a release via the
 # downstream release.yml workflow_run hook on success. App-only concern —
 # changes to .octopus/ or anything else don't fire this.
+#
+# Path filter excludes app/k8s/** because Octopus's
+# `Octopus.ArgoCDUpdateImageTags` step DirectCommits new image tags into
+# app/k8s/deployment.yaml. Without the exclusion, every release would
+# trigger another build → release → image-update commit → infinite loop.
+# The exclusion is symmetric on push and PR triggers so PR previews don't
+# fire on Octopus-owned files either.
 
 on:
   push:
     branches: [main]
     paths:
-      - 'app/index.html'
+      - 'app/**'
+      - '!app/k8s/**'
   pull_request:
     branches: [main]
     paths:
       - 'app/**'
+      - '!app/k8s/**'
   workflow_dispatch:
 
 env:
