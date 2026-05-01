@@ -100,9 +100,6 @@ resource "helm_release" "argocd" {
               repoURL        = "https://github.com/vlussenburg/octopus-iac-lab"
               path           = "gitops/argocd"
               targetRevision = "HEAD"
-              directory = {
-                recurse = false
-              }
             }
             destination = {
               server    = "https://kubernetes.default.svc"
