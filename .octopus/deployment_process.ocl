@@ -94,7 +94,7 @@ step "deploy-manifests" {
                                 name: randomquotes
                                 port:
                                   number: 80
-                EOT
+                    EOT
             Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
