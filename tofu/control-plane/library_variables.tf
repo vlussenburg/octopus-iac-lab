@@ -23,3 +23,17 @@ resource "octopusdeploy_variable" "source" {
   type     = "String"
   value    = local.source_kind
 }
+
+# GitHub PAT exposed as a sensitive script variable so runbook steps that
+# commit to git (e.g. the maintenance-on/off runbooks' "Set Argo
+# Maintenance" step) can authenticate the push. The same PAT is already
+# stored as an Octopus Git credential for CaC, but Git credentials aren't
+# directly addressable from script steps — they're consumed internally by
+# Octopus's Git plumbing. Hence this duplication.
+resource "octopusdeploy_variable" "github_token" {
+  owner_id        = octopusdeploy_library_variable_set.lab_source.id
+  name            = "GitHub.Token"
+  type            = "Sensitive"
+  is_sensitive    = true
+  sensitive_value = var.github_pat
+}

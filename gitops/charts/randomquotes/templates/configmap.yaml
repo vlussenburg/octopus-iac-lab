@@ -14,5 +14,5 @@ data:
       "icon": {{ .Values.icon | quote }},
       "color": {{ .Values.brandColor | quote }},
       "watermark": {{ .Values.watermark | quote }},
-      "maintenance": ""
+      "maintenance": {{ .Values.maintenance | default "" | quote }}
     }

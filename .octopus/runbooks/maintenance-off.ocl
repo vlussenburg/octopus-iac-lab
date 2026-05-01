@@ -54,4 +54,33 @@ process {
             }
         }
     }
+
+    step "clear-argo-maintenance" {
+        name = "Clear Argo Maintenance"
+
+        action {
+            action_type = "Octopus.Script"
+            properties = {
+                Octopus.Action.RunOnServer = "true"
+                Octopus.Action.Script.ScriptSource = "Inline"
+                Octopus.Action.Script.Syntax = "Bash"
+                Octopus.Action.Script.ScriptBody = <<-EOT
+                    set -euo pipefail
+                    LEAF="gitops/applications/randomquotes/#{Source}/#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.yaml"
+
+                    WORK=$(mktemp -d)
+                    git clone --depth 1 "https://x-access-token:#{GitHub.Token}@github.com/vlussenburg/octopus-iac-lab.git" "$WORK"
+                    cd "$WORK"
+                    git config user.email "octopus@octopus.com"
+                    git config user.name  "Octopus"
+
+                    sed -i 's|^\(\s*maintenance: \).*|\1""|' "$LEAF"
+                    git diff --quiet -- "$LEAF" && { echo "no change"; exit 0; }
+                    git add "$LEAF"
+                    git commit -m "Clear maintenance for #{Octopus.Deployment.Tenant.Name}/#{Octopus.Environment.Name | ToLower}"
+                    git push origin HEAD:main
+                EOT
+            }
+        }
+    }
 }
