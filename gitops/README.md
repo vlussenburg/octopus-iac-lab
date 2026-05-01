@@ -63,16 +63,13 @@ Reference: <https://octopus.com/docs/argo-cd/annotations>
 
 - **Application name**: `randomquotes-{tenant}-{env}-{worktree}` — the worktree suffix prevents collision in the shared `argocd` namespace where both worktrees' Applications live.
 - **Destination namespace**: `argo-randomquotes-{worktree}-{tenant}-{env}` — the `argo-` prefix keeps these out of the way of the K8s agent's `randomquotes-{worktree}-{tenant}-{env}` namespaces (the push-based path).
-- **Source path**: `gitops/k8s/{env}` — dev and production each have their own folder. Octopus's `Octopus.ArgoCDUpdateImageTags` step is scoped to Dev and only commits into `gitops/k8s/dev/`, so prod never auto-receives image bumps. Promotion to prod is a manual git copy.
+- **Source path**: `gitops/k8s/{env}` — dev and production each have their own folder, so a Dev release can't accidentally update prod's manifests and vice versa.
 
 ## Promoting Dev → Production
 
-Dev's `gitops/k8s/dev/deployment.yaml` advances continuously as Octopus releases land. Production stays frozen until you promote:
+Octopus owns the progression. The `Octopus.ArgoCDUpdateImageTags` step runs on every env it's deployed to and only writes into the matching `gitops/k8s/{env}/` folder (because the Argo Applications for that env have `spec.source.path` pinned to that folder). So the flow is:
 
-```bash
-cp gitops/k8s/dev/deployment.yaml gitops/k8s/production/deployment.yaml
-git add gitops/k8s/production/ && git commit -m "Promote randomquotes to prod"
-git push
-```
+1. Push to `app/**` → `build.yml` builds new image → calls `release.yml` → Octopus release created and deployed to **Dev** → Argo step writes to `gitops/k8s/dev/deployment.yaml` → Argo dev Apps sync.
+2. To promote: deploy the same Octopus release to **Production** (UI button or another `release.yml` run targeting Prod). Argo step now writes to `gitops/k8s/production/deployment.yaml` → Argo prod Apps sync.
 
-Argo's prod Apps poll, see the new image, sync. No tofu, no Octopus action — just a git operation, which is exactly the GitOps promotion story.
+The two folders never get touched by the same Octopus deploy — env separation is enforced by the Argo Application `spec.source.path` pin, not by manual file copies.
