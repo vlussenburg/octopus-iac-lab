@@ -23,11 +23,9 @@ process {
             action_type = "Octopus.KubernetesDeployConfigMap"
             properties = {
                 Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
-                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
                 Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
-                Octopus.Action.KubernetesContainers.ConfigMapValues = <<-JSON
-                    {"config.json":"{\"tenant\":\"#{Octopus.Deployment.Tenant.Name}\",\"mood\":\"#{Featured.Mood}\",\"icon\":\"#{Brand.Icon}\",\"color\":\"#{Brand.Color}\",\"watermark\":\"#{Branding.Watermark}\",\"maintenance\":\"#{Maintenance.Message}\"}"}
-                    JSON
+                Octopus.Action.KubernetesContainers.ConfigMapValues = "{\"config.json\":\"{\\\"tenant\\\":\\\"#{Octopus.Deployment.Tenant.Name}\\\",\\\"mood\\\":\\\"#{Featured.Mood}\\\",\\\"icon\\\":\\\"#{Brand.Icon}\\\",\\\"color\\\":\\\"#{Brand.Color}\\\",\\\"watermark\\\":\\\"#{Branding.Watermark}\\\",\\\"maintenance\\\":\\\"#{Maintenance.Message}\\\"}\"}"
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
             }
         }
     }
@@ -41,16 +39,29 @@ process {
         action {
             action_type = "Octopus.KubernetesRunScript"
             properties = {
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
                 Octopus.Action.RunOnServer = "false"
+                Octopus.Action.Script.ScriptBody = <<-EOT
+                        set -euo pipefail
+                        kubectl scale deployment/randomquotes --replicas=1
+                        kubectl rollout restart deployment/randomquotes
+                        kubectl rollout status deployment/randomquotes --timeout=2m
+                    EOT
                 Octopus.Action.Script.ScriptSource = "Inline"
                 Octopus.Action.Script.Syntax = "Bash"
-                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
-                Octopus.Action.Script.ScriptBody = <<-EOT
-                    set -euo pipefail
-                    kubectl scale deployment/randomquotes --replicas=1
-                    kubectl rollout restart deployment/randomquotes
-                    kubectl rollout status deployment/randomquotes --timeout=2m
-                EOT
+            }
+        }
+    }
+
+    step "set-argo-maintenance" {
+        name = "Set Argo Maintenance"
+
+        action {
+            action_type = "Octopus.ArgoCDUpdateManifests"
+            properties = {
+                Octopus.Action.ArgoCD.CommitMessageSummary = "Set maintenance message"
+                Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
+                Octopus.Action.ArgoCD.StepVerification.Method = "ArgoCDApplicationHealthy"
             }
         }
     }
