@@ -12,7 +12,7 @@ image:
   # The chart-default tag isn't actually consumed today — every leaf
   # pins image.tag in its spec.source.helm.valuesObject. Keep this as a
   # sentinel so a forgotten override is obvious in the rendered manifest.
-  tag: chart-default-do-not-use
+  tag: 1.1.19
 
 replicaCount: 1
 
