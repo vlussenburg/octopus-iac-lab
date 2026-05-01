@@ -15,7 +15,7 @@ The `randomquotes` Octopus project — the application-level scaffold. Tenanted,
 - **Runbooks** — live in [`../../.octopus/runbooks/`](../../.octopus/runbooks/) (`maintenance-on.ocl`, `maintenance-off.ocl`).
 - **Project variables** — live in [`../../.octopus/variables.ocl`](../../.octopus/) alongside the deployment process.
 - **Image build** — happens in [`.github/workflows/build.yml`](../../.github/workflows/build.yml). Image is `ghcr.io/vlussenburg/octopus-iac-lab` (built from this repo's [`app/Dockerfile`](../../app/Dockerfile)), pulled via the GHCR feed registered in `control-plane`.
-- **K8s manifests as files** — [`../../app/k8s/`](../../app/k8s/) exists but is no longer used; the manifests are inlined in the deployment process OCL.
+- **K8s manifests as files** — live in [`../../gitops/k8s/{dev,production}/`](../../gitops/k8s/) and are read by Argo CD via the App-of-Apps roots in `gitops/argocd/`. The deployment process OCL inlines its own manifests for the K8s agent path; the gitops/ tree is the source for the Argo path.
 
 ## Run
 

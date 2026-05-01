@@ -6,7 +6,8 @@ The Random Quotes K8s sample app — the artefact Octopus deploys.
 |------|---------|
 | [`Dockerfile`](Dockerfile) | nginx + static `index.html`, with a `VERSION` build-arg that gets baked into the page footer. Built + pushed to `ghcr.io/vlussenburg/octopus-iac-lab` by [`../.github/workflows/build.yml`](../.github/workflows/build.yml). |
 | [`index.html`](index.html) | The actual page. Reads `/config.json` at startup for tenant/mood/icon/colour/watermark/maintenance overrides — that file is materialised by Octopus at deploy time via a ConfigMap. Honours a `maintenance` overlay used by the `Maintenance Mode On` runbook. |
-| `k8s/` | **Stale.** Original namespace/deployment/service YAMLs. The deployment process now inlines its own manifests (Deployment + Service + Ingress + ConfigMap mount) in [`../.octopus/deployment_process.ocl`](../.octopus/deployment_process.ocl), so this folder isn't read by anything. Kept as a reference of the original octopus-ttc shape. |
+
+> **Where are the K8s manifests?** Two places — Octopus's K8s agent path inlines them in [`../.octopus/deployment_process.ocl`](../.octopus/deployment_process.ocl), and the Argo CD path reads them from [`../gitops/k8s/{dev,production}/`](../gitops/k8s/). They're separate by design so each path has its own promotion semantics.
 
 ## Build locally (optional)
 

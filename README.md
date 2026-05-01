@@ -146,4 +146,4 @@ Two scopes — pick what you want gone.
 ## Not in scope
 
 - No production guidance — this is a sandbox.
-- No reference to the `octopus-ttc` demo. App artefacts in `app/` were originally copied from there but the lab is otherwise standalone. `app/k8s/` is no longer wired through; manifests are inlined in `.octopus/deployment_process.ocl`.
+- No reference to the `octopus-ttc` demo. App artefacts in `app/` were originally copied from there but the lab is otherwise standalone. K8s manifests live in `gitops/k8s/{dev,production}/` (used by Argo) and inlined in `.octopus/deployment_process.ocl` (used by the K8s agent).

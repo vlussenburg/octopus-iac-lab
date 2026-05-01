@@ -21,7 +21,7 @@ terraform state.
 |  | Source of truth | Materialised by | Namespace pattern | Triggered by |
 |---|---|---|---|---|
 | **K8s agent** ([`../k8s-agent/`](../k8s-agent/)) | Inline manifests in `.octopus/deployment_process.ocl` | Octopus runtime (push) | `randomquotes-{source}-{tenant}-{env}` | Octopus release / runbook |
-| **ArgoCD** (this stack) | `app/k8s/*.yaml` in this repo | Argo CD (pull) | `argo-randomquotes-{source}-{tenant}-{env}` | git commit |
+| **ArgoCD** (this stack) | `gitops/k8s/{dev,production}/*.yaml` | Argo CD (pull) | `argo-randomquotes-{source}-{tenant}-{env}` | git commit |
 
 Both surface to the same Octopus project. Adding/changing a leaf Application is a one-file commit under `gitops/`; the gateway pod forwards the change events to Octopus.
 

@@ -12,17 +12,28 @@ Adding a new tenant or environment is a one-file commit:
 
 ```
 gitops/
-└── applications/
-    └── randomquotes/
-        ├── local/                              # one Application per (tenant, env), surfaced to Local Octopus
-        │   ├── acme-corp-dev.yaml
-        │   ├── acme-corp-production.yaml
-        │   ├── globex-dev.yaml
-        │   ├── globex-production.yaml
-        │   ├── initech-dev.yaml
-        │   └── initech-production.yaml
-        └── saas/                               # same six, surfaced to Octopus Cloud
-            └── …
+├── argocd/                                  # bootstrap + App-of-Apps roots + ingress (synced by argocd-bootstrap)
+│   ├── argocd-server-ingress.yaml
+│   ├── randomquotes-root-local.yaml
+│   └── randomquotes-root-saas.yaml
+├── applications/
+│   └── randomquotes/
+│       ├── local/                           # one Application per (tenant, env), surfaced to Local Octopus
+│       │   ├── acme-corp-dev.yaml           #   spec.source.path → gitops/k8s/dev
+│       │   ├── acme-corp-production.yaml    #   spec.source.path → gitops/k8s/production
+│       │   ├── globex-dev.yaml
+│       │   ├── globex-production.yaml
+│       │   ├── initech-dev.yaml
+│       │   └── initech-production.yaml
+│       └── saas/                            # same six, surfaced to Octopus Cloud
+│           └── …
+└── k8s/                                     # the actual workload manifests (Deployment + Service)
+    ├── dev/                                 # Octopus's update-argo-cd-application-image-tags step writes here
+    │   ├── deployment.yaml                  #   on every Dev release. Promotion to prod is a manual git op
+    │   └── service.yaml                     #   (e.g. `cp gitops/k8s/dev/* gitops/k8s/production/`).
+    └── production/                          # Untouched by automated steps. Hand-promote to gate prod deploys.
+        ├── deployment.yaml
+        └── service.yaml
 ```
 
 ## How the Applications get into Argo
@@ -52,3 +63,16 @@ Reference: <https://octopus.com/docs/argo-cd/annotations>
 
 - **Application name**: `randomquotes-{tenant}-{env}-{worktree}` — the worktree suffix prevents collision in the shared `argocd` namespace where both worktrees' Applications live.
 - **Destination namespace**: `argo-randomquotes-{worktree}-{tenant}-{env}` — the `argo-` prefix keeps these out of the way of the K8s agent's `randomquotes-{worktree}-{tenant}-{env}` namespaces (the push-based path).
+- **Source path**: `gitops/k8s/{env}` — dev and production each have their own folder. Octopus's `Octopus.ArgoCDUpdateImageTags` step is scoped to Dev and only commits into `gitops/k8s/dev/`, so prod never auto-receives image bumps. Promotion to prod is a manual git copy.
+
+## Promoting Dev → Production
+
+Dev's `gitops/k8s/dev/deployment.yaml` advances continuously as Octopus releases land. Production stays frozen until you promote:
+
+```bash
+cp gitops/k8s/dev/deployment.yaml gitops/k8s/production/deployment.yaml
+git add gitops/k8s/production/ && git commit -m "Promote randomquotes to prod"
+git push
+```
+
+Argo's prod Apps poll, see the new image, sync. No tofu, no Octopus action — just a git operation, which is exactly the GitOps promotion story.
