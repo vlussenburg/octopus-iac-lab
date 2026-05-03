@@ -43,9 +43,13 @@ resource "octopusdeploy_variable" "github_token" {
 # pin to "Hosted Ubuntu" instead. Local self-host has only "Default Worker
 # Pool" (the built-in Octopus Server worker, which is Linux).
 # Used by runbook script steps via Octopus.Action.WorkerPoolVariable.
+data "octopusdeploy_worker_pools" "linux" {
+  partial_name = local.source_kind == "saas" ? "Hosted Ubuntu" : "Default Worker Pool"
+}
+
 resource "octopusdeploy_variable" "linux_worker_pool" {
   owner_id = octopusdeploy_library_variable_set.lab_source.id
   name     = "Linux.WorkerPool"
   type     = "WorkerPool"
-  value    = local.source_kind == "saas" ? "hosted-ubuntu" : "default-worker-pool"
+  value    = data.octopusdeploy_worker_pools.linux.worker_pools[0].id
 }
