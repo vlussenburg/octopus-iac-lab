@@ -58,8 +58,8 @@ process {
 
         action {
             action_type = "Octopus.Script"
+            worker_pool_variable = "Linux.WorkerPool"
             properties = {
-                Octopus.Action.RunOnServer = "true"
                 Octopus.Action.Script.ScriptSource = "Inline"
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT

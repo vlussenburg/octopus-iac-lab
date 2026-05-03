@@ -37,3 +37,15 @@ resource "octopusdeploy_variable" "github_token" {
   is_sensitive    = true
   sensitive_value = var.github_pat
 }
+
+# Worker pool name to target for bash script steps. SaaS's default dynamic
+# worker is Windows ("Hosted Windows") and there's no /bin/bash there;
+# pin to "Hosted Ubuntu" instead. Local self-host has only "Default Worker
+# Pool" (the built-in Octopus Server worker, which is Linux).
+# Used by runbook script steps via Octopus.Action.WorkerPoolVariable.
+resource "octopusdeploy_variable" "linux_worker_pool" {
+  owner_id = octopusdeploy_library_variable_set.lab_source.id
+  name     = "Linux.WorkerPool"
+  type     = "WorkerPool"
+  value    = local.source_kind == "saas" ? "worker-pools-hosted-ubuntu" : "default-worker-pool"
+}
