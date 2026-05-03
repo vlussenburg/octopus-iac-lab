@@ -32,7 +32,7 @@ spec:
         icon: "🃏"
         brandColor: "#F5C518"
         watermark: ""
-        maintenance: ""
+        maintenance: "5/2 window"
         host: argo-saas-acme-corp-dev.localtest.me
         image:
           repository: vlussenburg/octopus-iac-lab
