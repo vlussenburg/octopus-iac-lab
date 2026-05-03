@@ -47,5 +47,5 @@ resource "octopusdeploy_variable" "linux_worker_pool" {
   owner_id = octopusdeploy_library_variable_set.lab_source.id
   name     = "Linux.WorkerPool"
   type     = "WorkerPool"
-  value    = local.source_kind == "saas" ? "worker-pools-hosted-ubuntu" : "default-worker-pool"
+  value    = local.source_kind == "saas" ? "hosted-ubuntu" : "default-worker-pool"
 }
