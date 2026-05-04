@@ -38,6 +38,12 @@ For the licence: base64 your XML (`base64 -i license.xml | tr -d '\n'`) and set 
 
 `tofu/argocd/` is minimum-footprint: it only owns the control plane (ArgoCD install, JWT, Octopus Argo CD Gateway). Roots, leaves, ingress, and chart all live in `gitops/`.
 
+## Demos that opt-in
+
+These exist on `main` but are off by default — the production tenants stay simple. Each runs in its own namespace and is driven by `make` targets:
+
+- [`demo/argocd-blue-green/`](demo/argocd-blue-green/) — Argo Rollouts blue/green of `randomquotes`. `make bg-demo-up TAG=pr-N` instantiates an isolated Application with `blueGreen.enabled: true`, then `bg-demo-promote` flips active. Requires `kubectl-argo-rollouts`.
+
 ## Reaching it
 
 ```bash

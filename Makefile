@@ -193,6 +193,32 @@ argo-fmt:
 argo-validate:
 	cd $(ARGO_DIR) && tofu validate
 
+# --- blue/green demo (Argo Rollouts) -------------------------------------
+# Self-contained walkthrough — see demo/argocd-blue-green/README.md.
+# Stays out of `apply` / `destroy` so production traffic never accidentally
+# routes through a Rollout. Runs against the docker-desktop kube context.
+
+BG_DEMO_NS  := argo-randomquotes-bg-demo
+BG_DEMO_TPL := demo/argocd-blue-green/randomquotes-bg.yaml.tmpl
+TAG         ?= pr-1
+
+bg-demo-up:           ## Apply (or bump) the demo Application — TAG=pr-N
+	@TAG=$(TAG) envsubst < $(BG_DEMO_TPL) | kubectl apply -f -
+	@echo "Demo:  active=http://argo-bg.localtest.me:8080  preview=http://argo-bg-preview.localtest.me:8080"
+
+bg-demo-promote:      ## Flip active Service from blue to green
+	kubectl argo rollouts promote randomquotes -n $(BG_DEMO_NS)
+
+bg-demo-abort:        ## Drop the green ReplicaSet, keep blue serving
+	kubectl argo rollouts abort randomquotes -n $(BG_DEMO_NS)
+
+bg-demo-status:       ## Show Rollout phase + ReplicaSets
+	kubectl argo rollouts get rollout randomquotes -n $(BG_DEMO_NS)
+
+bg-demo-down:         ## Tear down the demo (Application + namespace)
+	-kubectl delete -n argocd application randomquotes-bg-demo --ignore-not-found
+	-kubectl delete namespace $(BG_DEMO_NS) --ignore-not-found
+
 # --- convenience ----------------------------------------------------------
 
 fmt: space-fmt cp-fmt ph-fmt app-fmt agent-fmt argo-fmt
