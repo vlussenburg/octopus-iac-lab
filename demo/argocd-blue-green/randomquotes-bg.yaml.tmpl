@@ -1,0 +1,46 @@
+# Blue/green demo Application — instantiated by `make bg-demo-up TAG=…`
+# (envsubst replaces ${TAG}). Lives outside the App-of-Apps roots so the
+# demo never auto-syncs from main; it's purely opt-in.
+#
+# Why a standalone manifest and not a flag in the production leaves: keeping
+# main blue/green-free means production tenants stay on plain Deployments,
+# while this Application lets you spin up an isolated Rollout in its own
+# namespace whenever you want to demo the strategy.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: randomquotes-bg-demo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/vlussenburg/octopus-iac-lab
+    targetRevision: main
+    path: gitops/charts/randomquotes
+    helm:
+      releaseName: randomquotes
+      valuesObject:
+        replicaCount: 1
+        tenant: blue-green-co
+        mood: silicon-valley
+        icon: "🔵"
+        brandColor: "#1976D2"
+        watermark: "BLUE/GREEN DEMO"
+        host: argo-bg.localtest.me
+        blueGreen:
+          enabled: true
+          previewHost: argo-bg-preview.localtest.me
+        image:
+          repository: vlussenburg/octopus-iac-lab
+          tag: ${TAG}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-randomquotes-bg-demo
+  syncPolicy:
+    automated:
+      # selfHeal is intentionally OFF: the demo bumps image.tag in-place and
+      # we don't want Argo to revert the Rollout's pause-pre-promotion state.
+      selfHeal: false
+      prune: true
+    syncOptions:
+      - CreateNamespace=true

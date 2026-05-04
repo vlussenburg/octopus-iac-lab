@@ -1,0 +1,93 @@
+name = "Blue/Green Demo"
+description = "Octopus's native Kubernetes blue/green via the `Deploy Kubernetes containers` step (DeploymentStyle = BlueGreen). One step does the whole dance: deploys the new ReplicaSet, waits for healthy, swaps the Service selector, prunes the old. Run twice with different package versions to see the swap. Self-contained: targets `randomquotes-bg-demo-#{Source}` namespace, doesn't touch real tenants."
+default_guided_failure_mode = "EnvironmentDefault"
+multi_tenancy_mode = "Untenanted"
+
+connectivity_policy {
+    allow_deployments_to_no_targets = false
+}
+
+run_retention_policy {
+    quantity_to_keep = 5
+    type = "Count"
+}
+
+process {
+    step "deploy" {
+        name = "Deploy (blue/green)"
+        properties = {
+            Octopus.Action.TargetRoles = "k8s"
+        }
+
+        action {
+            action_type = "Octopus.KubernetesDeployContainers"
+            properties = {
+                Octopus.Action.EnabledFeatures = "Octopus.Features.KubernetesService"
+                Octopus.Action.KubernetesContainers.DeploymentName = "randomquotes"
+                Octopus.Action.KubernetesContainers.DeploymentResourceType = "Deployment"
+                # The whole point of this runbook — Octopus creates a fresh
+                # ReplicaSet per release, waits for it healthy, then swaps the
+                # Service selector. Old ReplicaSet stays for a beat for
+                # rollback, then is cleaned up.
+                Octopus.Action.KubernetesContainers.DeploymentStyle = "BlueGreen"
+                Octopus.Action.KubernetesContainers.DeploymentWait = "Wait"
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-bg-demo-#{Source}"
+                Octopus.Action.KubernetesContainers.PodManagementPolicy = "OrderedReady"
+                Octopus.Action.KubernetesContainers.Replicas = "1"
+                Octopus.Action.KubernetesContainers.ServiceName = "randomquotes"
+                # "External" = stable name we control; required for BlueGreen
+                # so the Service stays put while the Deployment underneath swaps.
+                Octopus.Action.KubernetesContainers.ServiceNameType = "External"
+                Octopus.Action.KubernetesContainers.ServiceType = "ClusterIP"
+                Octopus.Action.KubernetesContainers.IngressAnnotations = "[]"
+                Octopus.Action.KubernetesContainers.Containers = "[{\"Name\":\"randomquotes\",\"Ports\":[{\"key\":\"web\",\"value\":\"80\",\"option\":\"TCP\"}],\"EnvironmentVariables\":[],\"SecretEnvironmentVariables\":[],\"ConfigMapEnvironmentVariables\":[],\"FieldRefEnvironmentVariables\":[],\"ConfigMapEnvFromSource\":[],\"SecretEnvFromSource\":[],\"VolumeMounts\":[],\"Resources\":{\"requests\":{\"memory\":\"\",\"cpu\":\"\",\"ephemeralStorage\":\"\"},\"limits\":{\"memory\":\"\",\"cpu\":\"\",\"ephemeralStorage\":\"\"}},\"LivenessProbe\":{\"failureThreshold\":\"\",\"initialDelaySeconds\":\"\",\"periodSeconds\":\"\",\"successThreshold\":\"\",\"timeoutSeconds\":\"\",\"type\":\"\",\"exec\":{\"command\":[]},\"httpGet\":{\"host\":\"\",\"path\":\"\",\"port\":\"\",\"scheme\":\"\",\"httpHeaders\":[]},\"tcpSocket\":{\"host\":\"\",\"port\":\"\"}},\"ReadinessProbe\":{\"failureThreshold\":\"\",\"initialDelaySeconds\":\"\",\"periodSeconds\":\"\",\"successThreshold\":\"\",\"timeoutSeconds\":\"\",\"type\":\"\",\"exec\":{\"command\":[]},\"httpGet\":{\"host\":\"\",\"path\":\"\",\"port\":\"\",\"scheme\":\"\",\"httpHeaders\":[]},\"tcpSocket\":{\"host\":\"\",\"port\":\"\"}},\"StartupProbe\":{\"failureThreshold\":\"\",\"initialDelaySeconds\":\"\",\"periodSeconds\":\"\",\"successThreshold\":\"\",\"timeoutSeconds\":\"\",\"type\":\"\",\"exec\":{\"command\":[]},\"httpGet\":{\"host\":\"\",\"path\":\"\",\"port\":\"\",\"scheme\":\"\",\"httpHeaders\":[]},\"tcpSocket\":{\"host\":\"\",\"port\":\"\"}},\"Command\":[],\"Args\":[],\"SecurityContext\":{\"allowPrivilegeEscalation\":\"\",\"privileged\":\"\",\"readOnlyRootFilesystem\":\"\",\"runAsGroup\":\"\",\"runAsNonRoot\":\"\",\"runAsUser\":\"\",\"capabilities\":{\"add\":[],\"drop\":[]}},\"TerminationMessagePath\":\"\",\"TerminationMessagePolicy\":\"\",\"Lifecycle\":{\"PreStop\":null,\"PostStart\":null},\"CreateFeedSecrets\":\"True\"}]"
+                Octopus.Action.KubernetesContainers.ServicePorts = "[{\"name\":\"web\",\"port\":\"80\",\"targetPort\":\"80\",\"nodePort\":\"\",\"protocol\":\"TCP\"}]"
+            }
+
+            packages "randomquotes" {
+                acquisition_location = "NotAcquired"
+                feed = "ghcr"
+                package_id = "vlussenburg/octopus-iac-lab"
+                properties = {
+                    Extract = "False"
+                    Purpose = "DockerImageReference"
+                    SelectionMode = "immediate"
+                }
+            }
+        }
+    }
+
+    step "ingress" {
+        name = "Ensure demo Ingress"
+        properties = {
+            Octopus.Action.TargetRoles = "k8s"
+        }
+
+        action {
+            action_type = "Octopus.KubernetesRunScript"
+            properties = {
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-bg-demo-#{Source}"
+                Octopus.Action.RunOnServer = "false"
+                Octopus.Action.Script.ScriptSource = "Inline"
+                Octopus.Action.Script.Syntax = "Bash"
+                Octopus.Action.Script.ScriptBody = <<-EOT
+                    set -euo pipefail
+                    cat <<YAML | kubectl apply -f -
+                    apiVersion: networking.k8s.io/v1
+                    kind: Ingress
+                    metadata: { name: randomquotes }
+                    spec:
+                      ingressClassName: nginx
+                      rules:
+                        - host: octopus-bg-#{Source}.localtest.me
+                          http:
+                            paths:
+                              - path: /
+                                pathType: Prefix
+                                backend: { service: { name: randomquotes, port: { number: 80 } } }
+                    YAML
+                EOT
+            }
+        }
+    }
+}
