@@ -15,6 +15,12 @@ variable "octopus_api_key" {
   sensitive   = true
 }
 
+variable "github_pat" {
+  description = "GitHub PAT — materialised into a k8s Secret (`github-pat`) in the argocd namespace so Argo's ApplicationSet SCM Provider generator can talk to GitHub above the 60 req/hr unauthenticated rate limit."
+  type        = string
+  sensitive   = true
+}
+
 variable "octopus_grpc_url" {
   description = "Optional override for the Octopus gRPC URL the Gateway dials. By default derived from octopus_url: SaaS hits <id>.octopus.app:443 (TLS over public cert), self-host hits host.docker.internal:8443. Self-host's :8443 is TLS with a self-signed cert; the Gateway will reject it unless `gateway.serverCertificateSecretName` is wired in. SaaS works out of the box."
   type        = string

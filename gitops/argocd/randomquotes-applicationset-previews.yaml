@@ -1,0 +1,75 @@
+# Ephemeral preview environments — auto-materialised from `feat/*` branches
+# in this repo. Argo's SCM Provider generator polls GitHub, finds matching
+# branches, and creates one Argo Application per branch using the template
+# below. Branch deleted → Application + namespace pruned automatically.
+#
+# Cost surface: this YAML, committed once. After that, `git push` of a
+# `feat/*` branch is the entire "create preview env" UX — no Octopus
+# action, no tofu, no manual file. Argo polls every 60s.
+#
+# Note this is NOT a per-tenant fan-out. Previews use a single pseudo-tenant
+# "preview-inc" with a "PREVIEW" watermark and a hazard-cone branding —
+# clearly distinct from real customer tenants in the UI.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: randomquotes-previews
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - scmProvider:
+        cloneProtocol: https
+        github:
+          owner: vlussenburg
+          repo: octopus-iac-lab
+          tokenRef:
+            secretName: github-pat
+            key: token
+        filters:
+          - branchMatch: "^feat/.*"
+        requeueAfterSeconds: 60
+  template:
+    metadata:
+      name: 'randomquotes-preview-{{ .branchNormalized }}'
+      annotations:
+        # Project + tenant make the preview legible inside Octopus's
+        # Argo CD Instances view. Environment is intentionally omitted —
+        # there's no "preview" Octopus environment, and that's fine; the
+        # preview lives in Argo, not in Octopus's lifecycle graph.
+        argo.octopus.com/project: randomquotes
+        argo.octopus.com/tenant: preview-inc
+      labels:
+        lab.octopus.com/role: preview
+        lab.octopus.com/branch: '{{ .branchNormalized }}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/vlussenburg/octopus-iac-lab
+        # The preview deploys what's IN the branch, not main. Edits on the
+        # branch propagate within Argo's sync interval (~3 min default).
+        targetRevision: '{{ .branch }}'
+        path: gitops/charts/randomquotes
+        helm:
+          releaseName: randomquotes
+          valuesObject:
+            replicaCount: 1
+            tenant: preview-inc
+            mood: comedy
+            icon: "🚧"
+            brandColor: "#FF6B35"
+            watermark: 'PREVIEW · {{ .branch }}'
+            host: 'argo-preview-{{ .branchNormalized }}.localtest.me'
+            image:
+              repository: vlussenburg/octopus-iac-lab
+              tag: latest
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'argo-randomquotes-preview-{{ .branchNormalized }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
