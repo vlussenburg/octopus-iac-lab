@@ -22,12 +22,13 @@ spec:
     - scmProvider:
         cloneProtocol: https
         github:
-          owner: vlussenburg
-          repo: octopus-iac-lab
+          organization: vlussenburg
+          allBranches: true
           tokenRef:
             secretName: github-pat
             key: token
         filters:
+          - repositoryMatch: "^octopus-iac-lab$"
           - branchMatch: "^feat/.*"
         requeueAfterSeconds: 60
   template:
