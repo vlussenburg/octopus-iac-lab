@@ -43,6 +43,7 @@ For the licence: base64 your XML (`base64 -i license.xml | tr -d '\n'`) and set 
 These exist on `main` but are off by default — the production tenants stay simple. Each runs in its own namespace and is driven by `make` targets:
 
 - [`demo/argocd-blue-green/`](demo/argocd-blue-green/) — Argo Rollouts blue/green of `randomquotes`. `make bg-demo-up TAG=pr-N` instantiates an isolated Application with `blueGreen.enabled: true`, then `bg-demo-promote` flips active. Requires `kubectl-argo-rollouts`.
+- [`demo/octopus-blue-green/`](demo/octopus-blue-green/) — Octopus-driven blue/green via a `Blue/Green Demo` runbook (defined in OCL on this branch only). Two `Deployment`s side-by-side, a Manual Intervention step gates promotion, a script step patches the Service selector. Same outcome as the Argo path, but imperative + audit-logged.
 
 ## Reaching it
 

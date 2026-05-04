@@ -1,0 +1,177 @@
+name = "Blue/Green Demo"
+description = "Octopus-side blue/green of randomquotes — deploys two Deployments side-by-side, pauses for manual smoke-test on the preview Service, then flips the active Service selector. Self-contained: runs against `randomquotes-bg-demo-#{Source}` namespace, doesn't touch any real tenant. Pair with the Argo path at demo/argocd-blue-green/."
+default_guided_failure_mode = "EnvironmentDefault"
+multi_tenancy_mode = "Untenanted"
+
+connectivity_policy {
+    allow_deployments_to_no_targets = false
+}
+
+run_retention_policy {
+    quantity_to_keep = 5
+    type = "Count"
+}
+
+process {
+    step "deploy-blue" {
+        name = "Deploy blue"
+        properties = {
+            Octopus.Action.TargetRoles = "k8s"
+        }
+
+        action {
+            action_type = "Octopus.KubernetesRunScript"
+            properties = {
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-bg-demo-#{Source}"
+                Octopus.Action.RunOnServer = "false"
+                Octopus.Action.Script.ScriptSource = "Inline"
+                Octopus.Action.Script.Syntax = "Bash"
+                Octopus.Action.Script.ScriptBody = <<-EOT
+                    set -euo pipefail
+                    kubectl create namespace "randomquotes-bg-demo-#{Source}" --dry-run=client -o yaml | kubectl apply -f -
+
+                    cat <<YAML | kubectl apply -f -
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: randomquotes-blue
+                      labels: { app: randomquotes, version: blue }
+                    spec:
+                      replicas: 1
+                      selector: { matchLabels: { app: randomquotes, version: blue } }
+                      template:
+                        metadata: { labels: { app: randomquotes, version: blue } }
+                        spec:
+                          containers:
+                            - name: app
+                              image: ghcr.io/vlussenburg/octopus-iac-lab:#{BlueGreen.BlueImageTag}
+                              ports: [{ containerPort: 80 }]
+                    ---
+                    # Active Service — what real users hit. Selector starts pinned
+                    # to blue; the promote step rewrites it to green.
+                    apiVersion: v1
+                    kind: Service
+                    metadata:
+                      name: randomquotes-active
+                    spec:
+                      selector: { app: randomquotes, version: blue }
+                      ports: [{ port: 80, targetPort: 80 }]
+                    ---
+                    apiVersion: networking.k8s.io/v1
+                    kind: Ingress
+                    metadata: { name: randomquotes-active }
+                    spec:
+                      ingressClassName: nginx
+                      rules:
+                        - host: octopus-bg-#{Source}.localtest.me
+                          http:
+                            paths:
+                              - path: /
+                                pathType: Prefix
+                                backend: { service: { name: randomquotes-active, port: { number: 80 } } }
+                    YAML
+
+                    kubectl rollout status deployment/randomquotes-blue --timeout=2m
+                EOT
+            }
+        }
+    }
+
+    step "deploy-green" {
+        name = "Deploy green (preview)"
+        properties = {
+            Octopus.Action.TargetRoles = "k8s"
+        }
+
+        action {
+            action_type = "Octopus.KubernetesRunScript"
+            properties = {
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-bg-demo-#{Source}"
+                Octopus.Action.RunOnServer = "false"
+                Octopus.Action.Script.ScriptSource = "Inline"
+                Octopus.Action.Script.Syntax = "Bash"
+                Octopus.Action.Script.ScriptBody = <<-EOT
+                    set -euo pipefail
+
+                    cat <<YAML | kubectl apply -f -
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: randomquotes-green
+                      labels: { app: randomquotes, version: green }
+                    spec:
+                      replicas: 1
+                      selector: { matchLabels: { app: randomquotes, version: green } }
+                      template:
+                        metadata: { labels: { app: randomquotes, version: green } }
+                        spec:
+                          containers:
+                            - name: app
+                              image: ghcr.io/vlussenburg/octopus-iac-lab:#{BlueGreen.GreenImageTag}
+                              ports: [{ containerPort: 80 }]
+                    ---
+                    # Preview Service — always points at green. Smoke-test here
+                    # before promoting; the active Service stays on blue.
+                    apiVersion: v1
+                    kind: Service
+                    metadata: { name: randomquotes-preview }
+                    spec:
+                      selector: { app: randomquotes, version: green }
+                      ports: [{ port: 80, targetPort: 80 }]
+                    ---
+                    apiVersion: networking.k8s.io/v1
+                    kind: Ingress
+                    metadata: { name: randomquotes-preview }
+                    spec:
+                      ingressClassName: nginx
+                      rules:
+                        - host: octopus-bg-#{Source}-preview.localtest.me
+                          http:
+                            paths:
+                              - path: /
+                                pathType: Prefix
+                                backend: { service: { name: randomquotes-preview, port: { number: 80 } } }
+                    YAML
+
+                    kubectl rollout status deployment/randomquotes-green --timeout=2m
+                EOT
+            }
+        }
+    }
+
+    step "smoke-test-pause" {
+        name = "Smoke-test green"
+
+        action {
+            action_type = "Octopus.Manual"
+            properties = {
+                Octopus.Action.Manual.BlockConcurrentDeployments = "False"
+                Octopus.Action.Manual.Instructions = "Smoke-test green at http://octopus-bg-#{Source}-preview.localtest.me:8080 (port-forward svc/ingress-nginx-controller 8080:8080 -n ingress-nginx).\n\nApprove to flip the active Service selector from blue → green.\nFail to leave green deployed but unpromoted (rollback = re-run with versions swapped, or just delete the green Deployment)."
+                Octopus.Action.Manual.ResponsibleTeamIds = "teams-everyone"
+            }
+        }
+    }
+
+    step "promote" {
+        name = "Promote (flip active Service to green)"
+        properties = {
+            Octopus.Action.TargetRoles = "k8s"
+        }
+
+        action {
+            action_type = "Octopus.KubernetesRunScript"
+            properties = {
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-bg-demo-#{Source}"
+                Octopus.Action.RunOnServer = "false"
+                Octopus.Action.Script.ScriptSource = "Inline"
+                Octopus.Action.Script.Syntax = "Bash"
+                Octopus.Action.Script.ScriptBody = <<-EOT
+                    set -euo pipefail
+                    kubectl patch service randomquotes-active --type=merge \
+                      -p '{"spec":{"selector":{"app":"randomquotes","version":"green"}}}'
+                    echo "active now serving green (#{BlueGreen.GreenImageTag})"
+                EOT
+            }
+        }
+    }
+}

@@ -62,3 +62,23 @@ variable "Maintenance.Message" {
         }
     }
 }
+
+variable "BlueGreen.BlueImageTag" {
+    value "" {
+        prompt {
+            description = "Image tag served as 'blue' (current production). The Blue/Green Demo runbook deploys this alongside green and points the active Service at it."
+            label = "Blue image tag"
+            required = true
+        }
+    }
+}
+
+variable "BlueGreen.GreenImageTag" {
+    value "" {
+        prompt {
+            description = "Image tag served as 'green' (candidate). Reachable via the preview Service for smoke-testing; the manual-intervention step decides whether to promote."
+            label = "Green image tag"
+            required = true
+        }
+    }
+}
