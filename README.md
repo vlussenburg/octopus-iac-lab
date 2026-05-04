@@ -23,6 +23,18 @@ make up                    # local self-host only — boots compose stack on :80
 make apply                 # space → cp → ph → app → agent → argo
 ```
 
+### Host-side dependencies
+
+| Tool | Used by | Install (macOS) |
+|---|---|---|
+| `docker` | compose, K8s | Docker Desktop |
+| `kubectl` | k8s-agent, argocd | `brew install kubectl` |
+| `helm` | (bundled in helm provider, not a host dep) | — |
+| `tofu` | every stack | `brew install opentofu` |
+| `gh` | release automation, PR previews | `brew install gh` |
+| `kubeseal` | sealing values for the chart's SealedSecret CRD | `brew install kubeseal` |
+| `tailscale` (optional) | exposing local Octopus to GHA | `brew install tailscale` |
+
 `make apply`'s first step (`ensure-api-key`) probes `.env`'s `OCTOPUS_API_KEY` against `/api/users/me` and auto-mints a fresh one on local self-host if it's stale (e.g. after `make nuke`). On SaaS, mint manually via the UI — keys can't be created without a browser session.
 
 For the licence: base64 your XML (`base64 -i license.xml | tr -d '\n'`) and set as `OCTOPUS_SERVER_BASE64_LICENSE` in `.env` before `make up`. Otherwise paste in the UI after first login.
