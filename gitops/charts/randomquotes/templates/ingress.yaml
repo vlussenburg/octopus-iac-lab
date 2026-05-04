@@ -1,3 +1,45 @@
+{{- if .Values.blueGreen.enabled }}
+# Active ingress — host you'd publish to users. Routes to randomquotes-active,
+# whose selector the Rollouts controller swaps on `argo rollouts promote`.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: randomquotes-active
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: randomquotes-active
+                port:
+                  number: 80
+---
+# Preview ingress — separate hostname for QA / smoke tests on the green
+# ReplicaSet before promotion. Same `*.localtest.me` trick: previewHost is
+# typically `bg-{host}` so one port-forward covers both.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: randomquotes-preview
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.blueGreen.previewHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: randomquotes-preview
+                port:
+                  number: 80
+{{- else }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -15,3 +57,4 @@ spec:
                 name: randomquotes
                 port:
                   number: 80
+{{- end }}

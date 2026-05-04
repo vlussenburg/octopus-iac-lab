@@ -1,3 +1,36 @@
+{{- if .Values.blueGreen.enabled }}
+# Active service — what real users hit. Selector is rewritten by the
+# Rollouts controller during promotion; pre-promote it points at blue,
+# post-promote at green.
+apiVersion: v1
+kind: Service
+metadata:
+  name: randomquotes-active
+spec:
+  type: ClusterIP
+  selector:
+    app: randomquotes
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+# Preview service — points at the new (green) ReplicaSet from the moment
+# it's created. Reach it via Values.blueGreen.previewHost to validate the
+# new version before promoting.
+apiVersion: v1
+kind: Service
+metadata:
+  name: randomquotes-preview
+spec:
+  type: ClusterIP
+  selector:
+    app: randomquotes
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+{{- else }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,3 +43,4 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 80
+{{- end }}

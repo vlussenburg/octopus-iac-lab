@@ -1,0 +1,53 @@
+{{- if .Values.blueGreen.enabled }}
+# Argo Rollout — drop-in replacement for Deployment that the Rollouts
+# controller (installed cluster-wide via tofu/k8s-agent/argo_rollouts.tf)
+# drives through a blue/green strategy:
+#
+#   1. New revision lands in pods labeled with a fresh rollouts-pod-template-hash
+#   2. previewService selector flips to the new hash → green is reachable at previewHost
+#   3. activeService keeps pointing at the old hash → users still hit blue
+#   4. `kubectl argo rollouts promote randomquotes` flips activeService → green
+#   5. After scaleDownDelaySeconds, the old (blue) ReplicaSet is scaled to 0
+#
+# autoPromotionEnabled: false makes step 4 manual — that's the whole point of
+# this demo. Flip to true for canary-style "ship if metrics are green" flows.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: randomquotes
+  labels:
+    app: randomquotes
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: randomquotes
+  strategy:
+    blueGreen:
+      activeService: randomquotes-active
+      previewService: randomquotes-preview
+      autoPromotionEnabled: false
+      scaleDownDelaySeconds: 30
+  template:
+    metadata:
+      labels:
+        app: randomquotes
+      annotations:
+        configmap-checksum: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: randomquotes
+          image: ghcr.io/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          ports:
+            - containerPort: 80
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/nginx/html/config.json
+              subPath: config.json
+      volumes:
+        - name: config
+          configMap:
+            name: randomquotes-config
+{{- end }}

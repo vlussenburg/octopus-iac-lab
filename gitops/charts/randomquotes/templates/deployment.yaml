@@ -1,3 +1,4 @@
+{{- if not .Values.blueGreen.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,3 +34,4 @@ spec:
         - name: config
           configMap:
             name: randomquotes-config
+{{- end }}

@@ -35,3 +35,14 @@ resources:
   limits:
     cpu: 250m
     memory: 128Mi
+
+# Blue/green deployment via Argo Rollouts. When enabled, the chart renders
+# a Rollout (instead of a Deployment) plus active + preview Services and a
+# second Ingress for the preview host. Promotion is manual — `kubectl argo
+# rollouts promote randomquotes` flips the active selector. The Rollouts
+# controller itself lives in `tofu/k8s-agent/argo_rollouts.tf`.
+blueGreen:
+  enabled: false
+  # Host for the preview (green) ingress while a new version is staged.
+  # Required when blueGreen.enabled = true.
+  previewHost: ""
