@@ -1,15 +1,20 @@
-# Ephemeral preview environments — auto-materialised from `feat/*` branches
-# in this repo. Argo's SCM Provider generator polls GitHub, finds matching
-# branches, and creates one Argo Application per branch using the template
-# below. Branch deleted → Application + namespace pruned automatically.
+# Ephemeral preview environments — auto-materialised from open PRs in
+# this repo. Argo's PullRequest generator polls GitHub for open PRs and
+# creates one Argo Application per match. PR merged/closed → Application
+# + namespace pruned automatically.
 #
-# Cost surface: this YAML, committed once. After that, `git push` of a
-# `feat/*` branch is the entire "create preview env" UX — no Octopus
-# action, no tofu, no manual file. Argo polls every 60s.
+# Why PR-based and not branch-based: GitHub's SCM Provider for branches
+# only works on *organization* accounts, not user accounts. The
+# PullRequest generator hits /repos/{owner}/{repo}/pulls which works
+# regardless. It also matches the more common real-world workflow:
+# "open a PR, get a preview env to review against".
 #
-# Note this is NOT a per-tenant fan-out. Previews use a single pseudo-tenant
-# "preview-inc" with a "PREVIEW" watermark and a hazard-cone branding —
-# clearly distinct from real customer tenants in the UI.
+# Cost surface is the ApplicationSet itself: committed once, after that
+# `gh pr create` of a `feat/*` branch is the entire create-preview UX.
+# Closing/merging the PR tears it down.
+#
+# Previews use a "preview-inc" pseudo-tenant with a hazard-cone icon and
+# a `PREVIEW · #N` watermark so they're unmistakable in the UI.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -19,21 +24,19 @@ spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
   generators:
-    - scmProvider:
-        cloneProtocol: https
+    - pullRequest:
         github:
-          organization: vlussenburg
-          allBranches: true
+          owner: vlussenburg
+          repo: octopus-iac-lab
           tokenRef:
             secretName: github-pat
             key: token
         filters:
-          - repositoryMatch: "^octopus-iac-lab$"
           - branchMatch: "^feat/.*"
         requeueAfterSeconds: 60
   template:
     metadata:
-      name: 'randomquotes-preview-{{ .branchNormalized }}'
+      name: 'randomquotes-preview-pr-{{ .number }}'
       annotations:
         # Project + tenant make the preview legible inside Octopus's
         # Argo CD Instances view. Environment is intentionally omitted —
@@ -43,13 +46,14 @@ spec:
         argo.octopus.com/tenant: preview-inc
       labels:
         lab.octopus.com/role: preview
+        lab.octopus.com/pr: '{{ .number }}'
         lab.octopus.com/branch: '{{ .branchNormalized }}'
     spec:
       project: default
       source:
         repoURL: https://github.com/vlussenburg/octopus-iac-lab
-        # The preview deploys what's IN the branch, not main. Edits on the
-        # branch propagate within Argo's sync interval (~3 min default).
+        # Deploy what's IN the PR's branch, not main. Edits propagate
+        # within Argo's sync interval (~3 min default).
         targetRevision: '{{ .branch }}'
         path: gitops/charts/randomquotes
         helm:
@@ -60,14 +64,14 @@ spec:
             mood: comedy
             icon: "🚧"
             brandColor: "#FF6B35"
-            watermark: 'PREVIEW · {{ .branch }}'
-            host: 'argo-preview-{{ .branchNormalized }}.localtest.me'
+            watermark: 'PREVIEW · PR #{{ .number }}'
+            host: 'argo-preview-pr-{{ .number }}.localtest.me'
             image:
               repository: vlussenburg/octopus-iac-lab
               tag: latest
       destination:
         server: https://kubernetes.default.svc
-        namespace: 'argo-randomquotes-preview-{{ .branchNormalized }}'
+        namespace: 'argo-randomquotes-preview-pr-{{ .number }}'
       syncPolicy:
         automated:
           prune: true
