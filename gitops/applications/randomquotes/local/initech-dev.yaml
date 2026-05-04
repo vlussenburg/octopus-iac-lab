@@ -32,7 +32,7 @@ spec:
         icon: "🧘"
         brandColor: "#7E57C2"
         watermark: "FREE TIER"
-        maintenance: "Maintenance window 5/2"
+        maintenance: ""
         host: argo-local-initech-dev.localtest.me
         image:
           repository: vlussenburg/octopus-iac-lab
