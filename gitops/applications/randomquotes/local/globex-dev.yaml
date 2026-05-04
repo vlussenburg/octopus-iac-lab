@@ -32,7 +32,7 @@ spec:
         icon: "🚀"
         brandColor: "#00B0FF"
         watermark: ""
-        maintenance: "Maintenance window 5/2"
+        maintenance: ""
         host: argo-local-globex-dev.localtest.me
         image:
           repository: vlussenburg/octopus-iac-lab
