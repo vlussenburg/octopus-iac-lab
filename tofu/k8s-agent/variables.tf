@@ -49,3 +49,9 @@ variable "nginx_ingress_chart_version" {
   description = "ingress-nginx helm chart version constraint. Single controller per cluster; same idempotent install pattern as NFS CSI."
   default     = "4.*"
 }
+
+variable "argo_rollouts_chart_version" {
+  type        = string
+  description = "Argo Rollouts helm chart version constraint. Installs the controller + Rollout CRD; charts opt in by rendering a Rollout instead of a Deployment."
+  default     = "2.*"
+}
