@@ -47,7 +47,7 @@ spec:
       labels:
         lab.octopus.com/role: preview
         lab.octopus.com/pr: '{{ .number }}'
-        lab.octopus.com/branch: '{{ .branchNormalized }}'
+        lab.octopus.com/branch: '{{ .branch_slug }}'
     spec:
       project: default
       source:
