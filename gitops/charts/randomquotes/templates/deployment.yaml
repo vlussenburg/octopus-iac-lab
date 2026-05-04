@@ -30,8 +30,14 @@ spec:
             - name: config
               mountPath: /usr/share/nginx/html/config.json
               subPath: config.json
+            - name: api-secret
+              mountPath: /usr/share/nginx/html/secret
+              readOnly: true
       volumes:
         - name: config
           configMap:
             name: randomquotes-config
+        - name: api-secret
+          secret:
+            secretName: randomquotes-secrets
 {{- end }}

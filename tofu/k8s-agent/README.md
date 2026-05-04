@@ -12,6 +12,38 @@ Installs the **Octopus Kubernetes Agent** + shared cluster infra (NFS CSI driver
 | [`deregister.tf`](deregister.tf) | Destroy-time `null_resource` that DELETEs the registered deployment target out of Octopus before `helm uninstall` runs. Without this, the orphaned target blocks env deletion later. |
 | [`outputs.tf`](outputs.tf) | Convenience kubectl command + helm release info |
 
+## Cluster-wide infra installed alongside the agent
+
+Three idempotent helm releases that survive `make agent-destroy` (installed via `helm upgrade --install` so they don't fight other agents on the cluster):
+
+- **NFS CSI driver** ([`nfs_csi.tf`](nfs_csi.tf)) — provides PVCs the agent needs.
+- **nginx-ingress controller** ([`nginx_ingress.tf`](nginx_ingress.tf)) — host port 8080 → cluster ingress for everything in `*.localtest.me`.
+- **Sealed Secrets controller** ([`sealed_secrets.tf`](sealed_secrets.tf)) — Bitnami's controller in `kube-system`. Decrypts SealedSecret CRDs committed to git into regular k8s Secrets.
+
+### Working with sealed secrets locally
+
+`kubeseal` is a host-side dependency. macOS:
+
+```bash
+brew install kubeseal
+```
+
+To seal a value for use in the chart:
+
+```bash
+# 1. Fetch the controller's public cert (one-shot per cluster lifetime)
+kubeseal --controller-namespace=kube-system \
+         --controller-name=sealed-secrets-controller \
+         --fetch-cert > /tmp/seal-cert.pem
+
+# 2. Author a plain Secret YAML, then encrypt with cluster-wide scope so
+#    the same blob works in every tenant namespace
+kubeseal --cert /tmp/seal-cert.pem --scope cluster-wide --format yaml \
+         < my-secret.yaml > my-sealed.yaml
+```
+
+The cluster-wide scope matters: without it the SealedSecret only decrypts in the namespace it was sealed for, and the chart renders into many.
+
 ## Auth: admin API key as bearer
 
 Octopus accepts API keys as `Authorization: Bearer ...` — so we feed the existing `OCTOPUS_API_KEY` directly to `agent.bearerToken`. No service-account dance, no minting, no extra resources. **This is fine for a localhost lab; it'd be wrong for anything real**, where you'd want a scoped service-account API key (or a one-time registration token from the UI flow that this provider doesn't yet model).
