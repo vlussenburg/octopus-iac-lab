@@ -36,13 +36,25 @@ resources:
     cpu: 250m
     memory: 128Mi
 
-# Blue/green deployment via Argo Rollouts. When enabled, the chart renders
-# a Rollout (instead of a Deployment) plus active + preview Services and a
-# second Ingress for the preview host. Promotion is manual — `kubectl argo
-# rollouts promote randomquotes` flips the active selector. The Rollouts
-# controller itself lives in `tofu/k8s-agent/argo_rollouts.tf`.
+# Blue/green is the only deployment shape this chart renders — every release
+# goes through an Argo Rollout. The Rollouts controller (installed
+# cluster-wide via tofu/k8s-agent/argo_rollouts.tf) handles the parallel
+# ReplicaSet + active Service selector swap + scale-down of the old.
+#
+# Two operational modes:
+#
+# - autoPromotion: true (default) — atomic. Controller swaps the active
+#   selector as soon as the new ReplicaSet is healthy, then scales the
+#   old down. Hard binary cut (no half-rolled requests). Matches the
+#   behavior of Octopus's KubernetesDeployContainers + BlueGreen step on
+#   the bluegreen-lab project — same pattern, two ecosystems.
+#
+# - autoPromotion: false — gated. The new ReplicaSet stays running but
+#   receives no active traffic; reach it at blueGreen.previewHost for
+#   smoke testing. Promote with `kubectl argo rollouts promote
+#   randomquotes`. Adds a human-in-the-loop gate.
 blueGreen:
-  enabled: false
+  autoPromotion: true
   # Host for the preview (green) ingress while a new version is staged.
-  # Required when blueGreen.enabled = true.
+  # Only consumed when autoPromotion = false.
   previewHost: ""

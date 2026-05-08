@@ -1,16 +1,7 @@
-{{- if .Values.blueGreen.enabled }}
-# Argo Rollout — drop-in replacement for Deployment that the Rollouts
-# controller (installed cluster-wide via tofu/k8s-agent/argo_rollouts.tf)
-# drives through a blue/green strategy:
-#
-#   1. New revision lands in pods labeled with a fresh rollouts-pod-template-hash
-#   2. previewService selector flips to the new hash → green is reachable at previewHost
-#   3. activeService keeps pointing at the old hash → users still hit blue
-#   4. `kubectl argo rollouts promote randomquotes` flips activeService → green
-#   5. After scaleDownDelaySeconds, the old (blue) ReplicaSet is scaled to 0
-#
-# autoPromotionEnabled: false makes step 4 manual — that's the whole point of
-# this demo. Flip to true for canary-style "ship if metrics are green" flows.
+# Argo Rollout — drop-in replacement for Deployment. Used unconditionally;
+# the Rollouts controller (installed cluster-wide via
+# tofu/k8s-agent/argo_rollouts.tf) drives this through a blue/green
+# strategy. Atomic by default — see values.yaml's blueGreen block.
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -24,10 +15,12 @@ spec:
       app: randomquotes
   strategy:
     blueGreen:
-      activeService: randomquotes-active
-      previewService: randomquotes-preview
-      autoPromotionEnabled: false
+      activeService: randomquotes
+      autoPromotionEnabled: {{ .Values.blueGreen.autoPromotion }}
       scaleDownDelaySeconds: 30
+      {{- if not .Values.blueGreen.autoPromotion }}
+      previewService: randomquotes-preview
+      {{- end }}
   template:
     metadata:
       labels:
@@ -50,4 +43,3 @@ spec:
         - name: config
           configMap:
             name: randomquotes-config
-{{- end }}
