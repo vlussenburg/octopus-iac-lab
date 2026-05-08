@@ -38,6 +38,10 @@ For the licence: base64 your XML (`base64 -i license.xml | tr -d '\n'`) and set 
 
 `tofu/argocd/` is minimum-footprint: it only owns the control plane (ArgoCD install, JWT, Octopus Argo CD Gateway). Roots, leaves, ingress, and chart all live in `gitops/`.
 
+## Blue/green by default
+
+Both delivery paths render an [Argo Rollout](https://argoproj.github.io/argo-rollouts/) instead of a `Deployment`. The cluster-wide controller (`tofu/k8s-agent/argo_rollouts.tf`) handles the dance: stage new ReplicaSet → wait healthy → atomic Service-selector swap → scale old down. Atomic, no operator gate, no preview URL — same UX as a plain deploy, just with a hard binary cut and never a half-rolled state. Watch it happen with `kubectl -n argo-randomquotes-{src}-{tenant}-{env} get rs -w` between releases.
+
 ## Reaching it
 
 ```bash

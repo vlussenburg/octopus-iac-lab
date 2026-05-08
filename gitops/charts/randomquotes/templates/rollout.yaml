@@ -1,5 +1,9 @@
-apiVersion: apps/v1
-kind: Deployment
+# Argo Rollout — drop-in replacement for Deployment. The Rollouts controller
+# (installed cluster-wide via tofu/k8s-agent/argo_rollouts.tf) handles the
+# blue/green dance atomically: stage new ReplicaSet → wait healthy → swap
+# the active Service selector → scale old down.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: randomquotes
   labels:
@@ -9,13 +13,16 @@ spec:
   selector:
     matchLabels:
       app: randomquotes
+  strategy:
+    blueGreen:
+      activeService: randomquotes
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 30
   template:
     metadata:
       labels:
         app: randomquotes
       annotations:
-        # Roll the pod when the ConfigMap content changes — k8s doesn't
-        # auto-restart on volume-mount updates.
         configmap-checksum: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       containers:

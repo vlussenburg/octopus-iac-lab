@@ -1,3 +1,5 @@
+# Active Service — what real users hit. The Rollouts controller rewrites
+# the selector during promotion to point at the new ReplicaSet.
 apiVersion: v1
 kind: Service
 metadata:
