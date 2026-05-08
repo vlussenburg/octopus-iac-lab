@@ -30,6 +30,7 @@
     <br>
     <button onclick="next()">Next quote</button>
     <footer id="version"></footer>
+    <div id="apiToken" style="margin-top: 1rem; font-size: 0.7rem; color: #888; font-family: monospace;"></div>
   </div>
   <div class="watermark" id="watermark" style="display: none"></div>
   <div class="maintenance" id="maintenance" style="display: none">
@@ -111,6 +112,19 @@
         document.getElementById("version").textContent = `v${window.APP_VERSION || "dev"}`;
         render();
       });
+
+    // Token came from a SealedSecret committed to git → decrypted in-cluster
+    // by the sealed-secrets controller → mounted as a regular Secret on this
+    // pod → readable here. Display masked to prove the round-trip worked.
+    fetch("/secret/api-token")
+      .then(r => r.ok ? r.text() : null)
+      .then(t => {
+        if (!t) return;
+        const trimmed = t.trim();
+        const masked = trimmed.slice(0, 8) + "•••••••••" + trimmed.slice(-4);
+        document.getElementById("apiToken").textContent = `🔐 ${masked}`;
+      })
+      .catch(() => {});
   </script>
 </body>
 </html>
