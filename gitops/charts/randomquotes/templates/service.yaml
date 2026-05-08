@@ -1,7 +1,25 @@
+# Active Service — what real users hit. The Rollouts controller rewrites
+# the selector during promotion to point at the new ReplicaSet.
 apiVersion: v1
 kind: Service
 metadata:
   name: randomquotes
+spec:
+  type: ClusterIP
+  selector:
+    app: randomquotes
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+# Preview Service — Rollouts controller pins this selector to the newly
+# deployed (green) ReplicaSet from the moment it's created so the preview
+# host always serves the candidate, regardless of which is active.
+apiVersion: v1
+kind: Service
+metadata:
+  name: randomquotes-preview
 spec:
   type: ClusterIP
   selector:
