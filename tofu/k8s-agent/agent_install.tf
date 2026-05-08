@@ -96,11 +96,13 @@ resource "helm_release" "octopus_agent" {
     value = local.agent_tenants
   }
 
-  # The chart needs to know how to scope tenanted participation; "Tenanted"
-  # means this target only matches deployments that pick a tenant.
+  # "TenantedOrUntenanted" lets the same target serve both tenanted projects
+  # (like randomquotes) and untenanted ones — useful so you don't have to
+  # spin up a second agent for each shape. Tighten back to "Tenanted" if
+  # you only ever deploy tenanted.
   set {
     name  = "agent.deploymentTarget.initial.tenantedDeploymentParticipation"
-    value = "Tenanted"
+    value = "TenantedOrUntenanted"
   }
 
   # KLOS (live status / kubernetes monitor) deliberately disabled — it needs
