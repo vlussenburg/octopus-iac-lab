@@ -1,10 +1,10 @@
 resource "octopusdeploy_lifecycle" "dev_to_production" {
   name        = "Dev to Production"
-  description = "Deploy to Dev, then promote to Production."
+  description = "Auto-deploy to Dev on release creation; promote to Production manually."
 
   phase {
     name                                  = "Dev"
-    optional_deployment_targets           = [octopusdeploy_environment.dev.id]
+    automatic_deployment_targets          = [octopusdeploy_environment.dev.id]
     minimum_environments_before_promotion = 1
     is_optional_phase                     = false
   }
