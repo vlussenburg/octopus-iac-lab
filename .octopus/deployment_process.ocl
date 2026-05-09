@@ -131,7 +131,6 @@ step "update-argo-cd-application-image-tags" {
             package_id = "vlussenburg/octopus-iac-lab"
             properties = {
                 Extract = "False"
-                Octopus.Action.ArgoCD.HelmImageTagPath = "image.tag"
                 Purpose = "DockerImageReference"
                 SelectionMode = "immediate"
             }
