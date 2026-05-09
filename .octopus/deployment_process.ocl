@@ -121,6 +121,13 @@ step "update-argo-cd-application-image-tags" {
         properties = {
             Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
             Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
+            # Tells the step which yaml path inside each Application's
+            # referenced values file to overwrite. Every leaf Application
+            # references one of values-{local,saas}-{dev,production}.yaml
+            # via spec.source.helm.valueFiles, and each of those files has
+            # `image.tag` at the root. One path covers all 12 Apps because
+            # the values files share the same shape.
+            Octopus.Action.ArgoCD.HelmImageTagPaths = "image.tag"
             Octopus.Action.ArgoCD.StepVerification.Method = "ArgoCDApplicationHealthy"
             Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
         }

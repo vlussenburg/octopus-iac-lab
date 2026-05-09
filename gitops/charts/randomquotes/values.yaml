@@ -1,18 +1,22 @@
-# Defaults — overridden per-Application via spec.source.helm.valuesObject in
-# each leaf under gitops/applications/randomquotes/{local,saas}/. Anything
-# left at default here will surface as an unconfigured tenant on the page,
-# which is a useful signal when you forget to wire a new App.
+# Defaults. Effective values per leaf Application are layered as:
+#   values.yaml (this file)              — chart defaults
+#   < values-{local,saas}-{dev,prod}.yaml — per-(Octopus, env) image.tag,
+#                                           rewritten by Octopus's
+#                                           update-argo-cd-application-image-tags
+#                                           step on every deploy
+#   < spec.source.helm.valuesObject       — per-tenant config (mood, icon,
+#                                           color, host, replicaCount)
+# The split is required because Octopus only writes to values *files*,
+# not inline valuesObject — so image.tag has to live in a referenced
+# file to be reachable by the step.
 
 image:
   # Full path is "ghcr.io/{{ .Values.image.repository }}:{{ .Values.image.tag }}".
-  # Octopus's update-argo-cd-application-image-tags step bumps `tag` and
-  # uses the argo.octopus.com/image-replace-paths annotation on each leaf
-  # to know where the tag lives in this template.
   repository: vlussenburg/octopus-iac-lab
-  # The chart-default tag isn't actually consumed today — every leaf
-  # pins image.tag in its spec.source.helm.valuesObject. Keep this as a
-  # sentinel so a forgotten override is obvious in the rendered manifest.
-  tag: 1.1.49
+  # Sentinel default — every Application overrides via its values-<src>-<env>.yaml.
+  # If you ever see this tag in a rendered manifest, a values file got
+  # disconnected.
+  tag: SENTINEL
 
 replicaCount: 1
 
