@@ -1,5 +1,9 @@
-apiVersion: apps/v1
-kind: Deployment
+# Argo Rollout — gated blue/green. Replaces the chart's plain Deployment
+# for this demo. autoPromotionEnabled=false means each release stages a
+# new ReplicaSet behind `previewService` and waits for an explicit
+# `kubectl argo rollouts promote` before swapping the active Service.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: randomquotes
   labels:
@@ -9,13 +13,17 @@ spec:
   selector:
     matchLabels:
       app: randomquotes
+  strategy:
+    blueGreen:
+      activeService: randomquotes
+      previewService: randomquotes-preview
+      autoPromotionEnabled: false
+      scaleDownDelaySeconds: 30
   template:
     metadata:
       labels:
         app: randomquotes
       annotations:
-        # Roll the pod when the ConfigMap content changes — k8s doesn't
-        # auto-restart on volume-mount updates.
         configmap-checksum: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       containers:

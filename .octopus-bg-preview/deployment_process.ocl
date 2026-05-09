@@ -27,8 +27,8 @@ step "deploy-manifests" {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
             Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
-                apiVersion: apps/v1
-                kind: Deployment
+                apiVersion: argoproj.io/v1alpha1
+                kind: Rollout
                 metadata:
                   name: randomquotes
                   labels:
@@ -38,6 +38,12 @@ step "deploy-manifests" {
                   selector:
                     matchLabels:
                       app: randomquotes
+                  strategy:
+                    blueGreen:
+                      activeService: randomquotes
+                      previewService: randomquotes-preview
+                      autoPromotionEnabled: false
+                      scaleDownDelaySeconds: 30
                   template:
                     metadata:
                       labels:
@@ -77,6 +83,19 @@ step "deploy-manifests" {
                       port: 80
                       targetPort: 80
                 ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: randomquotes-preview
+                spec:
+                  type: ClusterIP
+                  selector:
+                    app: randomquotes
+                  ports:
+                    - protocol: TCP
+                      port: 80
+                      targetPort: 80
+                ---
                 apiVersion: networking.k8s.io/v1
                 kind: Ingress
                 metadata:
@@ -92,6 +111,24 @@ step "deploy-manifests" {
                             backend:
                               service:
                                 name: randomquotes
+                                port:
+                                  number: 80
+                ---
+                apiVersion: networking.k8s.io/v1
+                kind: Ingress
+                metadata:
+                  name: randomquotes-preview
+                spec:
+                  ingressClassName: nginx
+                  rules:
+                    - host: bg-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.localtest.me
+                      http:
+                        paths:
+                          - path: /
+                            pathType: Prefix
+                            backend:
+                              service:
+                                name: randomquotes-preview
                                 port:
                                   number: 80
                     EOT
