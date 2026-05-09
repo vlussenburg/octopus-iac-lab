@@ -112,3 +112,28 @@ step "deploy-manifests" {
         }
     }
 }
+
+step "update-argo-cd-application-image-tags" {
+    name = "Update Argo CD Application Image Tags"
+
+    action {
+        action_type = "Octopus.ArgoCDUpdateImageTags"
+        properties = {
+            Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
+            Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
+            Octopus.Action.ArgoCD.StepVerification.Method = "ArgoCDApplicationHealthy"
+            Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
+        }
+
+        packages "octopus-iac-lab" {
+            acquisition_location = "NotAcquired"
+            feed = "ghcr"
+            package_id = "vlussenburg/octopus-iac-lab"
+            properties = {
+                Extract = "False"
+                Purpose = "DockerImageReference"
+                SelectionMode = "immediate"
+            }
+        }
+    }
+}
