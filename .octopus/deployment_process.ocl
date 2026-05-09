@@ -27,8 +27,8 @@ step "deploy-manifests" {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
             Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
-                apiVersion: argoproj.io/v1alpha1
-                kind: Rollout
+                apiVersion: apps/v1
+                kind: Deployment
                 metadata:
                   name: randomquotes
                   labels:
@@ -38,11 +38,6 @@ step "deploy-manifests" {
                   selector:
                     matchLabels:
                       app: randomquotes
-                  strategy:
-                    blueGreen:
-                      activeService: randomquotes
-                      autoPromotionEnabled: true
-                      scaleDownDelaySeconds: 30
                   template:
                     metadata:
                       labels:
