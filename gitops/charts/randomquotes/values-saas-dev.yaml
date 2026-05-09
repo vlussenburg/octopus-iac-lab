@@ -1,0 +1,7 @@
+# Image tag for saas/dev. Owned by Octopus's
+# 'Update Argo CD Application Image Tags' step — Octopus rewrites the
+# tag here on every deployment to dev from the saas project. Do not
+# hand-edit unless you know what you're doing; the next deploy will
+# overwrite. Leaf Apps reference this via spec.source.helm.valueFiles.
+image:
+  tag: "1.1.16"

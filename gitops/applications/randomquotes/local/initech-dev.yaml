@@ -10,9 +10,13 @@ metadata:
     argo.octopus.com/project: randomquotes
     argo.octopus.com/environment: dev
     argo.octopus.com/tenant: initech
-    # Tells Octopus's update-argo-cd-application-image-tags step where the
-    # image reference lives in the helm values, so it can bump the tag
-    # without touching anything else.
+    # The image-replace-paths annotation is a backup discovery mechanism
+    # used by Octopus's update-argo-cd-application-image-tags step when
+    # the step itself has no helm image path configured. We DO configure
+    # one (Octopus.Action.ArgoCD.HelmImageTagPaths="image.tag" in the
+    # deployment_process.ocl), so this annotation is currently a no-op —
+    # kept for documentation and to ease swapping back to annotation-driven
+    # discovery if we ever need per-Application path overrides.
     argo.octopus.com/image-replace-paths: "ghcr.io/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
   labels:
     lab.octopus.com/source: local
@@ -25,6 +29,8 @@ spec:
     targetRevision: HEAD
     helm:
       releaseName: randomquotes
+      valueFiles:
+        - values-local-dev.yaml
       valuesObject:
         replicaCount: 1
         tenant: initech
@@ -34,9 +40,6 @@ spec:
         watermark: "FREE TIER"
         maintenance: ""
         host: argo-local-initech-dev.localtest.me
-        image:
-          repository: vlussenburg/octopus-iac-lab
-          tag: "1.1.16"
   destination:
     server: https://kubernetes.default.svc
     namespace: argo-randomquotes-local-initech-dev
