@@ -1,0 +1,66 @@
+# Demo log: demo/blue-green (atomic blue/green via Argo Rollouts, agent path)
+Date: 2026-05-09T22:28:44Z
+
+## Trigger
+    octopus release create --project blue-green-randomquotes --git-ref refs/heads/demo/blue-green ...
+
+## Latest releases
+Project blue-green-randomquotes
+VERSION         CHANNEL  CREATED
+1.1.49-45e8dc4  Default  Sat, 09 May 2026 22:25:51 +0000
+1.1.37-demo     Default  Sat, 09 May 2026 16:29:34 +0000
+1.1.21          Default  Sat, 09 May 2026 16:19:30 +0000
+
+## Auto-deploy results
+  [Success] Deploy blue-green-randomquotes release 1.1.49-45e8dc4 to Dev for initech
+  [Success] Deploy blue-green-randomquotes release 1.1.49-45e8dc4 to Dev for acme-corp
+  [Success] Deploy blue-green-randomquotes release 1.1.49-45e8dc4 to Dev for globex
+
+## Cluster shape — Rollout, not Deployment (the demo's whole point)
+### randomquotes-local-blue-green-acme-corp-dev
+rollout.argoproj.io/randomquotes   3     3     3     3     22h
+replicaset.apps/randomquotes-6567f9ddbd   0     0     0     5h58m
+replicaset.apps/randomquotes-6d94965566   0     0     0     6h9m
+replicaset.apps/randomquotes-748c79d96c   3     3     3     2m41s
+replicaset.apps/randomquotes-759f84bbfb   0     0     0     22h
+
+### randomquotes-local-blue-green-globex-dev
+rollout.argoproj.io/randomquotes   2     2     2     2     6h8m
+replicaset.apps/randomquotes-6567f9ddbd   0     0     0     5h58m
+replicaset.apps/randomquotes-6d94965566   0     0     0     6h8m
+replicaset.apps/randomquotes-748c79d96c   2     2     2     2m42s
+service/randomquotes   ClusterIP   10.96.109.253   <none>   80/TCP   6h8m
+
+### randomquotes-local-blue-green-initech-dev
+rollout.argoproj.io/randomquotes   1     1     1     1     6h8m
+replicaset.apps/randomquotes-6567f9ddbd   0     0     0     5h58m
+replicaset.apps/randomquotes-6d94965566   0     0     0     6h8m
+replicaset.apps/randomquotes-748c79d96c   1     1     1     2m26s
+service/randomquotes   ClusterIP   10.96.218.7   <none>   80/TCP   6h8m
+
+
+## Rollout strategy (acme-corp)
+{
+  "blueGreen": {
+    "activeService": "randomquotes",
+    "autoPromotionEnabled": true,
+    "scaleDownDelaySeconds": 30
+  }
+}
+
+
+## Pod images
+  randomquotes-local-blue-green-acme-corp-dev -> ghcr.io/vlussenburg/octopus-iac-lab:1.1.49
+  randomquotes-local-blue-green-globex-dev -> ghcr.io/vlussenburg/octopus-iac-lab:1.1.49
+  randomquotes-local-blue-green-initech-dev -> ghcr.io/vlussenburg/octopus-iac-lab:1.1.49
+
+## Live ingress
+  http://local-blue-green-acme-corp-dev.localtest.me:8080 -> HTTP 200
+  http://local-blue-green-globex-dev.localtest.me:8080 -> HTTP 200
+  http://local-blue-green-initech-dev.localtest.me:8080 -> HTTP 200
+
+## Result
+✓ Demo project blue-green-randomquotes deployed via the agent path
+✓ Renders kind: Rollout (not Deployment) — confirmed by 'kubectl get rollout'
+✓ blueGreen strategy with autoPromotionEnabled=true, scaleDownDelaySeconds=30
+✓ All 3 tenants serve image 1.1.49 in Dev

@@ -1,0 +1,55 @@
+# Demo log: demo/bg-preview (gated blue/green via Argo Rollouts, preview URL on bg-{host})
+Date: 2026-05-09T22:32:37Z
+
+## Trigger
+    octopus release create --project bg-preview-randomquotes --git-ref refs/heads/demo/bg-preview ...
+
+## Latest releases
+Project bg-preview-randomquotes
+VERSION         CHANNEL  CREATED
+1.1.49-6b83521  Default  Sat, 09 May 2026 22:25:55 +0000
+1.1.21          Default  Sat, 09 May 2026 16:19:29 +0000
+1.1.20          Default  Sat, 09 May 2026 00:03:46 +0000
+
+## Auto-deploy results (Octopus 'success' even though Rollout is paused — that's the point of gated)
+  [Success] Deploy bg-preview-randomquotes release 1.1.49-6b83521 to Dev for initech
+  [Success] Deploy bg-preview-randomquotes release 1.1.49-6b83521 to Dev for acme-corp
+  [Success] Deploy bg-preview-randomquotes release 1.1.49-6b83521 to Dev for globex
+
+## Rollout strategy (acme-corp)
+{
+  "blueGreen": {
+    "activeService": "randomquotes",
+    "autoPromotionEnabled": false,
+    "previewService": "randomquotes-preview",
+    "scaleDownDelaySeconds": 30
+  }
+}
+
+
+## State across tenants — gated, pod count = old+new (no scaleDown until promote)
+  randomquotes-local-bg-preview-acme-corp-dev: phase=[Healthy|] replicasets=3 pods=3
+  randomquotes-local-bg-preview-globex-dev: phase=[Paused|BlueGreenPause] replicasets=2 pods=4
+  randomquotes-local-bg-preview-initech-dev: phase=[Paused|BlueGreenPause] replicasets=2 pods=2
+
+## acme-corp: BEFORE promote — active=old, preview=new
+    Active service hash: 759f84bbfb (was selecting old ReplicaSet)
+    Preview service hash: 748c79d96c (selecting new ReplicaSet)
+    http://local-bg-preview-acme-corp-dev.localtest.me:8080      -> v1.1.19
+    http://bg-local-bg-preview-acme-corp-dev.localtest.me:8080   -> v1.1.49
+
+## acme-corp: AFTER 'kubectl argo rollouts promote' — active flipped
+    Active service hash: 748c79d96c (now selecting the new ReplicaSet)
+    http://local-bg-preview-acme-corp-dev.localtest.me:8080      -> v1.1.49
+    Old pods linger for scaleDownDelaySeconds=30 then get reaped
+
+## globex + initech still paused (illustrating per-environment gating)
+  globex — phase=Paused  active=v1.1.35  preview=v1.1.49
+  initech — phase=Paused  active=v1.1.35  preview=v1.1.49
+
+## Result
+✓ Demo project bg-preview-randomquotes deployed via gated bg agent path
+✓ Rollout strategy: blueGreen { autoPromotionEnabled: false, previewService: randomquotes-preview }
+✓ All tenants reached BlueGreenPause; active stayed on previous version
+✓ Preview Service routes to staged ReplicaSet — visible at bg-{host}.localtest.me
+✓ kubectl argo rollouts promote flips active → new ReplicaSet (verified on acme-corp)

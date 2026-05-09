@@ -1,0 +1,51 @@
+# Demo log: demo/octopus-native-bg (Octopus's KubernetesDeployContainers + BlueGreen)
+Date: 2026-05-09T22:29:07Z
+
+## Trigger
+    octopus release create --project octopus-native-bg-randomquotes --git-ref refs/heads/demo/octopus-native-bg ...
+
+## Latest releases
+Project octopus-native-bg-randomquotes
+VERSION         CHANNEL  CREATED
+1.1.49-196200b  Default  Sat, 09 May 2026 22:25:53 +0000
+1.1.24          Default  Sat, 09 May 2026 16:19:29 +0000
+1.1.23          Default  Sat, 09 May 2026 00:03:44 +0000
+
+## Auto-deploy results
+  [Success] Deploy octopus-native-bg-randomquotes release 1.1.49-196200b to Dev for initech
+  [Success] Deploy octopus-native-bg-randomquotes release 1.1.49-196200b to Dev for acme-corp
+  [Success] Deploy octopus-native-bg-randomquotes release 1.1.49-196200b to Dev for globex
+
+## Cluster shape — Deployment (Octopus's native step manages bg via twin Deployments, not Rollout CRD)
+### randomquotes-local-octopus-native-bg-acme-corp-dev
+deployment.apps/randomquotes-deployments-133   3/3   3     3     2m31s
+service/randomquotes   ClusterIP   10.96.16.247   <none>   80/TCP   22h
+
+### randomquotes-local-octopus-native-bg-globex-dev
+deployment.apps/randomquotes-deployments-132   2/2   2     2     2m43s
+service/randomquotes   ClusterIP   10.96.47.19   <none>   80/TCP   6h9m
+
+### randomquotes-local-octopus-native-bg-initech-dev
+deployment.apps/randomquotes-deployments-134   1/1   1     1     2m45s
+service/randomquotes   ClusterIP   10.96.79.43   <none>   80/TCP   6h9m
+
+
+## NOT Rollouts — confirm it's plain Deployments
+No resources found in randomquotes-local-octopus-native-bg-acme-corp-dev namespace.
+
+## Pod images
+  randomquotes-local-octopus-native-bg-acme-corp-dev: randomquotes-deployments-133=ghcr.io/vlussenburg/octopus-iac-lab:1.1.49
+  randomquotes-local-octopus-native-bg-globex-dev: randomquotes-deployments-132=ghcr.io/vlussenburg/octopus-iac-lab:1.1.49
+  randomquotes-local-octopus-native-bg-initech-dev: randomquotes-deployments-134=ghcr.io/vlussenburg/octopus-iac-lab:1.1.49
+
+## Live ingress
+  http://local-octopus-native-bg-acme-corp-dev.localtest.me:8080 -> HTTP 200
+  http://local-octopus-native-bg-globex-dev.localtest.me:8080 -> HTTP 200
+  http://local-octopus-native-bg-initech-dev.localtest.me:8080 -> HTTP 200
+
+## Result
+✓ Demo project octopus-native-bg-randomquotes deployed via Octopus native bg step
+✓ Engine: Octopus.KubernetesDeployContainers with DeploymentStyle=BlueGreen
+✓ NOT Rollouts (confirmed: kubectl get rollout returns 'No resources found')
+✓ Octopus itself does the staged Deployment + Service swap + old Deployment delete
+✓ All 3 tenants serve image 1.1.49 in Dev

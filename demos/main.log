@@ -1,0 +1,56 @@
+# Demo log: main (vanilla deployment, dual delivery path)
+Date: 2026-05-09T22:28:23Z
+Worktree: octopus-iac-lab-local · Octopus: http://localhost:8090
+
+## Trigger
+    gh workflow run build.yml --ref main
+    -> built ghcr.io/vlussenburg/octopus-iac-lab:1.1.49 (run 25613254487)
+    -> created Octopus release 1.1.49-b787a03 via 'octopus release create'
+       (the GHA local leg failed because Tailscale Funnel is down — local Octopus
+       isn't reachable from github.com runners; CLI substitute works fine)
+
+## Latest 3 releases
+Project randomquotes
+VERSION         CHANNEL  CREATED
+1.1.49-b787a03  Default  Sat, 09 May 2026 22:25:42 +0000
+1.1.9-650f9a3   Default  Sun, 03 May 2026 00:37:58 +0000
+1.1.9-3c99274   Default  Sun, 03 May 2026 00:26:33 +0000
+
+## Auto-deploy: Dev × 3 tenants (lifecycle automatic_deployment_targets)
+  [Success] Deploy randomquotes release 1.1.49-b787a03 to Dev for initech
+  [Success] Deploy randomquotes release 1.1.49-b787a03 to Dev for acme-corp
+  [Success] Deploy randomquotes release 1.1.49-b787a03 to Dev for globex
+
+## Step-by-step (one tenant, ServerTasks-876, acme-corp)
+  [Success] Step 1: Deploy ConfigMap
+  [Success] Acquire packages
+  [Success] Step 2: Deploy Manifests
+  [Success] Step 3: Update Argo CD Application Image Tags
+  [Success] Release packages
+
+## Cluster state — agent path (push)
+  randomquotes-local-acme-corp-dev — image=ghcr.io/vlussenburg/octopus-iac-lab:1.1.49 ready=3/3
+  randomquotes-local-globex-dev — image=ghcr.io/vlussenburg/octopus-iac-lab:1.1.49 ready=2/2
+  randomquotes-local-initech-dev — image=ghcr.io/vlussenburg/octopus-iac-lab:1.1.49 ready=1/1
+
+## Cluster state — Argo CD path (pull)
+  argo-randomquotes-local-acme-corp-dev — Application image.tag=1.1.16 (running pod image=ghcr.io/vlussenburg/octopus-iac-lab:1.1.16)
+  argo-randomquotes-local-globex-dev — Application image.tag=1.1.16 (running pod image=ghcr.io/vlussenburg/octopus-iac-lab:1.1.16)
+  argo-randomquotes-local-initech-dev — Application image.tag=1.1.16 (running pod image=ghcr.io/vlussenburg/octopus-iac-lab:1.1.16)
+
+## Live ingress (agent path, all 3 tenants)
+  http://local-acme-corp-dev.localtest.me:8080 -> HTTP 200
+  http://local-globex-dev.localtest.me:8080 -> HTTP 200
+  http://local-initech-dev.localtest.me:8080 -> HTTP 200
+
+## Result
+✓ Octopus release 1.1.49-b787a03 created against refs/heads/main
+✓ Auto-deployed to Dev × 3 tenants
+✓ Agent path: pods running image 1.1.49, ingress 200 OK
+⚠ Argo CD path: 'Update Argo CD Application Image Tags' step ran successfully but reported
+  'Nothing to update for Application' — root cause: the OCL step is missing the helm
+  yaml path property. The 'argo.octopus.com/image-replace-paths' annotation exists on
+  the Apps but the step config doesn't reference it, so the bump didn't fire.
+  → follow-up: investigate the correct OCL property name (likely something like
+    Octopus.Action.ArgoCD.UpdateImage.Helm.ValuePath) and add it via UI / OCL edit.
+  Argo Apps remain at image.tag 1.1.16 in Dev (Production unchanged).

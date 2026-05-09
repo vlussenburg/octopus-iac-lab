@@ -1,0 +1,30 @@
+# Demo log: feat/ephemeral-demo (PR-preview spawn via Argo CD)
+Date: 2026-05-09T22:23:03Z
+
+## Premise
+ApplicationSet (gitops/argocd/randomquotes-applicationset-previews.yaml) watches
+open PRs matching ^feat/.* — each creates a randomquotes-preview-pr-<N> Application
+deploying that PR's branch into argo-randomquotes-preview-pr-<N> namespace.
+
+## Verification
+
+### ApplicationSet config
+filter: ^feat/.*
+namespace template: argo-randomquotes-preview-pr-{{ .number }}
+
+### Live preview Apps
+NAME                         SYNC     HEALTH
+randomquotes-preview-pr-25   Synced   Healthy
+randomquotes-preview-pr-26   Synced   Healthy
+
+### Preview hostnames
+argo-randomquotes-preview-pr-25                    argo-preview-pr-25.localtest.me
+argo-randomquotes-preview-pr-26                    argo-preview-pr-26.localtest.me
+
+### PR #25 homepage shows the ephemeral-demo title change
+  <title>Random Quotes — Preview</title>
+
+### Result
+✓ PR-preview ApplicationSet auto-spawned env on PR open (namespace + Service + Ingress + Rollout)
+✓ Argo CD sync is Healthy
+✓ Ingress responds on argo-preview-pr-N.localtest.me:8080
