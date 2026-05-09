@@ -7,7 +7,7 @@
 # more demo project. Remove a string → tofu destroys it.
 variable "demo_branches" {
   type        = set(string)
-  description = "Branches to spin up as their own randomquotes demo project. Each gets a CaC-tracked project named randomquotes-<slug>. Empty by default — set via tfvars or `TF_VAR_demo_branches='[\"feat/foo\",\"feat/bar\"]'`."
+  description = "Branches to spin up as their own randomquotes demo project. Each gets a CaC-tracked project named randomquotes-<slug>. Empty by default — set via tfvars or `TF_VAR_demo_branches='[\"demo/foo\",\"demo/bar\"]'`."
   default     = []
 }
 
@@ -17,12 +17,12 @@ locals {
   # slug so each demo project's Source is unique.
   source_base = strcontains(var.octopus_url, "octopus.app") ? "saas" : "local"
 
-  # Strip the `feat/` prefix that the discovery filter already pinned —
-  # within feat/* the path-after-prefix is unique because git refs are
+  # Strip the `demo/` prefix that the discovery filter already pinned —
+  # within demo/* the path-after-prefix is unique because git refs are
   # unique paths, so no hash needed for disambiguation.
   branch_slugs = {
     for b in var.demo_branches :
-    b => replace(b, "feat/", "")
+    b => replace(b, "demo/", "")
   }
 }
 
@@ -72,7 +72,7 @@ resource "octopusdeploy_variable" "branch_demo_source" {
 resource "octopusdeploy_tenant_project" "branch_demo_tenants" {
   # Map key uses "::" as separator — branch names may contain "-", tenant
   # keys may contain "_", but neither can contain "::". Prevents pairs
-  # like (feat/foo, bar-baz) and (feat/foo-bar, baz) collapsing to the
+  # like (demo/foo, bar-baz) and (demo/foo-bar, baz) collapsing to the
   # same map key.
   for_each = {
     for pair in setproduct(tolist(var.demo_branches), keys(local.cp.tenant_ids)) :
