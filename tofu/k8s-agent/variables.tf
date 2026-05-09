@@ -55,3 +55,9 @@ variable "argo_rollouts_chart_version" {
   description = "Argo Rollouts helm chart version constraint. Installs the controller + Rollout CRD; charts opt in by rendering a Rollout instead of a Deployment."
   default     = "2.*"
 }
+
+variable "sealed_secrets_chart_version" {
+  type        = string
+  description = "Bitnami sealed-secrets helm chart version constraint. Single controller per cluster; decrypts SealedSecret CRDs committed to git into regular k8s Secrets."
+  default     = "2.*"
+}

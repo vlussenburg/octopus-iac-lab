@@ -1,3 +1,9 @@
+# ─── CLUSTER-WIDE CONTROLLER ─────────────────────────────────────────────
+# Lives on main so any branch's `make agent-apply` installs it. Demos that
+# exercise this: demo/blue-green (atomic bg via Rollout CRD), demo/bg-preview
+# (gated bg with previewService).
+# ─────────────────────────────────────────────────────────────────────────
+#
 # Argo Rollouts controller, cluster-wide infra. Provides the `Rollout` CRD
 # (drop-in replacement for `Deployment`) plus the controller that drives
 # blue/green and canary strategies, manages active/preview Services, and

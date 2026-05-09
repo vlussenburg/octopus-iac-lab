@@ -1,3 +1,9 @@
+# ─── CLUSTER-WIDE CONTROLLER ─────────────────────────────────────────────
+# Lives on main so any branch's `make agent-apply` installs it. Used by:
+# every tenant's Ingress (12 hostnames, all envs) — every demo branch
+# transitively depends on this.
+# ─────────────────────────────────────────────────────────────────────────
+#
 # nginx-ingress controller, cluster-wide infra. One controller serves every
 # tenant's Ingress resource via Host header routing. Same idempotent
 # `helm upgrade --install` pattern as the NFS CSI driver — multiple stacks
