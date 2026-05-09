@@ -1,3 +1,9 @@
+# ─── CLUSTER-WIDE CONTROLLER ─────────────────────────────────────────────
+# Lives on main so any branch's `make agent-apply` installs it. Used by:
+# the Octopus K8s Agent itself (PVC backing) — every demo branch transitively
+# depends on this.
+# ─────────────────────────────────────────────────────────────────────────
+#
 # The Octopus K8s Agent's PVC needs the NFS CSI driver. The driver is
 # cluster-wide infra (one DaemonSet per node), shared by every Octopus
 # target that registers an agent against this cluster.
