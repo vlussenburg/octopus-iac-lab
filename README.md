@@ -38,9 +38,31 @@ For the licence: base64 your XML (`base64 -i license.xml | tr -d '\n'`) and set 
 
 `tofu/argocd/` is minimum-footprint: it only owns the control plane (ArgoCD install, JWT, Octopus Argo CD Gateway). Roots, leaves, ingress, and chart all live in `gitops/`.
 
-## Blue/green by default
+## Blue/green is opt-in via demo branches
 
-Both delivery paths render an [Argo Rollout](https://argoproj.github.io/argo-rollouts/) instead of a `Deployment`. The cluster-wide controller (`tofu/k8s-agent/argo_rollouts.tf`) handles the dance: stage new ReplicaSet → wait healthy → atomic Service-selector swap → scale old down. Atomic, no operator gate, no preview URL — same UX as a plain deploy, just with a hard binary cut and never a half-rolled state. Watch it happen with `kubectl -n argo-randomquotes-{src}-{tenant}-{env} get rs -w` between releases.
+Main is a plain `Deployment` shape on both delivery paths — that's the baseline. Three demo branches show different ways to layer blue/green on top:
+
+| Branch | Engine | Mode | Surface |
+|---|---|---|---|
+| `demo/blue-green` | Argo Rollouts CRD | Atomic (autoPromote) | Active service only |
+| `demo/octopus-native-bg` | Octopus's `KubernetesDeployContainers` step (`DeploymentStyle=BlueGreen`) | Atomic | Active service only |
+| `demo/bg-preview` | Argo Rollouts CRD | Gated (manual promote) | Active + preview URL on `bg-{host}` |
+
+Each demo branch creates its own per-branch Octopus project (`<slug>-randomquotes`) via tofu's `for_each` over `demo/*`, so demos coexist with main on the same cluster. The Argo Rollouts controller lives cluster-wide on main (`tofu/k8s-agent/argo_rollouts.tf`) — branches opt in by rendering a `Rollout` instead of a `Deployment`.
+
+## Local CLI dependencies
+
+Install via Homebrew (macOS) — the demo step recipes in PR descriptions assume these are on PATH:
+
+```bash
+brew install opentofu                       # tofu — drives every stack
+brew install octopusdeploy/taps/octopus-cli # octopus — release/deploy/runbook CLI
+brew install kubernetes-cli                 # kubectl
+brew install argoproj/tap/kubectl-argo-rollouts  # kubectl argo rollouts <subcmd>
+brew install gh                             # GitHub CLI for `gh workflow run`
+```
+
+`OCTOPUS_URL` and `OCTOPUS_API_KEY` from `.env` flow into `octopus` automatically when invoked from this repo.
 
 ## Reaching it
 
