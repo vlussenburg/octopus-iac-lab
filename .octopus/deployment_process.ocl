@@ -115,9 +115,6 @@ step "deploy-manifests" {
 
 step "bump-gitops-image-tag" {
     name = "Bump GitOps image tag"
-    properties = {
-        Octopus.Action.TargetRoles = ""
-    }
 
     action {
         action_type = "Octopus.Script"
