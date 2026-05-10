@@ -113,36 +113,25 @@ step "deploy-manifests" {
     }
 }
 
-step "bump-gitops-image-tag" {
-    name = "Bump GitOps image tag"
+step "update-argo-cd-application-image-tags" {
+    name = "Update Argo CD Application Image Tags"
 
     action {
-        action_type = "Octopus.Script"
-        worker_pool_variable = "Linux.WorkerPool"
+        action_type = "Octopus.ArgoCDUpdateImageTags"
         properties = {
-            Octopus.Action.RunOnServer = "false"
-            Octopus.Action.Script.ScriptSource = "Inline"
-            Octopus.Action.Script.Syntax = "Bash"
-            Octopus.Action.Script.ScriptBody = <<-EOT
-                set -euo pipefail
-                F="gitops/charts/randomquotes/values-#{Source}-#{Octopus.Environment.Name | ToLower}.yaml"
-                T="#{Octopus.Action.Package[randomquotes-image].PackageVersion}"
-                git clone -q "https://x-access-token:#{GitHub.Token}@github.com/vlussenburg/octopus-iac-lab" repo
-                cd repo
-                sed -i -E 's/^([[:space:]]+tag:).*/\1 "'"$T"'"/' "$F"
-                git diff --quiet "$F" && { echo "$F already at $T"; exit 0; }
-                git -c user.name=Octopus -c user.email=octopus@octopus.com commit -qm "Octopus: bump $F → $T" "$F"
-                git push -q
-                echo "✓ $F → $T"
-                EOT
+            Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
+            Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
+            Octopus.Action.ArgoCD.StepVerification.Method = "ArgoCDApplicationHealthy"
+            Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
         }
 
-        packages "randomquotes-image" {
+        packages "octopus-iac-lab" {
             acquisition_location = "NotAcquired"
             feed = "ghcr"
             package_id = "vlussenburg/octopus-iac-lab"
             properties = {
                 Extract = "False"
+                HelmReplacementPath = "image.tag"
                 Purpose = "DockerImageReference"
                 SelectionMode = "immediate"
             }
