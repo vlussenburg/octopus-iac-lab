@@ -116,9 +116,6 @@ step "deploy-manifests" {
 step "bump-gitops-image-tag" {
     name = "Bump GitOps image tag"
 
-    # Stand-in for Octopus.ArgoCDUpdateImageTags — that step only writes to
-    # chart values.yaml, which doesn't fit this lab's per-(Octopus, env)
-    # values-file split. On push, Argo CD reconciles within its sync window.
     action {
         action_type = "Octopus.Script"
         worker_pool_variable = "Linux.WorkerPool"
