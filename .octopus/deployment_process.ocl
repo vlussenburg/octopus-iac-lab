@@ -116,6 +116,9 @@ step "deploy-manifests" {
 step "bump-gitops-image-tag" {
     name = "Bump GitOps image tag"
 
+    # Stand-in for Octopus.ArgoCDUpdateImageTags — that step only writes to
+    # chart values.yaml, which doesn't fit this lab's per-(Octopus, env)
+    # values-file split. On push, Argo CD reconciles within its sync window.
     action {
         action_type = "Octopus.Script"
         worker_pool_variable = "Linux.WorkerPool"
@@ -124,53 +127,16 @@ step "bump-gitops-image-tag" {
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "Bash"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                # Update image.tag in gitops/charts/randomquotes/values-#{Source}-<env>.yaml
-                # via the GitHub API. Replaces what Octopus.ArgoCDUpdateImageTags
-                # would do — except that step only writes to chart values.yaml,
-                # which doesn't fit this lab's per-(Octopus, env) values-file split.
-                #
-                # On commit + push, Argo CD picks up the change on its next poll
-                # (~3min) and rolls the GitOps namespaces to the new image.
-
                 set -euo pipefail
-
-                SRC="#{Source}"
-                ENV=$(echo "#{Octopus.Environment.Name}" | tr '[:upper:]' '[:lower:]')
-                TAG="#{Octopus.Action.Package[randomquotes-image].PackageVersion}"
-                FILE="gitops/charts/randomquotes/values-${SRC}-${ENV}.yaml"
-                REPO="vlussenburg/octopus-iac-lab"
-                TOKEN="#{GitHub.Token}"
-                BRANCH="main"
-
-                echo "Target: $FILE on $REPO@$BRANCH (image.tag=$TAG)"
-
-                # Fetch current file via GitHub Contents API
-                RESP=$(curl -sf -H "Authorization: Bearer $TOKEN" \
-                    -H "Accept: application/vnd.github+json" \
-                    "https://api.github.com/repos/$REPO/contents/$FILE?ref=$BRANCH")
-                SHA=$(echo "$RESP" | jq -r .sha)
-                CURRENT=$(echo "$RESP" | jq -r .content | base64 -d)
-
-                # Bump image.tag — single yaml line at root: '  tag: "x.y.z"'
-                NEW=$(echo "$CURRENT" | sed -E "s|^([[:space:]]+tag:[[:space:]]+).*|\\1\"$TAG\"|")
-
-                if [ "$CURRENT" = "$NEW" ]; then
-                    echo "image.tag already $TAG; nothing to commit."
-                    exit 0
-                fi
-
-                NEW_B64=$(echo -n "$NEW" | base64 | tr -d '\n')
-                MSG="Octopus Deploy: $SRC/$ENV image -> $TAG"
-
-                curl -sf -X PUT \
-                    -H "Authorization: Bearer $TOKEN" \
-                    -H "Accept: application/vnd.github+json" \
-                    -d "$(jq -nc --arg m "$MSG" --arg c "$NEW_B64" --arg s "$SHA" --arg b "$BRANCH" \
-                        '{message:$m, content:$c, sha:$s, branch:$b}')" \
-                    "https://api.github.com/repos/$REPO/contents/$FILE" >/dev/null
-
-                echo "✓ Committed: $MSG"
-                echo "Argo CD will reconcile on next sync (~3min default)."
+                F="gitops/charts/randomquotes/values-#{Source}-#{Octopus.Environment.Name | ToLower}.yaml"
+                T="#{Octopus.Action.Package[randomquotes-image].PackageVersion}"
+                git clone -q "https://x-access-token:#{GitHub.Token}@github.com/vlussenburg/octopus-iac-lab" repo
+                cd repo
+                sed -i -E 's/^([[:space:]]+tag:).*/\1 "'"$T"'"/' "$F"
+                git diff --quiet "$F" && { echo "$F already at $T"; exit 0; }
+                git -c user.name=Octopus -c user.email=octopus@octopus.com commit -qm "Octopus: bump $F → $T" "$F"
+                git push -q
+                echo "✓ $F → $T"
                 EOT
         }
 
