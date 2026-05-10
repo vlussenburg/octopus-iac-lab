@@ -113,20 +113,71 @@ step "deploy-manifests" {
     }
 }
 
-step "update-argo-cd-application-image-tags" {
-    name = "Update Argo CD Application Image Tags"
+step "bump-gitops-image-tag" {
+    name = "Bump GitOps image tag"
+    properties = {
+        Octopus.Action.TargetRoles = ""
+    }
 
     action {
-        action_type = "Octopus.ArgoCDUpdateImageTags"
+        action_type = "Octopus.Script"
+        worker_pool_variable = "Linux.WorkerPool"
         properties = {
-            Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
-            Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
-            Octopus.Action.ArgoCD.HelmImageTagPaths = "image.tag"
-            Octopus.Action.ArgoCD.StepVerification.Method = "ArgoCDApplicationHealthy"
-            Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "Bash"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                # Update image.tag in gitops/charts/randomquotes/values-#{Source}-<env>.yaml
+                # via the GitHub API. Replaces what Octopus.ArgoCDUpdateImageTags
+                # would do — except that step only writes to chart values.yaml,
+                # which doesn't fit this lab's per-(Octopus, env) values-file split.
+                #
+                # On commit + push, Argo CD picks up the change on its next poll
+                # (~3min) and rolls the GitOps namespaces to the new image.
+
+                set -euo pipefail
+
+                SRC="#{Source}"
+                ENV=$(echo "#{Octopus.Environment.Name}" | tr '[:upper:]' '[:lower:]')
+                TAG="#{Octopus.Action.Package[randomquotes-image].PackageVersion}"
+                FILE="gitops/charts/randomquotes/values-${SRC}-${ENV}.yaml"
+                REPO="vlussenburg/octopus-iac-lab"
+                TOKEN="#{GitHub.Token}"
+                BRANCH="main"
+
+                echo "Target: $FILE on $REPO@$BRANCH (image.tag=$TAG)"
+
+                # Fetch current file via GitHub Contents API
+                RESP=$(curl -sf -H "Authorization: Bearer $TOKEN" \
+                    -H "Accept: application/vnd.github+json" \
+                    "https://api.github.com/repos/$REPO/contents/$FILE?ref=$BRANCH")
+                SHA=$(echo "$RESP" | jq -r .sha)
+                CURRENT=$(echo "$RESP" | jq -r .content | base64 -d)
+
+                # Bump image.tag — single yaml line at root: '  tag: "x.y.z"'
+                NEW=$(echo "$CURRENT" | sed -E "s|^([[:space:]]+tag:[[:space:]]+).*|\\1\"$TAG\"|")
+
+                if [ "$CURRENT" = "$NEW" ]; then
+                    echo "image.tag already $TAG; nothing to commit."
+                    exit 0
+                fi
+
+                NEW_B64=$(echo -n "$NEW" | base64 | tr -d '\n')
+                MSG="Octopus Deploy: $SRC/$ENV image -> $TAG"
+
+                curl -sf -X PUT \
+                    -H "Authorization: Bearer $TOKEN" \
+                    -H "Accept: application/vnd.github+json" \
+                    -d "$(jq -nc --arg m "$MSG" --arg c "$NEW_B64" --arg s "$SHA" --arg b "$BRANCH" \
+                        '{message:$m, content:$c, sha:$s, branch:$b}')" \
+                    "https://api.github.com/repos/$REPO/contents/$FILE" >/dev/null
+
+                echo "✓ Committed: $MSG"
+                echo "Argo CD will reconcile on next sync (~3min default)."
+                EOT
         }
 
-        packages "octopus-iac-lab" {
+        packages "randomquotes-image" {
             acquisition_location = "NotAcquired"
             feed = "ghcr"
             package_id = "vlussenburg/octopus-iac-lab"
