@@ -61,3 +61,9 @@ variable "sealed_secrets_chart_version" {
   description = "Bitnami sealed-secrets helm chart version constraint. Single controller per cluster; decrypts SealedSecret CRDs committed to git into regular k8s Secrets."
   default     = "2.*"
 }
+
+variable "gatekeeper_chart_version" {
+  type        = string
+  description = "OPA Gatekeeper helm chart version constraint. Admission-side enforcement of Platform Hub-published Rego — pairs with the in-deploy conftest gate that surfaces violations in the Octopus task log."
+  default     = "3.*"
+}
