@@ -10,6 +10,11 @@ APP_DIR := tofu/app-randomquotes
 AGENT_DIR := tofu/k8s-agent
 ARGO_DIR := tofu/argocd
 
+# Forwarded to every `tofu apply` / `tofu destroy`. Default empty so
+# interactive use still prompts for `yes`. Pass `-auto-approve` for
+# non-interactive runs:  `make apply TOFU_APPLY_FLAGS=-auto-approve`
+TOFU_APPLY_FLAGS ?=
+
 # Load .env (secrets + per-target URL/key) and export TF_VAR_* for OpenTofu.
 # Non-sensitive values come from each stack's committed defaults.auto.tfvars.
 # OCTOPUS_URL is per-worktree: local has http://localhost:8090, SaaS has the
@@ -51,6 +56,10 @@ help:
 	@echo "tofu/k8s-agent/       : agent-init | agent-plan | agent-apply | agent-destroy | agent-fmt | agent-validate"
 	@echo "tofu/argocd/          : argo-init | argo-plan | argo-apply | argo-destroy | argo-fmt | argo-validate"
 	@echo "convenience           : fmt (all) | validate (all) | apply (space,cp,ph,app,agent,argo) | destroy (rev) | rebuild (destroy + apply, non-interactive)"
+	@echo ""
+	@echo "non-interactive flags:"
+	@echo "  make nuke FORCE=1                              # skip the 'are you sure' prompt"
+	@echo "  make apply TOFU_APPLY_FLAGS=-auto-approve      # skip 'yes' prompts on every tofu apply"
 
 # --- compose/ -------------------------------------------------------------
 
@@ -72,7 +81,10 @@ ps:
 	$(COMPOSE) ps
 
 nuke:
-	@read -p "This deletes the local Octopus DB. Continue? [y/N] " ans && [ "$$ans" = "y" ] || [ "$$ans" = "yes" ]
+	@if [ -z "$$FORCE" ]; then \
+		read -p "This deletes the local Octopus DB. Continue? [y/N] " ans && \
+		[ "$$ans" = "y" ] || [ "$$ans" = "yes" ]; \
+	fi
 	$(COMPOSE) down -v --remove-orphans
 
 # --- tofu/space/ ----------------------------------------------------------
@@ -84,10 +96,10 @@ space-plan:
 	$(load_env) cd $(SPACE_DIR) && tofu plan
 
 space-apply:
-	$(load_env) cd $(SPACE_DIR) && tofu apply
+	$(load_env) cd $(SPACE_DIR) && tofu apply $(TOFU_APPLY_FLAGS)
 
 space-destroy:
-	$(load_env) cd $(SPACE_DIR) && tofu destroy
+	$(load_env) cd $(SPACE_DIR) && tofu destroy $(TOFU_APPLY_FLAGS)
 
 space-fmt:
 	cd $(SPACE_DIR) && tofu fmt -recursive
@@ -104,10 +116,10 @@ cp-plan:
 	$(load_env) cd $(CP_DIR) && tofu plan
 
 cp-apply:
-	$(load_env) cd $(CP_DIR) && tofu apply
+	$(load_env) cd $(CP_DIR) && tofu apply $(TOFU_APPLY_FLAGS)
 
 cp-destroy:
-	$(load_env) cd $(CP_DIR) && tofu destroy
+	$(load_env) cd $(CP_DIR) && tofu destroy $(TOFU_APPLY_FLAGS)
 
 cp-fmt:
 	cd $(CP_DIR) && tofu fmt -recursive
@@ -124,10 +136,10 @@ ph-plan:
 	$(load_env) cd $(PH_DIR) && tofu plan
 
 ph-apply:
-	$(load_env) cd $(PH_DIR) && tofu apply
+	$(load_env) cd $(PH_DIR) && tofu apply $(TOFU_APPLY_FLAGS)
 
 ph-destroy:
-	$(load_env) cd $(PH_DIR) && tofu destroy
+	$(load_env) cd $(PH_DIR) && tofu destroy $(TOFU_APPLY_FLAGS)
 
 ph-fmt:
 	cd $(PH_DIR) && tofu fmt -recursive
@@ -144,10 +156,10 @@ app-plan:
 	$(load_env) cd $(APP_DIR) && tofu plan
 
 app-apply:
-	$(load_env) cd $(APP_DIR) && tofu apply
+	$(load_env) cd $(APP_DIR) && tofu apply $(TOFU_APPLY_FLAGS)
 
 app-destroy:
-	$(load_env) cd $(APP_DIR) && tofu destroy
+	$(load_env) cd $(APP_DIR) && tofu destroy $(TOFU_APPLY_FLAGS)
 
 app-fmt:
 	cd $(APP_DIR) && tofu fmt -recursive
@@ -164,10 +176,10 @@ agent-plan:
 	$(load_env) cd $(AGENT_DIR) && tofu plan
 
 agent-apply:
-	$(load_env) cd $(AGENT_DIR) && tofu apply
+	$(load_env) cd $(AGENT_DIR) && tofu apply $(TOFU_APPLY_FLAGS)
 
 agent-destroy:
-	$(load_env) cd $(AGENT_DIR) && tofu destroy
+	$(load_env) cd $(AGENT_DIR) && tofu destroy $(TOFU_APPLY_FLAGS)
 
 agent-fmt:
 	cd $(AGENT_DIR) && tofu fmt -recursive
@@ -184,10 +196,10 @@ argo-plan:
 	$(load_env) cd $(ARGO_DIR) && tofu plan
 
 argo-apply:
-	$(load_env) cd $(ARGO_DIR) && tofu apply
+	$(load_env) cd $(ARGO_DIR) && tofu apply $(TOFU_APPLY_FLAGS)
 
 argo-destroy:
-	$(load_env) cd $(ARGO_DIR) && tofu destroy
+	$(load_env) cd $(ARGO_DIR) && tofu destroy $(TOFU_APPLY_FLAGS)
 
 argo-fmt:
 	cd $(ARGO_DIR) && tofu fmt -recursive
