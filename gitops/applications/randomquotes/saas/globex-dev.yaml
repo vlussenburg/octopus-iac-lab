@@ -33,6 +33,7 @@ spec:
         - values-saas-dev.yaml
       valuesObject:
         replicaCount: 2
+        tier: pro
         tenant: globex
         mood: silicon-valley
         icon: "🚀"

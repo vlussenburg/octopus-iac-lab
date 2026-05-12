@@ -33,6 +33,7 @@ spec:
         - values-saas-production.yaml
       valuesObject:
         replicaCount: 3
+        tier: enterprise
         tenant: acme-corp
         mood: comedy
         icon: "🃏"
