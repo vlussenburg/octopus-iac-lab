@@ -20,6 +20,12 @@ image:
 
 replicaCount: 1
 
+# Subscription tier — drives per-tier policy in Platform Hub's Rego bundle
+# (replica caps, watermark, …). Mirrors the existing Octopus `tier/*` tenant
+# tag so the chart and Octopus agree on which tenant is which.
+# One of: free | pro | enterprise.
+tier: free
+
 # Per-tenant config that ends up in /usr/share/nginx/html/config.json.
 tenant: ""
 mood: ""

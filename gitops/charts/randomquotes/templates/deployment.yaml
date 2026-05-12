@@ -4,6 +4,10 @@ metadata:
   name: randomquotes
   labels:
     app: randomquotes
+    app.kubernetes.io/name: randomquotes
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: randomquotes
+    tenant.octopus.com/tier: {{ .Values.tier | quote }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -13,6 +17,10 @@ spec:
     metadata:
       labels:
         app: randomquotes
+        app.kubernetes.io/name: randomquotes
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/part-of: randomquotes
+        tenant.octopus.com/tier: {{ .Values.tier | quote }}
       annotations:
         # Roll the pod when the ConfigMap content changes — k8s doesn't
         # auto-restart on volume-mount updates.

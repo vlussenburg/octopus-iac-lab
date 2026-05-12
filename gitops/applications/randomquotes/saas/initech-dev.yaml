@@ -33,6 +33,7 @@ spec:
         - values-saas-dev.yaml
       valuesObject:
         replicaCount: 1
+        tier: free
         tenant: initech
         mood: stoic
         icon: "🧘"
