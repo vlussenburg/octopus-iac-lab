@@ -4,6 +4,10 @@
 # instead — same end state, supported on CaC projects.
 # Look up each project's default channel — the trigger needs a channel_id
 # and Octopus auto-creates exactly one "Default" channel per project.
+# `depends_on` defers the read to apply time so the lookup happens AFTER
+# the projects exist — without it, the data source runs at plan time on a
+# fresh `make apply`, finds zero matching channels, and the downstream
+# trigger fails its "channel_id is required" validation.
 data "octopusdeploy_channels" "branch_demo_default" {
   for_each = var.demo_branches
 
@@ -11,6 +15,8 @@ data "octopusdeploy_channels" "branch_demo_default" {
   ids          = []
   skip         = 0
   take         = 100
+
+  depends_on = [octopusdeploy_project.branch_demo]
 }
 
 locals {
