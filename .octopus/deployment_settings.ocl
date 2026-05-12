@@ -1,5 +1,8 @@
 connectivity_policy {}
 
 versioning_strategy {
-    template = "#{Octopus.Action[Deploy Manifests].Package[randomquotes-image].PackageVersion}"
+    donor_package {
+        package = "randomquotes-image"
+        step = "deploy-manifests"
+    }
 }
