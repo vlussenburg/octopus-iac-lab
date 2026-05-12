@@ -16,7 +16,7 @@ image:
   # Sentinel default — every Application overrides via its values-<src>-<env>.yaml.
   # If you ever see this tag in a rendered manifest, a values file got
   # disconnected.
-  tag: 1.1.49
+  tag: 1.1.61
 
 replicaCount: 1
 
