@@ -1,8 +1,11 @@
 name: CI / Build Image
 
-# Builds + pushes the randomquotes image to GHCR. Triggers a release via the
-# downstream release.yml workflow_run hook on success. App-only concern —
-# changes to .octopus/ or gitops/ don't fire this.
+# Builds + pushes the randomquotes image to GHCR. That's it — Octopus's
+# external-feed trigger (`Auto-release on new randomquotes-image`, applied
+# to every project in `tofu/app-randomquotes/`) sees the new tag, mints a
+# release with the image tag as the release version, and the lifecycle's
+# Dev auto-deploy target fires it. No `octopus release create` /
+# `octopus release deploy` from CI.
 #
 # (Note: Octopus's `Octopus.ArgoCDUpdateImageTags` step writes image tags
 # into the helm chart values under `gitops/`, which sits outside this
@@ -76,13 +79,3 @@ jobs:
             ${{ env.IMAGE }}:${{ steps.version.outputs.pr_tag }}
           build-args: VERSION=${{ steps.version.outputs.pr_tag }}
 
-  # On main, hand the freshly-built image off to release.yml as a callable
-  # workflow. Explicit version + sha pass — no GHCR latest-tag-roulette.
-  release:
-    needs: build
-    if: github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/release.yml
-    with:
-      version: ${{ needs.build.outputs.version }}
-      sha: ${{ github.sha }}
-    secrets: inherit
