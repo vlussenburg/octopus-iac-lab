@@ -1,5 +1,5 @@
 connectivity_policy {}
 
 versioning_strategy {
-    template = "#{Octopus.Action[Deploy Manifests].Package[randomquotes-image].PackageVersion}-#{Octopus.Release.Git.ShortCommit}"
+    template = "#{Octopus.Action[Deploy Manifests].Package[randomquotes-image].PackageVersion}"
 }
