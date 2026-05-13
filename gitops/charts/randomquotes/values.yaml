@@ -40,8 +40,11 @@ host: ""
 
 resources:
   requests:
+    # Lab footprint — the nginx demo app is idle most of the time. 10m
+    # keeps ~60 pods schedulable on a Docker Desktop node without
+    # bumping CPU allocation in Settings.
+    cpu: 10m
+    memory: 32Mi
+  limits:
     cpu: 100m
     memory: 64Mi
-  limits:
-    cpu: 250m
-    memory: 128Mi
