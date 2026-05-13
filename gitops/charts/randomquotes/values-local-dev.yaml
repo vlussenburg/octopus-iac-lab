@@ -4,4 +4,4 @@
 # hand-edit unless you know what you're doing; the next deploy will
 # overwrite. Leaf Apps reference this via spec.source.helm.valueFiles.
 image:
-  tag: "1.1.63"
+  tag: "1.1.64"
