@@ -70,55 +70,64 @@ resource "helm_release" "argocd" {
           "server.insecure" = true
         }
       }
-
-      # Seed a single bootstrap Application as part of the helm install.
-      # It syncs `gitops/argocd/`, which contains the per-Octopus root
-      # Applications (App-of-Apps pattern) AND the argocd-server Ingress.
-      # That's how the cluster gets ALL the lab's per-tenant Argo apps
-      # without tofu touching a single kubectl_manifest — pure GitOps from
-      # the moment ArgoCD comes up.
-      extraObjects = [
-        {
-          apiVersion = "argoproj.io/v1alpha1"
-          kind       = "Application"
-          metadata = {
-            name      = "argocd-bootstrap"
-            namespace = var.argocd_namespace
-            labels = {
-              "lab.octopus.com/role" = "argocd-bootstrap"
-            }
-            # Without this, helm's pre-install/upgrade hook will be GC'd
-            # by Argo on the next sync; with it, this Application is a
-            # plain resource that survives.
-            annotations = {
-              "argocd.argoproj.io/sync-options" = "Prune=false"
-            }
-          }
-          spec = {
-            project = "default"
-            source = {
-              repoURL        = "https://github.com/vlussenburg/octopus-iac-lab"
-              path           = "gitops/argocd"
-              targetRevision = "HEAD"
-            }
-            destination = {
-              server    = "https://kubernetes.default.svc"
-              namespace = var.argocd_namespace
-            }
-            syncPolicy = {
-              automated = {
-                prune    = true
-                selfHeal = true
-              }
-              syncOptions = [
-                "ApplyOutOfSyncOnly=true",
-              ]
-            }
-          }
-        }
-      ]
     })
   ]
+}
+
+# Bootstrap Application — points at `gitops/argocd/`, which holds the
+# per-Octopus App-of-Apps roots and the argocd-server Ingress.
+#
+# Lives outside the helm_release's `extraObjects` on purpose: when
+# helm_release.argocd is `atomic = true`, putting the Application here
+# means Helm renders + applies it during the SAME pass as the chart's
+# CRDs. On a fresh cluster the Application kind doesn't exist yet, so
+# the install fails ("ensure CRDs are installed first") and atomic
+# rollback removes the CRDs that *did* install — every retry is back
+# to square one.
+#
+# Splitting it into its own kubernetes_manifest with depends_on means:
+# pass 1 = chart installs CRDs cleanly; pass 2 = bootstrap Application
+# created against now-existing CRDs.
+resource "kubernetes_manifest" "argocd_bootstrap" {
+  count = local.install_argocd_final ? 1 : 0
+
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "argocd-bootstrap"
+      namespace = var.argocd_namespace
+      labels = {
+        "lab.octopus.com/role" = "argocd-bootstrap"
+      }
+      annotations = {
+        "argocd.argoproj.io/sync-options" = "Prune=false"
+      }
+    }
+    spec = {
+      project = "default"
+      source = {
+        repoURL        = "https://github.com/vlussenburg/octopus-iac-lab"
+        path           = "gitops/argocd"
+        targetRevision = "HEAD"
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.argocd_namespace
+      }
+      syncPolicy = {
+        automated = {
+          prune    = true
+          selfHeal = true
+        }
+        syncOptions = [
+          "ApplyOutOfSyncOnly=true",
+        ]
+      }
+    }
+  }
+
+  depends_on = [helm_release.argocd]
 }
 
 # The chart auto-generates an admin password into argocd-initial-admin-secret
