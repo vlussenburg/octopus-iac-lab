@@ -1,0 +1,126 @@
+# Argo CD Applications for the demo-branch flavours of randomquotes.
+#
+# Each Octopus demo project (blue-green-, bg-preview-, octopus-native-bg-,
+# servicenow-cr-gate-randomquotes) has its `Update Argo CD Application
+# Image Tags` step look up Applications by annotation match — this
+# ApplicationSet generates the matching Applications.
+#
+# Each flavour reads its chart from its own demo branch, so the GitOps
+# shape stays self-contained per demo (blue-green → Argo Rollout atomic,
+# bg-preview → Argo Rollout gated + preview Service/Ingress) without
+# spilling demo-specific manifests into main's chart.
+#
+# octopus-native-bg and servicenow-cr-gate use a plain Deployment shape
+# — for now they point at main's chart since the cluster manifests are
+# identical to randomquotes (their special semantics live entirely on
+# the Octopus side). Switch their `branch` to their own demo branch if
+# you ever want to specialise.
+#
+# platform-hub-opa-randomquotes is intentionally absent — its OCL has
+# no Update Argo step (the demo's enforcement is K8s admission via
+# Gatekeeper, not GitOps drift).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: randomquotes-demos
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          # matrix only supports 2 sub-generators, so we nest:
+          #   (flavour × tenant) × (env × source)
+          - matrix:
+              generators:
+                - list:
+                    elements:
+                      - flavour: blue-green
+                        branch: refs/heads/demo/blue-green
+                        previewEnabled: "false"
+                      - flavour: bg-preview
+                        branch: refs/heads/demo/bg-preview
+                        previewEnabled: "true"
+                      - flavour: octopus-native-bg
+                        branch: HEAD
+                        previewEnabled: "false"
+                      - flavour: servicenow-cr-gate
+                        branch: HEAD
+                        previewEnabled: "false"
+                - list:
+                    elements:
+                      - tenant: acme-corp
+                        mood: comedy
+                        icon: "🃏"
+                        brandColor: "#F5C518"
+                        replicaCount: "3"
+                        tier: enterprise
+                      - tenant: globex
+                        mood: silicon-valley
+                        icon: "🚀"
+                        brandColor: "#00B0FF"
+                        replicaCount: "2"
+                        tier: pro
+                      - tenant: initech
+                        mood: stoic
+                        icon: "🧘"
+                        brandColor: "#7E57C2"
+                        replicaCount: "1"
+                        tier: free
+          - matrix:
+              generators:
+                - list:
+                    elements:
+                      - env: Dev
+                        envLower: dev
+                      - env: Production
+                        envLower: production
+                - list:
+                    elements:
+                      - source: local
+                      - source: saas
+  template:
+    metadata:
+      name: '{{.flavour}}-randomquotes-{{.source}}-{{.tenant}}-{{.envLower}}'
+      namespace: argocd
+      annotations:
+        argo.octopus.com/project: '{{.flavour}}-randomquotes'
+        argo.octopus.com/environment: '{{.envLower}}'
+        argo.octopus.com/tenant: '{{.tenant}}'
+      labels:
+        lab.octopus.com/source: '{{.source}}'
+        lab.octopus.com/tenant: '{{.tenant}}'
+        lab.octopus.com/flavour: '{{.flavour}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/vlussenburg/octopus-iac-lab
+        # Each flavour's chart is the source of truth on its own branch.
+        # The Octopus auto-update step also commits image.tag updates
+        # back to THIS branch — keeping the demo branch self-contained.
+        targetRevision: '{{.branch}}'
+        path: gitops/charts/randomquotes
+        helm:
+          releaseName: randomquotes
+          valueFiles:
+            - values-{{.source}}-{{.envLower}}.yaml
+          valuesObject:
+            replicaCount: '{{.replicaCount}}'
+            tier: '{{.tier}}'
+            tenant: '{{.tenant}}'
+            mood: '{{.mood}}'
+            icon: '{{.icon}}'
+            brandColor: '{{.brandColor}}'
+            watermark: ""
+            host: 'argo-{{.flavour}}-{{.source}}-{{.tenant}}-{{.envLower}}.localtest.me'
+            previewHost: '{{- if eq .previewEnabled "true" -}}argo-{{.flavour}}-preview-{{.source}}-{{.tenant}}-{{.envLower}}.localtest.me{{- end -}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'argo-randomquotes-{{.flavour}}-{{.source}}-{{.tenant}}-{{.envLower}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
