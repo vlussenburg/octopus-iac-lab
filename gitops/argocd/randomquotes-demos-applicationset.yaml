@@ -1,0 +1,131 @@
+# Argo CD Applications for the demo-branch flavours of randomquotes.
+#
+# Octopus's Update Argo CD Application Image Tags step on each demo
+# project (blue-green, bg-preview, octopus-native-bg, servicenow-cr-gate)
+# needs matching annotated Applications to discover. This ApplicationSet
+# fans out 4 flavours × 3 tenants × 2 envs × 2 sources = 48 Applications,
+# all rendered from gitops/charts/randomquotes via per-flavour values.
+#
+# Each Application:
+#   - annotation argo.octopus.com/project = <flavour>-randomquotes →
+#     matches the per-demo Octopus project name
+#   - destination.namespace = argo-randomquotes-<flavour>-<source>-<tenant>-<env>
+#   - workloadType + rollout.* chosen per flavour (Rollout for blue-green
+#     and bg-preview; Deployment for octopus-native-bg and
+#     servicenow-cr-gate, since those demos express their behaviour on the
+#     Octopus side rather than in the cluster manifests)
+#
+# platform-hub-opa-randomquotes intentionally isn't here — that demo has
+# no Update Argo CD step in its OCL (the policy enforcement happens on
+# the K8s agent push path via Gatekeeper).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: randomquotes-demos
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          # Two-level nest because matrix takes exactly 2 sub-generators:
+          # (flavour × tenant) × (env × source).
+          - matrix:
+              generators:
+                - list:
+                    elements:
+                      - flavour: blue-green
+                        workloadType: Rollout
+                        autoPromote: "true"
+                        previewEnabled: "false"
+                      - flavour: bg-preview
+                        workloadType: Rollout
+                        autoPromote: "false"
+                        previewEnabled: "true"
+                      - flavour: octopus-native-bg
+                        workloadType: Deployment
+                        autoPromote: "true"
+                        previewEnabled: "false"
+                      - flavour: servicenow-cr-gate
+                        workloadType: Deployment
+                        autoPromote: "true"
+                        previewEnabled: "false"
+                - list:
+                    elements:
+                      - tenant: acme-corp
+                        mood: comedy
+                        icon: "🃏"
+                        brandColor: "#F5C518"
+                        replicaCount: "3"
+                        tier: enterprise
+                      - tenant: globex
+                        mood: silicon-valley
+                        icon: "🚀"
+                        brandColor: "#00B0FF"
+                        replicaCount: "2"
+                        tier: pro
+                      - tenant: initech
+                        mood: stoic
+                        icon: "🧘"
+                        brandColor: "#7E57C2"
+                        replicaCount: "1"
+                        tier: free
+          - matrix:
+              generators:
+                - list:
+                    elements:
+                      - env: Dev
+                        envLower: dev
+                      - env: Production
+                        envLower: production
+                - list:
+                    elements:
+                      - source: local
+                      - source: saas
+  template:
+    metadata:
+      name: '{{.flavour}}-randomquotes-{{.source}}-{{.tenant}}-{{.envLower}}'
+      namespace: argocd
+      annotations:
+        argo.octopus.com/project: '{{.flavour}}-randomquotes'
+        argo.octopus.com/environment: '{{.envLower}}'
+        argo.octopus.com/tenant: '{{.tenant}}'
+      labels:
+        lab.octopus.com/source: '{{.source}}'
+        lab.octopus.com/tenant: '{{.tenant}}'
+        lab.octopus.com/flavour: '{{.flavour}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/vlussenburg/octopus-iac-lab
+        path: gitops/charts/randomquotes
+        targetRevision: HEAD
+        helm:
+          releaseName: randomquotes
+          valueFiles:
+            - values-{{.source}}-{{.envLower}}.yaml
+          valuesObject:
+            workloadType: '{{.workloadType}}'
+            rollout:
+              autoPromotionEnabled: '{{.autoPromote}}'
+              previewService:
+                enabled: '{{.previewEnabled}}'
+            previewHost: '{{- if eq .previewEnabled "true" -}}argo-{{.flavour}}-preview-{{.source}}-{{.tenant}}-{{.envLower}}.localtest.me{{- end -}}'
+            replicaCount: '{{.replicaCount}}'
+            tier: '{{.tier}}'
+            tenant: '{{.tenant}}'
+            mood: '{{.mood}}'
+            icon: '{{.icon}}'
+            brandColor: '{{.brandColor}}'
+            watermark: ""
+            host: 'argo-{{.flavour}}-{{.source}}-{{.tenant}}-{{.envLower}}.localtest.me'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'argo-randomquotes-{{.flavour}}-{{.source}}-{{.tenant}}-{{.envLower}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

@@ -10,6 +10,29 @@
 # not inline valuesObject — so image.tag has to live in a referenced
 # file to be reachable by the step.
 
+# Demo flavour selector. The main `randomquotes` apps use Deployment.
+# Demo flavours that need blue/green semantics on the GitOps path (the
+# blue-green and bg-preview demos) set this to Rollout via their
+# Application valuesObject, and the chart renders an Argo Rollout (and
+# optionally a preview Service + Ingress) instead.
+workloadType: Deployment
+
+rollout:
+  # Atomic vs gated blue/green. true → cutover when healthy (matches the
+  # blue-green demo); false → wait for an external promote signal (matches
+  # the bg-preview demo).
+  autoPromotionEnabled: true
+  previewService:
+    # When true, a randomquotes-preview Service is rendered and (if a
+    # previewHost value is set) a matching Ingress, exposing the candidate
+    # ReplicaSet at a separate URL while the active ingress keeps serving
+    # the old one.
+    enabled: false
+
+# Hostname for the preview Ingress. Empty by default — only the bg-preview
+# flavour sets this in its Application valuesObject.
+previewHost: ""
+
 image:
   # Full path is "ghcr.io/{{ .Values.image.repository }}:{{ .Values.image.tag }}".
   repository: vlussenburg/octopus-iac-lab

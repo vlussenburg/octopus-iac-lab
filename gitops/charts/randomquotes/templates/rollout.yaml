@@ -1,6 +1,9 @@
-{{- if eq (default "Deployment" .Values.workloadType) "Deployment" }}
-apiVersion: apps/v1
-kind: Deployment
+{{- if eq (default "Deployment" .Values.workloadType) "Rollout" }}
+# Argo Rollout — used by the demo flavours that need blue/green semantics
+# on the GitOps path (blue-green, bg-preview). Same image+config as the
+# Deployment shape; the strategy block is what differs.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: randomquotes
   labels:
@@ -14,6 +17,14 @@ spec:
   selector:
     matchLabels:
       app: randomquotes
+  strategy:
+    blueGreen:
+      activeService: randomquotes
+      {{- if .Values.rollout.previewService.enabled }}
+      previewService: randomquotes-preview
+      {{- end }}
+      autoPromotionEnabled: {{ .Values.rollout.autoPromotionEnabled }}
+      scaleDownDelaySeconds: 30
   template:
     metadata:
       labels:
@@ -23,8 +34,6 @@ spec:
         app.kubernetes.io/part-of: randomquotes
         tenant.octopus.com/tier: {{ .Values.tier | quote }}
       annotations:
-        # Roll the pod when the ConfigMap content changes — k8s doesn't
-        # auto-restart on volume-mount updates.
         configmap-checksum: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       containers:

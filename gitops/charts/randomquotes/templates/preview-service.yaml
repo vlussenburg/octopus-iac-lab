@@ -1,0 +1,17 @@
+{{- if and (eq (default "Deployment" .Values.workloadType) "Rollout") .Values.rollout.previewService.enabled }}
+# Preview Service — Rollouts controller binds this to the new ReplicaSet
+# while the active Service still serves the old one. Lets operators eyeball
+# the candidate before promoting.
+apiVersion: v1
+kind: Service
+metadata:
+  name: randomquotes-preview
+spec:
+  type: ClusterIP
+  selector:
+    app: randomquotes
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+{{- end }}
