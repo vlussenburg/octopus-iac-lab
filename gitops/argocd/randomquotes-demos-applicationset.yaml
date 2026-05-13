@@ -1,23 +1,24 @@
 # Argo CD Applications for the demo-branch flavours of randomquotes.
 #
-# Octopus's Update Argo CD Application Image Tags step on each demo
-# project (blue-green, bg-preview, octopus-native-bg, servicenow-cr-gate)
-# needs matching annotated Applications to discover. This ApplicationSet
-# fans out 4 flavours × 3 tenants × 2 envs × 2 sources = 48 Applications,
-# all rendered from gitops/charts/randomquotes via per-flavour values.
+# Each Octopus demo project (blue-green-, bg-preview-, octopus-native-bg-,
+# servicenow-cr-gate-randomquotes) has its `Update Argo CD Application
+# Image Tags` step look up Applications by annotation match — this
+# ApplicationSet generates the matching Applications.
 #
-# Each Application:
-#   - annotation argo.octopus.com/project = <flavour>-randomquotes →
-#     matches the per-demo Octopus project name
-#   - destination.namespace = argo-randomquotes-<flavour>-<source>-<tenant>-<env>
-#   - workloadType + rollout.* chosen per flavour (Rollout for blue-green
-#     and bg-preview; Deployment for octopus-native-bg and
-#     servicenow-cr-gate, since those demos express their behaviour on the
-#     Octopus side rather than in the cluster manifests)
+# Each flavour reads its chart from its own demo branch, so the GitOps
+# shape stays self-contained per demo (blue-green → Argo Rollout atomic,
+# bg-preview → Argo Rollout gated + preview Service/Ingress) without
+# spilling demo-specific manifests into main's chart.
 #
-# platform-hub-opa-randomquotes intentionally isn't here — that demo has
-# no Update Argo CD step in its OCL (the policy enforcement happens on
-# the K8s agent push path via Gatekeeper).
+# octopus-native-bg and servicenow-cr-gate use a plain Deployment shape
+# — for now they point at main's chart since the cluster manifests are
+# identical to randomquotes (their special semantics live entirely on
+# the Octopus side). Switch their `branch` to their own demo branch if
+# you ever want to specialise.
+#
+# platform-hub-opa-randomquotes is intentionally absent — its OCL has
+# no Update Argo step (the demo's enforcement is K8s admission via
+# Gatekeeper, not GitOps drift).
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -29,27 +30,23 @@ spec:
   generators:
     - matrix:
         generators:
-          # Two-level nest because matrix takes exactly 2 sub-generators:
-          # (flavour × tenant) × (env × source).
+          # matrix only supports 2 sub-generators, so we nest:
+          #   (flavour × tenant) × (env × source)
           - matrix:
               generators:
                 - list:
                     elements:
                       - flavour: blue-green
-                        workloadType: Rollout
-                        autoPromote: "true"
+                        branch: refs/heads/demo/blue-green
                         previewEnabled: "false"
                       - flavour: bg-preview
-                        workloadType: Rollout
-                        autoPromote: "false"
+                        branch: refs/heads/demo/bg-preview
                         previewEnabled: "true"
                       - flavour: octopus-native-bg
-                        workloadType: Deployment
-                        autoPromote: "true"
+                        branch: HEAD
                         previewEnabled: "false"
                       - flavour: servicenow-cr-gate
-                        workloadType: Deployment
-                        autoPromote: "true"
+                        branch: HEAD
                         previewEnabled: "false"
                 - list:
                     elements:
@@ -99,19 +96,16 @@ spec:
       project: default
       source:
         repoURL: https://github.com/vlussenburg/octopus-iac-lab
+        # Each flavour's chart is the source of truth on its own branch.
+        # The Octopus auto-update step also commits image.tag updates
+        # back to THIS branch — keeping the demo branch self-contained.
+        targetRevision: '{{.branch}}'
         path: gitops/charts/randomquotes
-        targetRevision: HEAD
         helm:
           releaseName: randomquotes
           valueFiles:
             - values-{{.source}}-{{.envLower}}.yaml
           valuesObject:
-            workloadType: '{{.workloadType}}'
-            rollout:
-              autoPromotionEnabled: '{{.autoPromote}}'
-              previewService:
-                enabled: '{{.previewEnabled}}'
-            previewHost: '{{- if eq .previewEnabled "true" -}}argo-{{.flavour}}-preview-{{.source}}-{{.tenant}}-{{.envLower}}.localtest.me{{- end -}}'
             replicaCount: '{{.replicaCount}}'
             tier: '{{.tier}}'
             tenant: '{{.tenant}}'
@@ -120,6 +114,7 @@ spec:
             brandColor: '{{.brandColor}}'
             watermark: ""
             host: 'argo-{{.flavour}}-{{.source}}-{{.tenant}}-{{.envLower}}.localtest.me'
+            previewHost: '{{- if eq .previewEnabled "true" -}}argo-{{.flavour}}-preview-{{.source}}-{{.tenant}}-{{.envLower}}.localtest.me{{- end -}}'
       destination:
         server: https://kubernetes.default.svc
         namespace: 'argo-randomquotes-{{.flavour}}-{{.source}}-{{.tenant}}-{{.envLower}}'

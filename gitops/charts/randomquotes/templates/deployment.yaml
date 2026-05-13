@@ -1,4 +1,3 @@
-{{- if eq (default "Deployment" .Values.workloadType) "Deployment" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -42,4 +41,3 @@ spec:
         - name: config
           configMap:
             name: randomquotes-config
-{{- end }}
