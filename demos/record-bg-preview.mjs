@@ -419,120 +419,6 @@ async function banner(page, label) {
 // function as a no-op shim so the scene code reads the same.
 async function fitTtyd(_page) { /* nothing to fit anymore */ }
 
-// WebM recordings don't capture the OS cursor, so a Playwright click
-// looks like the page just reacts on its own. Inject a synthetic cursor
-// + button highlight + a slow approach animation so the audience can
-// see WHERE we clicked and that it was a click. Returns the bounding
-// box of the clicked element for the caller's interest.
-async function clickVisibly(page, selector, label) {
-  const el = page.locator(selector).first();
-  const box = await el.boundingBox();
-  if (!box) throw new Error(`clickVisibly: ${selector} has no bounding box`);
-  const cx = Math.round(box.x + box.width / 2);
-  const cy = Math.round(box.y + box.height / 2);
-
-  // Inject (or update) the fake cursor + highlight overlay. CSS-only,
-  // fixed-position so navigation doesn't break it.
-  await page.evaluate(({ cx, cy, sel, label }) => {
-    const ensure = (id, tag = "div") => {
-      let n = document.getElementById(id);
-      if (!n) { n = document.createElement(tag); n.id = id; document.documentElement.appendChild(n); }
-      return n;
-    };
-
-    // The cursor itself — an SVG arrow, fixed-position so it sits over
-    // the page regardless of scroll.
-    const cur = ensure("__demo_cursor");
-    cur.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.6))">
-      <path d="M5 3 L5 19 L9 15 L11 21 L14 20 L12 14 L18 14 Z" fill="#ffffff" stroke="#000" stroke-width="1.5" stroke-linejoin="round"/>
-    </svg>`;
-    cur.style.cssText = [
-      "position:fixed",
-      "left:0",
-      "top:0",
-      "z-index:2147483646",
-      "pointer-events:none",
-      "transform:translate(40vw,50vh)",
-      "transition:transform 1.2s cubic-bezier(.45,.05,.55,.95)",
-    ].join(";");
-
-    // Highlight ring under the cursor target. Drawn outside the element
-    // so we don't perturb the page's own layout.
-    const ring = ensure("__demo_ring");
-    const target = document.querySelector(sel);
-    if (target) {
-      const r = target.getBoundingClientRect();
-      ring.style.cssText = [
-        "position:fixed",
-        `left:${r.left - 8}px`,
-        `top:${r.top - 8}px`,
-        `width:${r.width + 16}px`,
-        `height:${r.height + 16}px`,
-        "border:3px solid #ffb000",
-        "border-radius:8px",
-        "box-shadow:0 0 0 9999px rgba(0,0,0,0.0), 0 0 24px rgba(255,176,0,0.7)",
-        "z-index:2147483645",
-        "pointer-events:none",
-        "animation:__demo_pulse 0.9s ease-in-out infinite alternate",
-        "opacity:1",
-        "transition:opacity 0.3s",
-      ].join(";");
-    }
-
-    // Keyframes (idempotent).
-    if (!document.getElementById("__demo_kf")) {
-      const s = document.createElement("style");
-      s.id = "__demo_kf";
-      s.textContent = `
-        @keyframes __demo_pulse { from{box-shadow:0 0 14px rgba(255,176,0,0.6)} to{box-shadow:0 0 28px rgba(255,176,0,0.95)} }
-        @keyframes __demo_ripple { from{transform:scale(0.4);opacity:0.9} to{transform:scale(2.5);opacity:0} }
-      `;
-      document.head.appendChild(s);
-    }
-    return { cx, cy };
-  }, { cx, cy, sel: selector, label: label || "" });
-
-  // Move synthetic cursor to the target. We use the same coords for
-  // Playwright's real mouse so :hover effects (if any) trigger.
-  await page.mouse.move(Math.round(cx / 2), Math.round(cy / 2), { steps: 25 });
-  await sleep(150);
-  await page.evaluate(({ cx, cy }) => {
-    const c = document.getElementById("__demo_cursor");
-    if (c) c.style.transform = `translate(${cx - 2}px, ${cy - 2}px)`;
-  }, { cx, cy });
-  await page.mouse.move(cx, cy, { steps: 30 });
-  await sleep(1400); // let the audience read the highlight
-
-  // Click ripple — a brief expanding circle at the cursor.
-  await page.evaluate(({ cx, cy }) => {
-    const r = document.createElement("div");
-    r.style.cssText = [
-      "position:fixed",
-      `left:${cx - 14}px`,
-      `top:${cy - 14}px`,
-      "width:28px",
-      "height:28px",
-      "border-radius:50%",
-      "background:rgba(255,176,0,0.6)",
-      "z-index:2147483647",
-      "pointer-events:none",
-      "animation:__demo_ripple 0.6s ease-out forwards",
-    ].join(";");
-    document.documentElement.appendChild(r);
-    setTimeout(() => r.remove(), 700);
-  }, { cx, cy });
-  await sleep(250);
-
-  await el.click();
-  // Fade the ring out so the post-click UI is unobscured.
-  await page.evaluate(() => {
-    const ring = document.getElementById("__demo_ring");
-    if (ring) { ring.style.opacity = "0"; setTimeout(() => ring.remove(), 600); }
-    const cur = document.getElementById("__demo_cursor");
-    if (cur) { setTimeout(() => cur.remove(), 600); }
-  });
-}
-
 async function dismissOctoChrome(page) {
   for (const sel of [
     'button[aria-label="Close help sidebar"]',
@@ -664,7 +550,7 @@ async function dismissOctoChrome(page) {
       const b = page.locator(sel).first();
       if (await b.isVisible().catch(() => false)) {
         log(`pre-click ${sel}`);
-        await clickVisibly(page, sel, "Take responsibility");
+        await b.click().catch(() => {});
         await sleep(1500);
         break;
       }
@@ -680,7 +566,7 @@ async function dismissOctoChrome(page) {
       const btn = page.locator(sel).first();
       if (await btn.isVisible().catch(() => false)) {
         log(`clicking ${sel}`);
-        await clickVisibly(page, sel, "Proceed");
+        await btn.click().catch(() => {});
         clicked = true;
         break;
       }
