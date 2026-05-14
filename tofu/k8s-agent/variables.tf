@@ -62,6 +62,13 @@ variable "sealed_secrets_chart_version" {
   default     = "2.*"
 }
 
+variable "sealed_secrets_tls_b64" {
+  type        = string
+  description = "Base64 of `kubectl get secrets -l sealedsecrets.bitnami.com/sealed-secrets-key=active -n kube-system -o yaml`. Persists the controller's keypair across cluster resets so SealedSecrets in git stay decryptable. Empty on first install — the post-install step writes the freshly-generated key back to .env for the next run."
+  default     = ""
+  sensitive   = true
+}
+
 variable "gatekeeper_chart_version" {
   type        = string
   description = "OPA Gatekeeper helm chart version constraint. Admission-side enforcement of Platform Hub-published Rego — pairs with the in-deploy conftest gate that surfaces violations in the Octopus task log."
