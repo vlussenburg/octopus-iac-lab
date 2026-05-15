@@ -92,18 +92,49 @@ async function octoPost(p, body) {
 
 import { execSync } from "node:child_process";
 
-// Latest semver release. The deploy click flow uses the form
-// deep-link with env+tenant pre-selected — that endpoint works
-// for both a first-time Production push and a re-deploy of the
-// same release, so we don't need to walk backwards looking for a
-// "Production pending" cell.
+// Pick a release that's NOT the version currently running in
+// Production for our tenant. Octopus's deploy form auto-skips
+// tenants whose current Production version matches the release
+// being deployed, so deploying the live version is a no-op. This
+// is "next if exists, previous otherwise":
+//   - Newest semver release with a version > live → roll forward.
+//   - Else newest semver release with a version != live → roll
+//     back (also fires a fresh CR, also exercises the gate).
 async function resolveRelease() {
+  const liveTag = currentLiveTag() || "0.0.0";
+  log(`Production / ${TENANT_SLUG} currently running: ${liveTag}`);
   const releases = await octoGet(`/api/${SPACE_ID}/projects/${PROJECT_ID}/releases?take=10`);
   const semver = (releases.Items || []).filter((r) => /^\d+\.\d+\.\d+$/.test(r.Version));
   if (!semver.length) throw new Error("no semver releases on the project");
-  const release = semver[0];
+  const release =
+    semver.find((r) => isNewer(liveTag, r.Version)) ||
+    semver.find((r) => r.Version !== liveTag);
+  if (!release) throw new Error(`no release differs from the current live tag ${liveTag}`);
   log(`using release ${release.Version} (${release.Id})`);
   return { release };
+}
+
+// "Current live" = whatever the live Production pod is running.
+function currentLiveTag() {
+  try {
+    const img = execSync(
+      `kubectl get pods -n ${NS} -l app=randomquotes ` +
+      `-o jsonpath='{.items[0].spec.containers[0].image}'`,
+      { encoding: "utf8" },
+    ).trim();
+    return img.split(":").pop() || "";
+  } catch { return ""; }
+}
+
+function isNewer(a, b) {
+  const p = (v) => v.split(/[^0-9]+/).filter(Boolean).map(Number);
+  const xs = p(a), ys = p(b);
+  for (let i = 0; i < Math.max(xs.length, ys.length); i++) {
+    const x = xs[i] ?? 0, y = ys[i] ?? 0;
+    if (y > x) return true;
+    if (y < x) return false;
+  }
+  return false;
 }
 
 // Cancel sibling tasks the auto-trigger fans out across the other
@@ -161,17 +192,17 @@ async function submitProductionDeployViaUI(page, release) {
   const tenants = await octoGet(`/api/${SPACE_ID}/tenants?name=${TENANT_SLUG}`);
   const tenantId = tenants.Items[0].Id;
 
-  // Scene a: deployments grid filtered to this release.
+  // Scene a: deployments grid filtered to this release. Kept brief —
+  // the grid is just context; the click + gate are what matter.
   const gridUrl =
     `${OCTO_URL}/app#/${SPACE_ID}/projects/${PROJECT_SLUG}` +
     `/deployments?groupBy=None&page=1&pageSize=50&release=${release.Id}`;
   log(`opening deployments grid for ${release.Version}`);
   await page.goto(gridUrl, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
-  await page.waitForTimeout(4000);
+  await page.waitForTimeout(2500);
   await dismissOctoChrome(page);
-  await banner(page, `Deployments grid — ready to push release ${release.Version} to Production / ${TENANT_SLUG}`);
-  await page.waitForTimeout(5000);
+  await banner(page, `Deployments grid — ready to push ${release.Version} to Production / ${TENANT_SLUG}`);
+  await page.waitForTimeout(2000);
 
   // Scene b: pre-populated deploy form.
   const deployFormUrl =
@@ -180,15 +211,16 @@ async function submitProductionDeployViaUI(page, release) {
     `?environmentIds=${ENV_ID}&tenantIds=${tenantId}`;
   log(`opening deploy form for Production / ${TENANT_SLUG}`);
   await page.goto(deployFormUrl, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
-  await page.waitForTimeout(3000);
-  await dismissOctoChrome(page);
-  await banner(page, `Operator clicks Deploy — ${release.Version} → Production / ${TENANT_SLUG}`);
-  await page.waitForTimeout(2500);
-
-  log("  click Deploy");
+  // Wait for the Deploy button to become enabled — that's the signal
+  // that env+tenant have loaded and the form is ready. Cheaper and
+  // more reliable than a fixed sleep + networkidle.
   const deployBtn = page.locator('button[title="Deploy"]:not([disabled])').first();
   await deployBtn.waitFor({ state: "visible", timeout: 30_000 });
+  await dismissOctoChrome(page);
+  await banner(page, `Operator clicks Deploy — ${release.Version} → Production / ${TENANT_SLUG}`);
+  await page.waitForTimeout(1500);
+
+  log("  click Deploy");
   await deployBtn.click();
 
   let deploymentId;
@@ -259,6 +291,29 @@ async function setBusinessRule(active) {
     body: JSON.stringify({ active: active ? "true" : "false" }),
   });
   if (!r.ok) throw new Error(`toggle BR → ${r.status}`);
+}
+
+// Octopus's ITSM integration dedupes CRs by (project, release, env) —
+// re-deploying a release reuses any prior CR. After the first demo run
+// that CR is already in state=Implement, approval=approved, so the
+// "pending → approve" arc never plays. Delete the existing one(s)
+// pre-roll so Octopus mints a fresh CR on the next deploy click.
+async function purgeExistingCRs(release) {
+  const auth = await snowAuthHeader();
+  const q = `short_descriptionSTARTSWITHOctopus^short_descriptionLIKEversion ${release.Version}^short_descriptionLIKETo "Production"`;
+  const r = await fetch(
+    `${SNOW_URL}/api/now/table/change_request?sysparm_query=${encodeURIComponent(q)}&sysparm_fields=sys_id,number`,
+    { headers: { Authorization: auth } },
+  ).then((r) => r.json());
+  const items = r.result || [];
+  if (!items.length) return;
+  for (const cr of items) {
+    const del = await fetch(`${SNOW_URL}/api/now/table/change_request/${cr.sys_id}`, {
+      method: "DELETE",
+      headers: { Authorization: auth },
+    });
+    log(`pre: deleted existing CR ${cr.number} (HTTP ${del.status})`);
+  }
 }
 
 // The SNow demo is about the *Octopus gate*, not the SNow workflow —
@@ -375,6 +430,7 @@ async function banner(page, label) {
   await cancelOtherQueued();
   await ensureDevDeployed(release);
   await cancelOtherQueued();
+  await purgeExistingCRs(release);
 
   const browser = await chromium.launch({ headless: false, slowMo: 200 });
   const VIEW = { width: 1680, height: 1000 };
