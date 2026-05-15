@@ -92,19 +92,17 @@ async function octoPost(p, body) {
 
 import { execSync } from "node:child_process";
 
-// `latest-1` rather than `latest`. The newest release usually has its
-// auto-trigger Dev deploys finishing or already mirrored across the
-// Production cells (the trigger fan-out hits Dev for every tenant);
-// picking one release back gives a reliably "Dev green, Production
-// pending" cell to deploy from. That's the normal "next push" demo
-// state, and the per-tenant `Deploy...` link in the grid only renders
-// when Production is actually pending.
+// Latest semver release. The deploy click flow uses the form
+// deep-link with env+tenant pre-selected — that endpoint works
+// for both a first-time Production push and a re-deploy of the
+// same release, so we don't need to walk backwards looking for a
+// "Production pending" cell.
 async function resolveRelease() {
   const releases = await octoGet(`/api/${SPACE_ID}/projects/${PROJECT_ID}/releases?take=10`);
   const semver = (releases.Items || []).filter((r) => /^\d+\.\d+\.\d+$/.test(r.Version));
-  if (semver.length < 2) throw new Error("need at least two semver releases on the project");
-  const release = semver[1];
-  log(`using release ${release.Version} (${release.Id}) — second-latest`);
+  if (!semver.length) throw new Error("no semver releases on the project");
+  const release = semver[0];
+  log(`using release ${release.Version} (${release.Id})`);
   return { release };
 }
 
@@ -151,45 +149,42 @@ async function ensureDevDeployed(release) {
 }
 
 // Drive the Octopus UI to create a Production deployment of `release`
-// for the target tenant. The "right" entrypoint is the project's
-// deployments grid (filtered to this release): every env × tenant cell
-// has a per-cell "Deploy..." link that opens the deploy form fully
-// pre-populated. From there it's one more click ("Deploy") to submit.
-//
-// The pre-populated form needs the URL params `environmentIds` and
-// `tenantIds` (both plural) — Octopus's older snake_case singular form
-// the recorder previously used is silently ignored.
+// for the target tenant. Two on-camera scenes:
+//   - Show the deployments grid filtered to this release (so the
+//     operator sees the current Dev/Prod state).
+//   - Navigate to the pre-populated deploy form via the same deeplink
+//     the grid's per-tenant "Deploy..." link uses (`environmentIds`
+//     + `tenantIds`, both plural). Works whether or not the Production
+//     cell already has an existing deployment — a redeploy lands on
+//     the same form.
 async function submitProductionDeployViaUI(page, release) {
   const tenants = await octoGet(`/api/${SPACE_ID}/tenants?name=${TENANT_SLUG}`);
   const tenantId = tenants.Items[0].Id;
 
+  // Scene a: deployments grid filtered to this release.
   const gridUrl =
     `${OCTO_URL}/app#/${SPACE_ID}/projects/${PROJECT_SLUG}` +
     `/deployments?groupBy=None&page=1&pageSize=50&release=${release.Id}`;
-  log(`opening deployments grid for ${release.Version} (${release.Id})`);
+  log(`opening deployments grid for ${release.Version}`);
   await page.goto(gridUrl, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
   await page.waitForTimeout(4000);
-  await page.screenshot({ path: path.join(OUT, "snow-grid.png") }).catch(() => {});
   await dismissOctoChrome(page);
-  await banner(page, `Operator picks Production / ${TENANT_SLUG} for release ${release.Version}`);
-  await page.waitForTimeout(2000);
+  await banner(page, `Deployments grid — ready to push release ${release.Version} to Production / ${TENANT_SLUG}`);
+  await page.waitForTimeout(5000);
 
-  // The grid renders TWO "Deploy" anchors that match a href-based
-  // filter for our env+tenant:
-  //   - per-tenant: text="Deploy...",     title=""              ← we want this
-  //   - env-wide:   text="Deploy all...", title="Deploy all..."  ← skip
-  // The title attribute on the per-tenant link is empty in current
-  // Octopus builds, so we filter by exact visible text instead.
-  log(`  click Deploy… (Production / ${TENANT_SLUG})`);
-  const deployLink = page.locator(
-    `a[href*="environmentIds=${ENV_ID}"][href*="tenantIds=${tenantId}"]`,
-  ).filter({ hasText: /^Deploy\.\.\.$/ }).first();
-  await deployLink.waitFor({ state: "attached", timeout: 15_000 });
-  await deployLink.scrollIntoViewIfNeeded();
-  await deployLink.click();
-  await page.waitForTimeout(4000);
+  // Scene b: pre-populated deploy form.
+  const deployFormUrl =
+    `${OCTO_URL}/app#/${SPACE_ID}/projects/${PROJECT_SLUG}` +
+    `/deployments/releases/${release.Version}/deployments/create` +
+    `?environmentIds=${ENV_ID}&tenantIds=${tenantId}`;
+  log(`opening deploy form for Production / ${TENANT_SLUG}`);
+  await page.goto(deployFormUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+  await page.waitForTimeout(3000);
   await dismissOctoChrome(page);
+  await banner(page, `Operator clicks Deploy — ${release.Version} → Production / ${TENANT_SLUG}`);
+  await page.waitForTimeout(2500);
 
   log("  click Deploy");
   const deployBtn = page.locator('button[title="Deploy"]:not([disabled])').first();
