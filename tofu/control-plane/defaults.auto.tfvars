@@ -4,3 +4,10 @@
 cac_repo_url  = "https://github.com/vlussenburg/octopus-iac-lab.git"
 cac_branch    = "main"
 cac_base_path = ".octopus"
+
+# Production env is permanently marked change-controlled. Has no effect on
+# projects without ServiceNowChangeControlled = true, so it's safe to leave
+# on for the whole lab — only the servicenow-cr-gate demo project actually
+# fires the CR. Setting this here means the env wakes up demo-ready after
+# any tofu wipe / `make destroy + apply`.
+enable_servicenow_change_control = true
