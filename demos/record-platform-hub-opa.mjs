@@ -149,10 +149,22 @@ async function submitDeployViaUI(page, release, replicas, tenantId) {
     `?environmentIds=${ENV_ID}&tenantIds=${tenantId}`;
   log(`open deploy form (Replicas=${replicas})`);
   await page.goto(url, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(3000);
+  await dismissOctoChrome(page);
+
+  // Form ships with "Skip tenants where <version> is current on <env>"
+  // checked. When the release we're deploying is already the live
+  // version for our tenant (which it will be after the first run of
+  // this demo), it filters every tenant out and keeps Deploy disabled.
+  const skipBox = page.getByRole("checkbox", { name: /Skip tenants/i }).first();
+  if (await skipBox.isChecked().catch(() => false)) {
+    log("  uncheck Skip-already-deployed filter");
+    await skipBox.uncheck();
+    await page.waitForTimeout(800);
+  }
 
   const deployBtn = page.locator('button[title="Deploy"]:not([disabled])').first();
   await deployBtn.waitFor({ state: "visible", timeout: 30_000 });
-  await dismissOctoChrome(page);
 
   log(`  fill Replicas = ${replicas}`);
   const replicasInput = page.getByLabel(/Replica count/i).first();
@@ -213,16 +225,45 @@ async function submitDeployViaUI(page, release, replicas, tenantId) {
     await dismissOctoChrome(page);
     await banner(page, "Gatekeeper denies the manifest at admission", "#7a1f1f");
     await waitForTaskState(bad.taskId, ["Failed"], 180_000);
+    // Open Task Log tab + scroll to the denial line so it's actually
+    // readable on screen. Task Summary collapses the failure to a
+    // generic "exit code 255".
     await page.reload({ waitUntil: "domcontentloaded" });
     await dismissOctoChrome(page);
+    const logTab = page.getByRole("tab", { name: "Task Log" }).first();
+    await logTab.waitFor({ state: "visible", timeout: 15_000 });
+    await logTab.click();
+    await page.waitForTimeout(2500);
+    // Zoom the page so the denial text is actually readable at 1680px
+    // record width — Octopus's log shows the kubectl JSON patch on
+    // long wrapped lines and the policy message is just one of them.
+    await page.evaluate(() => { document.body.style.zoom = "1.4"; });
+    await page.waitForTimeout(500);
+
+    // Scroll the denial line into view.
+    const denialLine = page
+      .getByText(/admission webhook "validation.gatekeeper.sh" denied/, { exact: false })
+      .first();
+    if (await denialLine.isVisible().catch(() => false)) {
+      await denialLine.scrollIntoViewIfNeeded();
+    } else {
+      await page.evaluate(() => {
+        const c = document.querySelector('[class*="taskLog"],[data-testid*="task-log"],main');
+        if (c) c.scrollTop = c.scrollHeight;
+      });
+    }
+    await page.waitForTimeout(800);
     await banner(
       page,
-      `Task Failed — tier=enterprise allows max ${TIER_CAP} replicas, got ${BAD_REPLICAS}`,
+      `Task Failed — admission denied: tier=enterprise allows max ${TIER_CAP} replicas, got ${BAD_REPLICAS}`,
       "#7a1f1f",
     );
-    await sleep(12_000);
+    await sleep(14_000);
 
     log(`scene 4: retry with Replicas=${TIER_CAP} (at cap)`);
+    // Reset the zoom we applied in the failure scene before opening
+    // the new deploy form — the form lays out poorly at 1.4x.
+    await page.evaluate(() => { document.body.style.zoom = "1"; }).catch(() => {});
     await banner(page, `Operator retries with Replicas=${TIER_CAP} — matches tier cap`, "#1a5c3a");
     const good = await submitDeployViaUI(page, release, TIER_CAP, tenantId);
     const goodTaskUrl =
