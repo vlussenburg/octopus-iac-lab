@@ -37,3 +37,9 @@ variable "cac_base_path" {
   description = "Path inside the repo where Octopus stores OCL files."
   default     = "cac"
 }
+
+variable "enable_servicenow_change_control" {
+  type        = bool
+  description = "Marks the Production environment as ServiceNow change-controlled. Defaults on lab-wide — the env-level flag is harmless without an actual SNow connection (which lives in tofu/servicenow/, applied only when the snow demo is active). Set to false to drop the marker entirely."
+  default     = true
+}

@@ -30,3 +30,17 @@ data "terraform_remote_state" "control_plane" {
     path = "../control-plane/terraform.tfstate"
   }
 }
+
+# Reads the ServiceNow ITSM connection ID — but only if the snow stack has
+# been applied. The `defaults = {}` lets this resolve to an empty object on
+# worktrees that don't run the snow stack, so app-randomquotes keeps
+# working without it.
+data "terraform_remote_state" "servicenow" {
+  backend = "local"
+  config = {
+    path = "../servicenow/terraform.tfstate"
+  }
+  defaults = {
+    connection_id = ""
+  }
+}
