@@ -29,16 +29,21 @@ resource "octopusdeploy_project" "randomquotes" {
   }
 }
 
-# Connect each tenant to the project and to both environments. Without this,
-# Octopus refuses to create a tenant-scoped release for that tenant — even if
-# the tenant exists.
+# Connect each tenant to the project. Tenants opt into specific
+# environments per project — that's how Octopus models "this customer's
+# lifecycle is shorter than that one's". acme-corp gets the full
+# Dev → Production lifecycle (acts as the canary tenant for new
+# releases); globex + initech are Production-only (changes pass through
+# Dev via acme-corp's run, then promote forward to the rest).
 resource "octopusdeploy_tenant_project" "tenants" {
   for_each = local.cp.tenant_ids
 
   tenant_id  = each.value
   project_id = octopusdeploy_project.randomquotes.id
-  environment_ids = [
+  environment_ids = each.key == "acme_corp" ? [
     local.cp.environment_ids.dev,
+    local.cp.environment_ids.production,
+  ] : [
     local.cp.environment_ids.production,
   ]
 }

@@ -84,8 +84,13 @@ resource "octopusdeploy_tenant_project" "branch_demo_tenants" {
 
   tenant_id  = local.cp.tenant_ids[each.value.tenant]
   project_id = octopusdeploy_project.branch_demo[each.value.branch].id
-  environment_ids = [
+  # Per-tenant lifecycle scope: acme-corp lives on Dev + Production
+  # (full lifecycle), globex + initech are Production-only — same
+  # rule as project.tf, applied to every demo branch.
+  environment_ids = each.value.tenant == "acme_corp" ? [
     local.cp.environment_ids.dev,
+    local.cp.environment_ids.production,
+  ] : [
     local.cp.environment_ids.production,
   ]
 }

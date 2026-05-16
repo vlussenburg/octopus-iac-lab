@@ -30,8 +30,13 @@ spec:
   generators:
     - matrix:
         generators:
-          # matrix only supports 2 sub-generators, so we nest:
-          #   (flavour × tenant) × (env × source)
+          # (flavour × tenantEnv) × source — tenantEnv is a single
+          # flattened list rather than tenant × env Cartesian, so we
+          # can encode the lab's per-tenant lifecycle scoping directly:
+          # acme-corp lives on Dev + Production (canary tenant); globex
+          # and initech are Production-only. Mirrors the
+          # `octopusdeploy_tenant_project.environment_ids` rule in
+          # tofu/app-randomquotes/{project,branch_demos}.tf.
           - matrix:
               generators:
                 - list:
@@ -51,35 +56,41 @@ spec:
                 - list:
                     elements:
                       - tenant: acme-corp
+                        env: Dev
+                        envLower: dev
+                        mood: comedy
+                        icon: "🃏"
+                        brandColor: "#F5C518"
+                        replicaCount: "3"
+                        tier: enterprise
+                      - tenant: acme-corp
+                        env: Production
+                        envLower: production
                         mood: comedy
                         icon: "🃏"
                         brandColor: "#F5C518"
                         replicaCount: "3"
                         tier: enterprise
                       - tenant: globex
+                        env: Production
+                        envLower: production
                         mood: silicon-valley
                         icon: "🚀"
                         brandColor: "#00B0FF"
                         replicaCount: "2"
                         tier: pro
                       - tenant: initech
+                        env: Production
+                        envLower: production
                         mood: stoic
                         icon: "🧘"
                         brandColor: "#7E57C2"
                         replicaCount: "1"
                         tier: free
-          - matrix:
-              generators:
-                - list:
-                    elements:
-                      - env: Dev
-                        envLower: dev
-                      - env: Production
-                        envLower: production
-                - list:
-                    elements:
-                      - source: local
-                      - source: saas
+          - list:
+              elements:
+                - source: local
+                - source: saas
   template:
     metadata:
       name: '{{.flavour}}-randomquotes-{{.source}}-{{.tenant}}-{{.envLower}}'

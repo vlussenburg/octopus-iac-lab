@@ -80,7 +80,7 @@ Downstream stacks read upstream outputs via `terraform_remote_state` with `backe
 
 ### Tenants + namespaces
 
-Three tenants (`acme-corp`/`globex`/`initech`), each tagged with `tier/{free,pro,enterprise}` (drives replicas + watermark), `mood/{comedy,silicon-valley,stoic}` (drives quote pool), and the `app/randomquotes` participation tag. Combined with two envs and two `Source` values (local/saas), this fans out to **12 namespaces** of the form `randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}`.
+Three tenants (`acme-corp`/`globex`/`initech`), each tagged with `tier/{free,pro,enterprise}` (drives replicas + watermark), `mood/{comedy,silicon-valley,stoic}` (drives quote pool), and the `app/randomquotes` participation tag. **Per-tenant lifecycle scope:** acme-corp is connected to both `Dev` and `Production` (full lifecycle, acts as the canary tenant); globex + initech are `Production`-only — modelling "different customers have different lifecycles". Combined with the envs each tenant participates in and two `Source` values (local/saas), this fans out to **8 namespaces per project** of the form `randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}` — acme-corp×{Dev,Prod} + globex×Prod + initech×Prod, doubled by Source.
 
 `Source` is supplied via the `Lab Defaults` library variable set, which differs per Octopus instance — it's not derived from the URL via Substring (we tried; library variable set is cleaner).
 
