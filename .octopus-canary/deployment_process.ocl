@@ -27,8 +27,8 @@ step "deploy-manifests" {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
             Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
-                apiVersion: apps/v1
-                kind: Deployment
+                apiVersion: argoproj.io/v1alpha1
+                kind: Rollout
                 metadata:
                   name: randomquotes
                   labels:
@@ -39,6 +39,23 @@ step "deploy-manifests" {
                   selector:
                     matchLabels:
                       app: randomquotes
+                  strategy:
+                    canary:
+                      canaryService: randomquotes-canary
+                      stableService: randomquotes
+                      trafficRouting:
+                        nginx:
+                          stableIngress: randomquotes
+                      scaleDownDelaySeconds: 30
+                      steps:
+                        - setWeight: 20
+                        - pause: { duration: 20 }
+                        - setWeight: 40
+                        - pause: { duration: 20 }
+                        - setWeight: 60
+                        - pause: { duration: 20 }
+                        - setWeight: 80
+                        - pause: { duration: 20 }
                   template:
                     metadata:
                       labels:
@@ -69,6 +86,19 @@ step "deploy-manifests" {
                 kind: Service
                 metadata:
                   name: randomquotes
+                spec:
+                  type: ClusterIP
+                  selector:
+                    app: randomquotes
+                  ports:
+                    - protocol: TCP
+                      port: 80
+                      targetPort: 80
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: randomquotes-canary
                 spec:
                   type: ClusterIP
                   selector:

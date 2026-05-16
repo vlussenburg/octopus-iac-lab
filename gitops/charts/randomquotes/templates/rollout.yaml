@@ -1,6 +1,16 @@
 {{- if .Values.image.tag }}
-apiVersion: apps/v1
-kind: Deployment
+# Argo Rollouts canary with NGINX trafficRouting. The chart's plain
+# Deployment is replaced by this Rollout for the canary demo; Argo
+# Rollouts manages the stableService / canaryService selectors and
+# auto-creates the canary Ingress (mirrored off stableIngress) carrying
+# the nginx.ingress.kubernetes.io/canary + canary-weight annotations
+# that actually shift traffic between ReplicaSets.
+#
+# Mirrors the agent-path Rollout in
+# .octopus-canary/deployment_process.ocl — same steps, same weights, so
+# both delivery paths render the same canary shape on the cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: randomquotes
   labels:
@@ -14,6 +24,23 @@ spec:
   selector:
     matchLabels:
       app: randomquotes
+  strategy:
+    canary:
+      canaryService: randomquotes-canary
+      stableService: randomquotes
+      trafficRouting:
+        nginx:
+          stableIngress: randomquotes
+      scaleDownDelaySeconds: 30
+      steps:
+        - setWeight: 20
+        - pause: { duration: 20 }
+        - setWeight: 40
+        - pause: { duration: 20 }
+        - setWeight: 60
+        - pause: { duration: 20 }
+        - setWeight: 80
+        - pause: { duration: 20 }
   template:
     metadata:
       labels:
