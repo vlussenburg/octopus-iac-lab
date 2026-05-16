@@ -1,0 +1,12 @@
+# Demo branches each ship a `.octopus-<demo>/` directory — Octopus's CaC
+# enforces a unique base_path per project, so each demo project gets its
+# own renamed clone of the mainline `.octopus/` tree. Most files inside
+# are identical to main; only deployment_process.ocl and variables.ocl
+# actually differ.
+#
+# Marking the renamed directories as linguist-generated tells GitHub to
+# collapse them in PR diffs by default, so reviewers focus on the actual
+# demo-specific changes (tofu, gitops, scripts) rather than scrolling past
+# the OCL scaffolding. The files are still indexed and reviewable when
+# expanded; this only changes the default-collapsed state.
+.octopus-*/** linguist-generated=true
