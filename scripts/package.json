@@ -1,0 +1,11 @@
+{
+  "name": "octopus-iac-lab-scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "refresh-snow-pdi": "node refresh-snow-pdi.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}
