@@ -10,6 +10,18 @@ variable "Replicas" {
     }
 }
 
+variable "Tier" {
+    value "free" {
+        tenant_tag = ["tier/free"]
+    }
+    value "pro" {
+        tenant_tag = ["tier/pro"]
+    }
+    value "enterprise" {
+        tenant_tag = ["tier/enterprise"]
+    }
+}
+
 variable "Featured.Mood" {
     value "comedy" {
         tenant_tag = ["mood/comedy"]

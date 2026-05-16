@@ -33,6 +33,7 @@ step "deploy-manifests" {
                   name: randomquotes
                   labels:
                     app: randomquotes
+                    tenant.octopus.com/tier: "#{Tier}"
                 spec:
                   replicas: #{Replicas}
                   selector:
