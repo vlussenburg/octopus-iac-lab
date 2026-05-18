@@ -15,6 +15,11 @@ secrets.auto.tfvars
 crash.log
 crash.*.log
 
+# Node
+scripts/node_modules/
+scripts/snow-debug-*.png
+scripts/snow-debug-*.html
+
 # macOS
 .DS_Store
 demos/out/
