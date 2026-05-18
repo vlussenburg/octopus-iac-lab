@@ -53,6 +53,14 @@ spec:
                       - flavour: servicenow-cr-gate
                         branch: HEAD
                         previewEnabled: "false"
+                # Lab-realism rule: a tenant×env combo only appears in
+                # GitOps once Octopus has actually deployed there. Octopus
+                # auto-deploys to Dev for tenants on Dev only (acme-corp);
+                # Production deploys are gated on manual promotion. So
+                # until a Prod promotion happens, only acme-corp/Dev is
+                # generated. When the first Prod promotion lands, add the
+                # matching entry here (a future Octopus runbook step will
+                # do this automatically).
                 - list:
                     elements:
                       - tenant: acme-corp
@@ -63,30 +71,6 @@ spec:
                         brandColor: "#F5C518"
                         replicaCount: "3"
                         tier: enterprise
-                      - tenant: acme-corp
-                        env: Production
-                        envLower: production
-                        mood: comedy
-                        icon: "🃏"
-                        brandColor: "#F5C518"
-                        replicaCount: "3"
-                        tier: enterprise
-                      - tenant: globex
-                        env: Production
-                        envLower: production
-                        mood: silicon-valley
-                        icon: "🚀"
-                        brandColor: "#00B0FF"
-                        replicaCount: "2"
-                        tier: pro
-                      - tenant: initech
-                        env: Production
-                        envLower: production
-                        mood: stoic
-                        icon: "🧘"
-                        brandColor: "#7E57C2"
-                        replicaCount: "1"
-                        tier: free
           - list:
               elements:
                 - source: local
