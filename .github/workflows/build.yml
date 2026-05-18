@@ -102,8 +102,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Local Octopus rides Tailscale Funnel — if the funnel's down the leg
-      # cleanly skips, matching the pattern release.yml uses for deploys.
+      # Local leg is best-effort — if its URL is unreachable from GHA the
+      # job continues; SaaS is the source of truth.
       - name: Push build information (${{ matrix.target.name }})
         continue-on-error: ${{ matrix.target.name == 'local' }}
         uses: OctopusDeploy/push-build-information-action@v4
