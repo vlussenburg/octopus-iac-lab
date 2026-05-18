@@ -3,5 +3,11 @@
 # tag here on every deployment to production from the saas project. Do not
 # hand-edit unless you know what you're doing; the next deploy will
 # overwrite. Leaf Apps reference this via spec.source.helm.valueFiles.
+#
+# Empty default = "no Octopus promote has landed yet". The chart's
+# deployment.yaml is guarded `{{- if .Values.image.tag }}` so an empty
+# tag renders a no-op Application (namespace + Service + Ingress still
+# created, but zero pods). First Octopus promote writes a real tag here
+# and the Deployment materialises.
 image:
-  tag: "1.1.16"
+  tag: ""
