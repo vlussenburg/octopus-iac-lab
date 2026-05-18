@@ -114,6 +114,7 @@ async function main() {
     args: [
       "--disable-blink-features=AutomationControlled",
       "--no-sandbox",
+      "--ignore-certificate-errors",
     ],
   });
   const ctx = await browser.newContext({
