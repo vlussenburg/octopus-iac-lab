@@ -63,30 +63,6 @@ spec:
                         brandColor: "#F5C518"
                         replicaCount: "3"
                         tier: enterprise
-                      - tenant: acme-corp
-                        env: Production
-                        envLower: production
-                        mood: comedy
-                        icon: "🃏"
-                        brandColor: "#F5C518"
-                        replicaCount: "3"
-                        tier: enterprise
-                      - tenant: globex
-                        env: Production
-                        envLower: production
-                        mood: silicon-valley
-                        icon: "🚀"
-                        brandColor: "#00B0FF"
-                        replicaCount: "2"
-                        tier: pro
-                      - tenant: initech
-                        env: Production
-                        envLower: production
-                        mood: stoic
-                        icon: "🧘"
-                        brandColor: "#7E57C2"
-                        replicaCount: "1"
-                        tier: free
           - list:
               elements:
                 - source: local
