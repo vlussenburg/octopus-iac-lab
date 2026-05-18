@@ -3,6 +3,7 @@ resource "octopusdeploy_environment" "dev" {
   description                  = "Development environment"
   use_guided_failure           = false
   allow_dynamic_infrastructure = true
+  sort_order                   = 0
 }
 
 resource "octopusdeploy_environment" "production" {
@@ -10,6 +11,7 @@ resource "octopusdeploy_environment" "production" {
   description                  = "Production environment"
   use_guided_failure           = true
   allow_dynamic_infrastructure = true
+  sort_order                   = 1
 
   # ServiceNow change-control gate. The env-level toggle marks Production
   # as change-controlled lab-wide; it has no runtime effect until an actual
