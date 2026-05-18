@@ -79,3 +79,45 @@ jobs:
             ${{ env.IMAGE }}:${{ steps.version.outputs.pr_tag }}
           build-args: VERSION=${{ steps.version.outputs.pr_tag }}
 
+  push-build-info:
+    # Push GitHub-sourced build information (commits, build URL, VCS root) to
+    # both Octopus targets after the image lands. The external-feed trigger
+    # mints the release from the image tag; this step attaches commit history
+    # so the resulting release page shows "what changed" without us minting
+    # the release from CI. Skipped on PRs — only `main` builds become releases.
+    name: Push Build Info → Octopus
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: local
+            url_secret: OCTOPUS_LOCAL_URL
+            key_secret: OCTOPUS_LOCAL_API_KEY
+          - name: saas
+            url_secret: OCTOPUS_SAAS_URL
+            key_secret: OCTOPUS_SAAS_API_KEY
+    steps:
+      - uses: actions/checkout@v4
+
+      # Local Octopus rides Tailscale Funnel — if the funnel's down the leg
+      # cleanly skips, matching the pattern release.yml uses for deploys.
+      - name: Push build information (${{ matrix.target.name }})
+        continue-on-error: ${{ matrix.target.name == 'local' }}
+        uses: OctopusDeploy/push-build-information-action@v4
+        env:
+          OCTOPUS_URL: ${{ secrets[matrix.target.url_secret] }}
+          OCTOPUS_API_KEY: ${{ secrets[matrix.target.key_secret] }}
+          OCTOPUS_SPACE: IaC Sandbox
+        with:
+          # Docker feed package IDs are the image repo without tag — the GHCR
+          # feed registered in tofu/control-plane/feeds.tf resolves this.
+          packages: ${{ env.IMAGE }}
+          version: ${{ needs.build.outputs.version }}
+          # Build info push happens just after image push; if a previous run
+          # of the same workflow already wrote info for this version (re-run
+          # of the same run_number), prefer overwrite over failing the job.
+          overwrite_mode: OverwriteExisting
+
