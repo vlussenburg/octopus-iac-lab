@@ -89,6 +89,22 @@ parameter "ConfigMapSubPath" {
     label = "ConfigMap subPath"
 }
 
+parameter "AppImage" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "Container image package for the workload. Bound by the consuming project."
+    label = "App image package"
+}
+
+parameter "ArgoImage" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "Container image package whose tag the Argo CD step writes into Application manifests. Usually the same package as App image."
+    label = "Argo image package"
+}
+
 step "deploy-manifests" {
     name = "Deploy Manifests"
     properties = {
@@ -126,7 +142,7 @@ step "deploy-manifests" {
                     spec:
                       containers:
                         - name: #{AppName}
-                          image: #{Octopus.Action.Package[app-image].Image}
+                          image: #{Octopus.Action.Package[AppImage].Image}
                           ports:
                             - containerPort: #{ContainerPort}
                           resources:
@@ -174,9 +190,8 @@ step "deploy-manifests" {
         }
         worker_pool_variable = ""
 
-        packages "app-image" {
+        packages "AppImage" {
             acquisition_location = "NotAcquired"
-            feed = "ghcr"
             properties = {
                 Extract = "False"
                 Purpose = "DockerImageReference"
@@ -198,9 +213,8 @@ step "update-argo-cd-application-image-tags" {
             Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
         }
 
-        packages "argo-image" {
+        packages "ArgoImage" {
             acquisition_location = "NotAcquired"
-            feed = "ghcr"
             properties = {
                 Extract = "False"
                 HelmReplacementPath = "image.tag"
