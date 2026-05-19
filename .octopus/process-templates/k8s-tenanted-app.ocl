@@ -13,8 +13,84 @@ parameter "Platform" {
     display_settings = {
         Octopus.ControlType = "TargetTags"
     }
-    help_text = ""
-    label = ""
+    help_text = "Target role(s) the workload step deploys to."
+    label = "Platform target role"
+}
+
+parameter "Namespace" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "K8s namespace. Auto-created if missing."
+    label = "Namespace"
+}
+
+parameter "Host" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "Ingress hostname (FQDN)."
+    label = "Ingress host"
+}
+
+parameter "Replicas" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "Replica count for the Deployment."
+    label = "Replicas"
+    default_value = "1"
+}
+
+parameter "ContainerPort" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "Container port the workload listens on. Service.targetPort matches this; Service.port is fixed at 80."
+    label = "Container port"
+    default_value = "80"
+}
+
+parameter "Tenant" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "Value for the tenant.octopus.com/tenant label."
+    label = "Tenant label value"
+}
+
+parameter "Tier" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "Value for the tenant.octopus.com/tier label."
+    label = "Tier label value"
+}
+
+parameter "ConfigMapName" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "Name of a ConfigMap the consuming project deploys separately."
+    label = "ConfigMap name"
+}
+
+parameter "ConfigMapMountPath" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "Absolute path inside the container where the ConfigMap key is mounted as a single file."
+    label = "ConfigMap mount path"
+    default_value = "/etc/app/config.json"
+}
+
+parameter "ConfigMapSubPath" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "Key in the ConfigMap to mount (volumeMount subPath)."
+    label = "ConfigMap subPath"
+    default_value = "config.json"
 }
 
 step "deploy-manifests" {
@@ -30,6 +106,7 @@ step "deploy-manifests" {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "False"
             Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
             Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
+            Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
             Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
                 apiVersion: apps/v1
                 kind: Deployment
@@ -100,5 +177,40 @@ step "deploy-manifests" {
             Octopus.Action.Script.ScriptSource = "Inline"
         }
         worker_pool_variable = ""
+
+        packages "app-image" {
+            acquisition_location = "NotAcquired"
+            feed = "ghcr"
+            properties = {
+                Extract = "False"
+                Purpose = "DockerImageReference"
+                SelectionMode = "deferred"
+            }
+        }
+    }
+}
+
+step "update-argo-cd-application-image-tags" {
+    name = "Update Argo CD Application Image Tags"
+
+    action {
+        action_type = "Octopus.ArgoCDUpdateImageTags"
+        properties = {
+            Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
+            Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
+            Octopus.Action.ArgoCD.StepVerification.Method = "ArgoCDApplicationHealthy"
+            Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
+        }
+
+        packages "argo-image" {
+            acquisition_location = "NotAcquired"
+            feed = "ghcr"
+            properties = {
+                Extract = "False"
+                HelmReplacementPath = "image.tag"
+                Purpose = "DockerImageReference"
+                SelectionMode = "deferred"
+            }
+        }
     }
 }
