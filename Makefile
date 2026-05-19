@@ -41,6 +41,7 @@ endef
         space-init space-plan space-apply space-destroy space-fmt space-validate \
         cp-init cp-plan cp-apply cp-destroy cp-fmt cp-validate \
         ph-init ph-plan ph-apply ph-destroy ph-fmt ph-validate \
+        template-publish template-share \
         app-init app-plan app-apply app-destroy app-fmt app-validate \
         agent-init agent-plan agent-apply agent-destroy agent-fmt agent-validate \
         argo-init argo-plan argo-apply argo-destroy argo-fmt argo-validate \
@@ -53,6 +54,7 @@ help:
 	@echo "tofu/space/           : space-init | space-plan | space-apply | space-destroy | space-fmt | space-validate"
 	@echo "tofu/control-plane/   : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
 	@echo "tofu/platform-hub/    : ph-init | ph-plan | ph-apply | ph-destroy | ph-fmt | ph-validate"
+	@echo "process templates     : template-publish TEMPLATE=<slug> VERSION=<semver> | template-share TEMPLATE=<slug>"
 	@echo "tofu/app-randomquotes/: app-init | app-plan | app-apply | app-destroy | app-fmt | app-validate"
 	@echo "tofu/k8s-agent/       : agent-init | agent-plan | agent-apply | agent-destroy | agent-fmt | agent-validate"
 	@echo "tofu/argocd/          : argo-init | argo-plan | argo-apply | argo-destroy | argo-fmt | argo-validate"
@@ -147,6 +149,30 @@ ph-fmt:
 
 ph-validate:
 	cd $(PH_DIR) && tofu validate
+
+# Publish + share a process template via the Platform Hub REST API
+# (no provider resource in octopusdeploy ~> 1.12 yet — null_resource bait).
+# Usage: make template-publish TEMPLATE=k8s-tenanted-app VERSION=1.0.0 [BRANCH=main]
+#        make template-share   TEMPLATE=k8s-tenanted-app                [BRANCH=main]
+TEMPLATE_BRANCH ?= main
+
+template-publish:
+	@test -n "$(TEMPLATE)" || { echo "TEMPLATE=<slug> required"; exit 2; }
+	@test -n "$(VERSION)" || { echo "VERSION=<semver> required"; exit 2; }
+	$(load_env) curl -sS -f -X POST \
+	  "$$OCTOPUS_URL/api/platformhub/refs%2Fheads%2F$(TEMPLATE_BRANCH)/processtemplates/$(TEMPLATE)/versions" \
+	  -H "X-Octopus-ApiKey: $$OCTOPUS_API_KEY" \
+	  -H "Content-Type: application/json" \
+	  --data '{"ProcessTemplateSlug":"$(TEMPLATE)","GitRef":"refs/heads/$(TEMPLATE_BRANCH)","Version":"$(VERSION)","IsPreRelease":false}' \
+	  | python3 -m json.tool
+
+template-share:
+	@test -n "$(TEMPLATE)" || { echo "TEMPLATE=<slug> required"; exit 2; }
+	$(load_env) curl -sS -f -X POST \
+	  "$$OCTOPUS_URL/api/platformhub/refs%2Fheads%2F$(TEMPLATE_BRANCH)/processtemplates/$(TEMPLATE)/share" \
+	  -H "X-Octopus-ApiKey: $$OCTOPUS_API_KEY" \
+	  -H "Content-Type: application/json" \
+	  --data '{"ProcessTemplateSlug":"$(TEMPLATE)","GitRef":"refs/heads/$(TEMPLATE_BRANCH)","ShareToAllSpaces":true,"IndividuallySharedSpaceIds":[]}'
 
 # --- tofu/app-randomquotes/ -----------------------------------------------
 
