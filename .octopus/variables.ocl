@@ -74,3 +74,38 @@ variable "Maintenance.Message" {
         }
     }
 }
+
+# --- PR.* prompted vars: consumed by the Spin up preview / Teardown
+# preview runbooks. Supplied at runbook-run time by
+# .github/workflows/preview-env.yml. Default values are placeholders so
+# the prompt is editable when running the runbook by hand from the UI.
+
+variable "PR.Number" {
+    value "0" {
+        prompt {
+            description = "GitHub PR number — drives the preview namespace and ingress host (randomquotes-preview-pr-#{PR.Number})."
+            label = "PR Number"
+            required = true
+        }
+    }
+}
+
+variable "PR.Branch" {
+    value "feat/example" {
+        prompt {
+            description = "Source branch (e.g. feat/ephemeral-demo). Informational — used in labels and log messages."
+            label = "PR Branch"
+            required = true
+        }
+    }
+}
+
+variable "PR.HeadSha" {
+    value "main" {
+        prompt {
+            description = "PR head SHA. Mainly for the announce-url log line — image lookup uses pr-#{PR.Number} as the tag."
+            label = "PR Head SHA"
+            required = false
+        }
+    }
+}
