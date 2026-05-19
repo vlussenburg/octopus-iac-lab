@@ -54,6 +54,11 @@ jobs:
           # needs an explicit Git ref to load the OCL from. The preview
           # runbooks live on main; pin here.
           git_ref: refs/heads/main
+          # The KubernetesDeployRawYaml step in the runbook references a
+          # `randomquotes-image` package. Without this the runbook run
+          # fails with "No package has been staged" — the YAML uses the
+          # image as a literal so the version doesn't matter; pin :latest.
+          packages: vlussenburg/octopus-iac-lab:latest
           variables: |
             PR.Number: ${{ github.event.number }}
             PR.Branch: ${{ github.head_ref }}
