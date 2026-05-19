@@ -20,92 +20,99 @@ process {
         }
 
         action {
-            action_type = "Octopus.KubernetesDeployRawYaml"
+            action_type = "Octopus.KubernetesRunScript"
             properties = {
-                Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
-                Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
-                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-preview-pr-#{PR.Number}"
-                Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
-                    apiVersion: v1
-                    kind: ConfigMap
+                Octopus.Action.Script.ScriptSource = "Inline"
+                Octopus.Action.Script.Syntax = "Bash"
+                Octopus.Action.Script.ScriptBody = <<-EOT
+                set -eu
+                NS="randomquotes-preview-pr-#{PR.Number}"
+                echo "Applying preview manifests into namespace $NS …"
+                kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+                kubectl apply -n "$NS" -f - <<MANIFESTS
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: randomquotes-config
+                  labels:
+                    lab.octopus.com/preview-pr: "#{PR.Number}"
+                    lab.octopus.com/preview-branch: "#{PR.Branch}"
+                data:
+                  config.json: |
+                    {
+                      "tenant": "preview-inc",
+                      "mood": "comedy",
+                      "icon": "🚧",
+                      "color": "#FF6B35",
+                      "watermark": "PREVIEW · PR ##{PR.Number}",
+                      "maintenance": ""
+                    }
+                ---
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: randomquotes
+                  labels:
+                    app: randomquotes
+                    lab.octopus.com/preview-pr: "#{PR.Number}"
+                    lab.octopus.com/preview-branch: "#{PR.Branch}"
+                spec:
+                  replicas: 1
+                  selector:
+                    matchLabels:
+                      app: randomquotes
+                  template:
                     metadata:
-                      name: randomquotes-config
-                      labels:
-                        lab.octopus.com/preview-pr: "#{PR.Number}"
-                        lab.octopus.com/preview-branch: "#{PR.Branch}"
-                    data:
-                      config.json: |
-                        {
-                          "tenant": "preview-inc",
-                          "mood": "comedy",
-                          "icon": "🚧",
-                          "color": "#FF6B35",
-                          "watermark": "PREVIEW · PR ##{PR.Number}",
-                          "maintenance": ""
-                        }
-                    ---
-                    apiVersion: apps/v1
-                    kind: Deployment
-                    metadata:
-                      name: randomquotes
                       labels:
                         app: randomquotes
-                        lab.octopus.com/preview-pr: "#{PR.Number}"
-                        lab.octopus.com/preview-branch: "#{PR.Branch}"
                     spec:
-                      replicas: 1
-                      selector:
-                        matchLabels:
-                          app: randomquotes
-                      template:
-                        metadata:
-                          labels:
-                            app: randomquotes
-                        spec:
-                          containers:
-                            - name: randomquotes
-                              image: ghcr.io/vlussenburg/octopus-iac-lab:pr-#{PR.Number}
-                              ports:
-                                - containerPort: 80
-                              volumeMounts:
-                                - name: config
-                                  mountPath: /usr/share/nginx/html/config.json
-                                  subPath: config.json
-                          volumes:
+                      containers:
+                        - name: randomquotes
+                          image: ghcr.io/vlussenburg/octopus-iac-lab:pr-#{PR.Number}
+                          ports:
+                            - containerPort: 80
+                          volumeMounts:
                             - name: config
-                              configMap:
-                                name: randomquotes-config
-                    ---
-                    apiVersion: v1
-                    kind: Service
-                    metadata:
-                      name: randomquotes
-                    spec:
-                      type: ClusterIP
-                      selector:
-                        app: randomquotes
-                      ports:
-                        - protocol: TCP
-                          port: 80
-                          targetPort: 80
-                    ---
-                    apiVersion: networking.k8s.io/v1
-                    kind: Ingress
-                    metadata:
-                      name: randomquotes
-                    spec:
-                      ingressClassName: nginx
-                      rules:
-                        - host: octopus-randomquotes-preview-pr-#{PR.Number}.localtest.me
-                          http:
-                            paths:
-                              - path: /
-                                pathType: Prefix
-                                backend:
-                                  service:
-                                    name: randomquotes
-                                    port:
-                                      number: 80
+                              mountPath: /usr/share/nginx/html/config.json
+                              subPath: config.json
+                      volumes:
+                        - name: config
+                          configMap:
+                            name: randomquotes-config
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: randomquotes
+                spec:
+                  type: ClusterIP
+                  selector:
+                    app: randomquotes
+                  ports:
+                    - protocol: TCP
+                      port: 80
+                      targetPort: 80
+                ---
+                apiVersion: networking.k8s.io/v1
+                kind: Ingress
+                metadata:
+                  name: randomquotes
+                spec:
+                  ingressClassName: nginx
+                  rules:
+                    - host: octopus-randomquotes-preview-pr-#{PR.Number}.localtest.me
+                      http:
+                        paths:
+                          - path: /
+                            pathType: Prefix
+                            backend:
+                              service:
+                                name: randomquotes
+                                port:
+                                  number: 80
+                MANIFESTS
+                echo "Applied. Waiting for Deployment to roll out …"
+                kubectl -n "$NS" rollout status deploy/randomquotes --timeout=120s || echo "(rollout status timed out — check pod events for ImagePullBackOff on pr-#{PR.Number})"
                 EOT
             }
         }
