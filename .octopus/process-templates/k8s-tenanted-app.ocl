@@ -1,0 +1,2 @@
+name = "k8s-tenanted-app"
+description = "Deploy a tenanted Kubernetes workload: Deployment + Service + Ingress, plus Argo CD image-tag update. The consuming project owns its ConfigMap and passes the name + mount path."
