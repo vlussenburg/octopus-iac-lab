@@ -121,3 +121,36 @@ The `OctopusDeploy/octopusdeploy` provider has zero Argo CD resources as of v1.1
 - **Demo branches are 1 surgical commit on main.** Each open PR branch (`demo/*`, `feat/*`, `infra/ha`) carries only the files that demonstrate that feature: its own `.octopus-<demo>/` OCL, chart template overrides (`rollout.yaml`, `sealed-secret.yaml`), or stack additions (`tofu/platform-hub/policies/`, `tofu/servicenow/`). No drift on shared files (`Makefile`, `tofu/k8s-agent/`, `tofu/argocd/`, etc.). When main moves, rebase the branches (force-push-with-lease is authorised on them); don't push doc/infra updates to demo branches, push to main and let the next rebase carry them.
 - **Process templates live in Platform Hub and use a different OCL schema than step templates** (`.octopus/process-templates/<slug>.ocl`). Gotchas burned in: (1) `default_value` is **not** on `ProcessTemplateParameter` — leaving the field out is fine, set defaults via the UI; (2) deferred packages must bind to a `Package`-typed parameter (`display_settings = { Octopus.ControlType = "Package" }`) via *three* things together — the `parameter` exists, the `packages "<Name>" { }` block name matches the parameter name, **and** `properties.PackageParameterName = "<Name>"` is set on the package block; matching block name alone is not enough (Octopus rejects with `Please select a package parameter for the package`). YAML references the package by parameter name: `#{Octopus.Action.Package[AppImage].Image}`; `feed` and `package_id` stay blank — the consuming project supplies them at instantiation. Cross-check by hitting `/api/communityactiontemplates` to see how working step templates serialize the binding. (3) `Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"` is accepted at the OCL layer on `KubernetesDeployRawYaml` even though the UI doesn't expose a toggle for that step type; (4) Platform Hub has no feeds endpoint — `/api/platformhub/feeds` is 404 — so the consuming Space's feeds resolve at instantiation time (every Space using a template needs a feed with the same slug, OR the template uses a Package-typed parameter so the project picks the feed).
 - **REST endpoint to verify a process template parses without round-tripping the UI** (not advertised in the API root's Links list — found by watching `docker compose logs octopus` while the UI loads a template): `GET /api/platformhub/refs%2Fheads%2F{branch}/processtemplates/summaries` lists templates with a `HasError` flag, and `GET /api/platformhub/refs%2Fheads%2F{branch}/processtemplates/{slug}` returns the parsed template or HTTP 400 with the OCL error message body. Use this to gate template edits before merging.
+- **Process Templates ≠ Project Templates** (two distinct features in Octopus's licence XML). Process Templates are reusable deployment-process snippets that projects can instantiate as steps; Project Templates is a separate (and on this version's self-hosted build, **gated-off**) feature where the entire project's identity is template-driven. The runtime check `Project templates feature toggle is not enabled` (thrown by `GetTemplatedProjectDeploymentProcessRequestHandler`) means the project-template-instantiation feature is off — Process Templates themselves still work. On SaaS (`lussenburg.octopus.app`) Project Templates is enabled; on self-hosted (2026.1.x at time of writing) it isn't, and there's no configurable toggle (the `IsEarlyAccessProgram` symbol in the binary suggests it's EAP-only).
+- **Instantiating a process template in a project's `deployment_process.ocl`.** The block is a top-level sibling to `step`, with snake_case sub-keys discovered empirically by hitting `/api/Spaces-{n}/projects/{id}/{ref}/deploymentprocesses` and reading the parse errors back. Working shape:
+  ```hcl
+  process_template "deploy-workload" {              # block label = usage id (free-form slug)
+      name                  = "Deploy app workload" # required display name
+      process_template_slug = "k8s-tenanted-app"    # the template's slug in Platform Hub
+      version_mask          = "1.x"                 # must match '1.x', '1.1.x', or 'prerelease' — semver values like '1.0.0' are rejected
+
+      parameter "AppName"   { value = "randomquotes" }
+      parameter "Namespace" { value = "ns-#{...}" }
+      ...                                           # one parameter sub-block per template parameter
+
+      package_parameter "AppImage" {                # one per Package-typed template parameter
+          feed       = "ghcr"                       # filled in by the project (template leaves these blank)
+          package_id = "vlussenburg/octopus-iac-lab"
+      }
+  }
+  ```
+  Each instantiation renders as a step with `ActionType = "Octopus.ProcessTemplate"`. Use `parameter` (singular, sub-block) — *not* `parameters = { ... }` map literals — and `package_parameter` (singular) for package bindings, *not* `packages` (which is the keyword inside the *template* file, not the *usage*). Cache gotcha: querying `/refs%2Fheads%2F{branch}/deploymentprocesses` after a push keeps returning the stale parse error; query by commit SHA (`/api/Spaces-{n}/projects/{id}/{commitSha}/deploymentprocesses`) to bypass the branch-ref cache.
+- **A process template must be Published + Shared before a project can pin to it.** Saving the OCL in Platform Hub creates the working copy; the template is *unversioned* (`Version: null`, no `PublishedDate`) until a release is cut. Use the two API endpoints (no provider resources yet — `octopusdeploy` v1.12 doesn't ship them):
+  ```bash
+  # Publish a version (idempotent in the sense that re-posting the same Version errors,
+  # but you can keep posting new versions — versioning is per-publish-call).
+  curl -X POST "$OCTOPUS_URL/api/platformhub/refs%2Fheads%2Fmain/processtemplates/<slug>/versions" \
+       -H "X-Octopus-ApiKey: $OCTOPUS_API_KEY" -H "Content-Type: application/json" \
+       --data '{"ProcessTemplateSlug":"<slug>","GitRef":"refs/heads/main","Version":"1.0.0","IsPreRelease":false}'
+
+  # Share to all Spaces (or pass space IDs explicitly).
+  curl -X POST "$OCTOPUS_URL/api/platformhub/refs%2Fheads%2Fmain/processtemplates/<slug>/share" \
+       -H "X-Octopus-ApiKey: $OCTOPUS_API_KEY" -H "Content-Type: application/json" \
+       --data '{"ProcessTemplateSlug":"<slug>","GitRef":"refs/heads/main","ShareToAllSpaces":true,"IndividuallySharedSpaceIds":[]}'
+  ```
+  These endpoints are server-wide (Platform Hub), not Space-scoped. API-key auth works (no CSRF token needed). When the provider eventually ships `octopusdeploy_platform_hub_process_template_*` resources, swap these for tofu — until then, a `null_resource` + `local-exec` curl in `tofu/platform-hub/` would be the idiomatic place.
