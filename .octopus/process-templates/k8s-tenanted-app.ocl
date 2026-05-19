@@ -39,7 +39,6 @@ parameter "Replicas" {
     }
     help_text = "Replica count for the Deployment."
     label = "Replicas"
-    default_value = "1"
 }
 
 parameter "ContainerPort" {
@@ -48,7 +47,6 @@ parameter "ContainerPort" {
     }
     help_text = "Container port the workload listens on. Service.targetPort matches this; Service.port is fixed at 80."
     label = "Container port"
-    default_value = "80"
 }
 
 parameter "Tenant" {
@@ -81,7 +79,6 @@ parameter "ConfigMapMountPath" {
     }
     help_text = "Absolute path inside the container where the ConfigMap key is mounted as a single file."
     label = "ConfigMap mount path"
-    default_value = "/etc/app/config.json"
 }
 
 parameter "ConfigMapSubPath" {
@@ -90,7 +87,6 @@ parameter "ConfigMapSubPath" {
     }
     help_text = "Key in the ConfigMap to mount (volumeMount subPath)."
     label = "ConfigMap subPath"
-    default_value = "config.json"
 }
 
 step "deploy-manifests" {
