@@ -20,16 +20,12 @@ process {
         }
 
         action {
-            action_type = "Octopus.KubernetesRunScript"
+            action_type = "Octopus.KubernetesDeployRawYaml"
             properties = {
-                Octopus.Action.Script.ScriptSource = "Inline"
-                Octopus.Action.Script.Syntax = "Bash"
-                Octopus.Action.Script.ScriptBody = <<-EOT
-                    set -eu
-                    NS="randomquotes-preview-pr-#{PR.Number}"
-                    echo "Applying preview manifests into namespace $NS …"
-                    kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
-                    kubectl apply -n "$NS" -f - <<MANIFESTS
+                Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+                Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-preview-pr-#{PR.Number}"
+                Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
                     apiVersion: v1
                     kind: ConfigMap
                     metadata:
@@ -68,10 +64,6 @@ process {
                         spec:
                           containers:
                             - name: randomquotes
-                              # Per-PR tag pushed by .github/workflows/build.yml on
-                              # pull_request events. On a PR that hasn't touched
-                              # app/**, the tag may not exist — image pull will fail
-                              # and the pod stays ImagePullBackOff.
                               image: ghcr.io/vlussenburg/octopus-iac-lab:pr-#{PR.Number}
                               ports:
                                 - containerPort: 80
@@ -114,10 +106,18 @@ process {
                                     name: randomquotes
                                     port:
                                       number: 80
-                    MANIFESTS
-                    echo "Applied. Waiting for Deployment to roll out …"
-                    kubectl -n "$NS" rollout status deploy/randomquotes --timeout=120s || echo "(rollout status timed out — check pod events for ImagePullBackOff on pr-#{PR.Number})"
                 EOT
+            }
+
+            packages "randomquotes-image" {
+                acquisition_location = "NotAcquired"
+                feed = "ghcr"
+                package_id = "vlussenburg/octopus-iac-lab"
+                properties = {
+                    Extract = "False"
+                    Purpose = "DockerImageReference"
+                    SelectionMode = "immediate"
+                }
             }
         }
     }
