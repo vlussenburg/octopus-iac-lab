@@ -24,7 +24,7 @@ define load_env
 	[ -f .env ] || { echo "Missing .env — copy .env.example and fill it in."; exit 1; }; \
 	source .env; set +a; \
 	[ -n "$$OCTOPUS_URL" ] || { echo "OCTOPUS_URL is unset in .env (e.g. http://localhost:8090 or https://<id>.octopus.app)"; exit 1; }; \
-	DEMO_BRANCHES=$$(git ls-remote --heads origin 'demo/*' 2>/dev/null | awk '{print $$2}' | sed 's|refs/heads/||' | jq -R . | jq -s -c . 2>/dev/null || echo '[]'); \
+	DEMO_BRANCHES=$$( ( git ls-remote --heads origin 'demo/*' 2>/dev/null; git ls-remote --heads origin 'feat/*' 2>/dev/null ) | awk '{print $$2}' | sed 's|refs/heads/||' | jq -R . | jq -s -c . 2>/dev/null || echo '[]'); \
 	export TF_VAR_octopus_url="$$OCTOPUS_URL" \
 	       TF_VAR_octopus_api_key="$$OCTOPUS_API_KEY" \
 	       TF_VAR_github_pat="$$GITHUB_PAT" \

@@ -7,7 +7,7 @@
 # more demo project. Remove a string → tofu destroys it.
 variable "demo_branches" {
   type        = set(string)
-  description = "Branches to spin up as their own randomquotes demo project. Each gets a CaC-tracked project named randomquotes-<slug>. Empty by default — set via tfvars or `TF_VAR_demo_branches='[\"demo/foo\",\"demo/bar\"]'`."
+  description = "Branches to spin up as their own randomquotes demo project. Each gets a CaC-tracked project named <slug>-randomquotes. Empty by default — the Makefile discovers `demo/*` and `feat/*` heads via `git ls-remote` and passes them in."
   default     = []
 }
 
@@ -17,12 +17,13 @@ locals {
   # slug so each demo project's Source is unique.
   source_base = strcontains(var.octopus_url, "octopus.app") ? "saas" : "local"
 
-  # Strip the `demo/` prefix that the discovery filter already pinned —
-  # within demo/* the path-after-prefix is unique because git refs are
-  # unique paths, so no hash needed for disambiguation.
+  # Strip the `demo/` or `feat/` prefix the discovery filter already
+  # pinned — within those namespaces the path-after-prefix is unique
+  # because git refs are unique paths, so no hash needed for
+  # disambiguation. `feat/ephemeral-demo` → `ephemeral-demo`, etc.
   branch_slugs = {
     for b in var.demo_branches :
-    b => replace(b, "demo/", "")
+    b => replace(replace(b, "demo/", ""), "feat/", "")
   }
 }
 

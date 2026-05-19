@@ -1,0 +1,76 @@
+name: Preview Env / Octopus Runbook
+
+# Mirror of the Argo PR-preview ApplicationSet (which polls GitHub and
+# fans out a leaf `Application` per open PR matching `feat/*`), but
+# driven through Octopus instead — so the same shape exists on both
+# delivery paths. The Octopus side adds an explicit deploy/teardown
+# record, env-scoped variables, and the ability to gate the preview
+# with prompted vars or approvals.
+#
+# Trigger surface is intentionally narrow: only PR events on the
+# `feat/ephemeral-demo` branch. Other `feat/*` PRs (e.g.
+# feat/sealed-secrets) are left to the Argo path. Add more branches to
+# the if-guards if you want them on the Octopus path too.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+env:
+  PROJECT: ephemeral-demo-randomquotes
+  RUNBOOK_SPIN_UP: Spin up preview
+  RUNBOOK_TEARDOWN: Teardown preview
+
+jobs:
+  spin-up:
+    name: Spin up preview env (PR ${{ github.event.number }})
+    if: github.event.action != 'closed' && github.head_ref == 'feat/ephemeral-demo'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: local, url_secret: OCTOPUS_LOCAL_URL, key_secret: OCTOPUS_LOCAL_API_KEY }
+          - { name: saas,  url_secret: OCTOPUS_SAAS_URL,  key_secret: OCTOPUS_SAAS_API_KEY  }
+    steps:
+      - name: Run "${{ env.RUNBOOK_SPIN_UP }}" on ${{ matrix.target.name }}
+        continue-on-error: ${{ matrix.target.name == 'local' }}
+        uses: OctopusDeploy/run-runbook-action@v3
+        env:
+          OCTOPUS_URL: ${{ secrets[matrix.target.url_secret] }}
+          OCTOPUS_API_KEY: ${{ secrets[matrix.target.key_secret] }}
+          OCTOPUS_SPACE: IaC Sandbox
+        with:
+          project: ${{ env.PROJECT }}
+          runbook: ${{ env.RUNBOOK_SPIN_UP }}
+          environments: Dev
+          variables: |
+            PR.Number: ${{ github.event.number }}
+            PR.Branch: ${{ github.head_ref }}
+            PR.HeadSha: ${{ github.event.pull_request.head.sha }}
+
+  teardown:
+    name: Tear down preview env (PR ${{ github.event.number }})
+    if: github.event.action == 'closed' && github.head_ref == 'feat/ephemeral-demo'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: local, url_secret: OCTOPUS_LOCAL_URL, key_secret: OCTOPUS_LOCAL_API_KEY }
+          - { name: saas,  url_secret: OCTOPUS_SAAS_URL,  key_secret: OCTOPUS_SAAS_API_KEY  }
+    steps:
+      - name: Run "${{ env.RUNBOOK_TEARDOWN }}" on ${{ matrix.target.name }}
+        continue-on-error: ${{ matrix.target.name == 'local' }}
+        uses: OctopusDeploy/run-runbook-action@v3
+        env:
+          OCTOPUS_URL: ${{ secrets[matrix.target.url_secret] }}
+          OCTOPUS_API_KEY: ${{ secrets[matrix.target.key_secret] }}
+          OCTOPUS_SPACE: IaC Sandbox
+        with:
+          project: ${{ env.PROJECT }}
+          runbook: ${{ env.RUNBOOK_TEARDOWN }}
+          environments: Dev
+          variables: |
+            PR.Number: ${{ github.event.number }}
+            PR.Branch: ${{ github.head_ref }}
