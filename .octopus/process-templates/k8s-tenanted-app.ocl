@@ -194,6 +194,7 @@ step "deploy-manifests" {
             acquisition_location = "NotAcquired"
             properties = {
                 Extract = "False"
+                PackageParameterName = "AppImage"
                 Purpose = "DockerImageReference"
                 SelectionMode = "deferred"
             }
@@ -218,6 +219,7 @@ step "update-argo-cd-application-image-tags" {
             properties = {
                 Extract = "False"
                 HelmReplacementPath = "image.tag"
+                PackageParameterName = "ArgoImage"
                 Purpose = "DockerImageReference"
                 SelectionMode = "deferred"
             }
