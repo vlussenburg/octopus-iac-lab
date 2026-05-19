@@ -1,0 +1,141 @@
+name = "Spin up preview"
+description = "Create an ephemeral preview env for a GitHub PR against a `feat/*` branch. Deploys randomquotes to namespace `randomquotes-preview-pr-#{PR.Number}` using the per-PR image tag (`pr-#{PR.Number}` from .github/workflows/build.yml's pull_request leg) and exposes it at http://octopus-randomquotes-preview-pr-#{PR.Number}.localtest.me. Fired by .github/workflows/preview-env.yml on PR opened/reopened/synchronize. Untenanted — previews are PR-scoped, not customer-scoped."
+default_guided_failure_mode = "EnvironmentDefault"
+multi_tenancy_mode = "Untenanted"
+
+connectivity_policy {
+    allow_deployments_to_no_targets = false
+}
+
+run_retention_policy {
+    quantity_to_keep = 20
+    type = "Count"
+}
+
+process {
+    step "deploy-preview" {
+        name = "Deploy preview namespace + workload"
+        properties = {
+            Octopus.Action.TargetRoles = "k8s"
+        }
+
+        action {
+            action_type = "Octopus.KubernetesDeployRawYaml"
+            properties = {
+                Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+                Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
+                Octopus.Action.KubernetesContainers.Namespace = "randomquotes-preview-pr-#{PR.Number}"
+                Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                    apiVersion: v1
+                    kind: ConfigMap
+                    metadata:
+                      name: randomquotes-config
+                      labels:
+                        lab.octopus.com/preview-pr: "#{PR.Number}"
+                        lab.octopus.com/preview-branch: "#{PR.Branch}"
+                    data:
+                      config.json: |
+                        {
+                          "tenant": "preview-inc",
+                          "mood": "comedy",
+                          "icon": "🚧",
+                          "color": "#FF6B35",
+                          "watermark": "PREVIEW · PR ##{PR.Number}",
+                          "maintenance": ""
+                        }
+                    ---
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: randomquotes
+                      labels:
+                        app: randomquotes
+                        lab.octopus.com/preview-pr: "#{PR.Number}"
+                        lab.octopus.com/preview-branch: "#{PR.Branch}"
+                    spec:
+                      replicas: 1
+                      selector:
+                        matchLabels:
+                          app: randomquotes
+                      template:
+                        metadata:
+                          labels:
+                            app: randomquotes
+                        spec:
+                          containers:
+                            - name: randomquotes
+                              # Per-PR tag pushed by .github/workflows/build.yml on
+                              # pull_request events. On a PR that hasn't touched
+                              # app/**, the tag may not exist — image pull will fail
+                              # and Octopus's resource health check will surface it.
+                              image: ghcr.io/vlussenburg/octopus-iac-lab:pr-#{PR.Number}
+                              ports:
+                                - containerPort: 80
+                              volumeMounts:
+                                - name: config
+                                  mountPath: /usr/share/nginx/html/config.json
+                                  subPath: config.json
+                          volumes:
+                            - name: config
+                              configMap:
+                                name: randomquotes-config
+                    ---
+                    apiVersion: v1
+                    kind: Service
+                    metadata:
+                      name: randomquotes
+                    spec:
+                      type: ClusterIP
+                      selector:
+                        app: randomquotes
+                      ports:
+                        - protocol: TCP
+                          port: 80
+                          targetPort: 80
+                    ---
+                    apiVersion: networking.k8s.io/v1
+                    kind: Ingress
+                    metadata:
+                      name: randomquotes
+                    spec:
+                      ingressClassName: nginx
+                      rules:
+                        - host: octopus-randomquotes-preview-pr-#{PR.Number}.localtest.me
+                          http:
+                            paths:
+                              - path: /
+                                pathType: Prefix
+                                backend:
+                                  service:
+                                    name: randomquotes
+                                    port:
+                                      number: 80
+                EOT
+            }
+        }
+    }
+
+    step "announce-url" {
+        name = "Announce preview URL"
+        properties = {
+            Octopus.Action.TargetRoles = ""
+        }
+
+        action {
+            action_type = "Octopus.Script"
+            properties = {
+                Octopus.Action.RunOnServer = "true"
+                Octopus.Action.Script.ScriptSource = "Inline"
+                Octopus.Action.Script.Syntax = "Bash"
+                Octopus.Action.Script.ScriptBody = <<-EOT
+                    echo "Preview for PR ##{PR.Number} (branch #{PR.Branch}, head #{PR.HeadSha}) ready."
+                    echo "  URL:       http://octopus-randomquotes-preview-pr-#{PR.Number}.localtest.me"
+                    echo "  Namespace: randomquotes-preview-pr-#{PR.Number}"
+                    echo "  Image:     ghcr.io/vlussenburg/octopus-iac-lab:pr-#{PR.Number}"
+                    echo ""
+                    echo "Argo's parallel preview lives at argo-randomquotes-preview-pr-#{PR.Number}."
+                EOT
+            }
+        }
+    }
+}
