@@ -75,15 +75,10 @@ variable "Maintenance.Message" {
     }
 }
 
-# --- PR.* prompted vars: consumed by the Spin up preview / Teardown
-# preview runbooks. Supplied at runbook-run time by
-# .github/workflows/preview-env.yml. Default values are placeholders so
-# the prompt is editable when running the runbook by hand from the UI.
-
 variable "PR.Number" {
     value "0" {
         prompt {
-            description = "GitHub PR number — drives the preview namespace and ingress host (randomquotes-preview-pr-#{PR.Number})."
+            description = "GitHub PR number — drives the preview namespace and ingress host (randomquotes-preview-pr-#{PR.Number}). Set by .github/workflows/preview-env.yml when firing the Spin up/Teardown preview runbooks."
             label = "PR Number"
             required = true
         }
