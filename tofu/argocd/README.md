@@ -11,7 +11,7 @@ terraform state.
 | ArgoCD helm install (cluster-side prereq) | tofu (gated `install_argocd`) | local worktree |
 | ArgoCD JWT for the `octopus` account | tofu (`argocd_account_token`) | per-worktree |
 | Octopus Argo CD Gateway (the actual control plane) | tofu (`module.gateway`) | per-worktree |
-| Bootstrap Application (helm `extraObjects`) | tofu, but as YAML inside helm values | local worktree |
+| Bootstrap Application | tofu (`null_resource` + `kubectl apply` after the helm release — NOT helm `extraObjects`, which dies on the chicken-and-egg between the Application CRD shipping in the same chart and the resource referencing it) | local worktree |
 | Argo `Application` roots (App-of-Apps) | [`gitops/argocd/randomquotes-root-{local,saas}.yaml`](../../gitops/argocd/) | git |
 | argocd-server UI Ingress | [`gitops/argocd/argocd-server-ingress.yaml`](../../gitops/argocd/) | git |
 | 12 leaf Argo `Application`s (per tenant×env) | [`gitops/applications/randomquotes/{local,saas}/*.yaml`](../../gitops/applications/) | git |

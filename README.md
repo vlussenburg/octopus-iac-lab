@@ -6,7 +6,7 @@ Personal lab: **Octopus Deploy** scaffolded entirely as code with **Config-as-Co
 
 ```
 compose/   # docker-compose Octopus Server (local worktree only)
-tofu/      # 6 OpenTofu stacks: space → cp → ph → app → agent → argocd + a local module
+tofu/      # 7 OpenTofu stacks: space → cp → ph → app → agent → argocd → snow + a local module
 .octopus/  # CaC-owned OCL: deployment process, runbooks, variables
 gitops/    # Argo's source of truth: App-of-Apps roots + 12 leaf Applications + helm chart
 app/       # Dockerfile + index.html (the deployed artefact)
