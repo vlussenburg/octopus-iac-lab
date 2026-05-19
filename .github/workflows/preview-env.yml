@@ -50,6 +50,10 @@ jobs:
           project: ${{ env.PROJECT }}
           runbook: ${{ env.RUNBOOK_SPIN_UP }}
           environments: Dev
+          # randomquotes is a CaC-tracked project, so runbook-run API
+          # needs an explicit Git ref to load the OCL from. The preview
+          # runbooks live on main; pin here.
+          git_ref: refs/heads/main
           variables: |
             PR.Number: ${{ github.event.number }}
             PR.Branch: ${{ github.head_ref }}
@@ -77,6 +81,7 @@ jobs:
           project: ${{ env.PROJECT }}
           runbook: ${{ env.RUNBOOK_TEARDOWN }}
           environments: Dev
+          git_ref: refs/heads/main
           variables: |
             PR.Number: ${{ github.event.number }}
             PR.Branch: ${{ github.head_ref }}
