@@ -26,6 +26,17 @@ resource "octopusdeploy_team" "space_managers" {
   space_id = octopusdeploy_space.this.id
   users    = [data.octopusdeploy_users.space_manager.users[0].id]
 
+  # The auto-created Space Managers team comes pre-bound to the
+  # `userroles-spacemanager` scoped role. Without this block, the provider
+  # reads the role on import, sees no matching block in config, and tries
+  # to delete it on apply — Octopus rejects with "The Space Manager Team
+  # must have a Space Manager User Role". Declaring it explicitly here
+  # makes the diff a no-op.
+  user_role {
+    space_id     = octopusdeploy_space.this.id
+    user_role_id = "userroles-spacemanager"
+  }
+
   lifecycle {
     # Name + space_id are fixed by Octopus on the auto-created team.
     ignore_changes = [name]
