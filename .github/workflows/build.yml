@@ -112,9 +112,14 @@ jobs:
           OCTOPUS_API_KEY: ${{ secrets[matrix.target.key_secret] }}
           OCTOPUS_SPACE: IaC Sandbox
         with:
-          # Docker feed package IDs are the image repo without tag — the GHCR
-          # feed registered in tofu/control-plane/feeds.tf resolves this.
-          packages: ${{ env.IMAGE }}
+          # Package ID must match the value Octopus stores on the GHCR feed —
+          # that's the image repo WITHOUT the `ghcr.io/` registry prefix
+          # (the prefix lives on the feed, not the package). The OCL
+          # references the same shape: `package_id = "vlussenburg/octopus-iac-lab"`.
+          # Mismatching `ghcr.io/...` here would push valid build info into
+          # Octopus, but the release-snapshot lookup at release-create time
+          # wouldn't match and the release page would render empty.
+          packages: ${{ github.repository_owner }}/octopus-iac-lab
           version: ${{ needs.build.outputs.version }}
           # Build info push happens just after image push; if a previous run
           # of the same workflow already wrote info for this version (re-run

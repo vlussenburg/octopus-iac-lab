@@ -76,7 +76,12 @@ Downstream stacks read upstream outputs via `terraform_remote_state` with `backe
 
 - App image is **built from this repo** by `.github/workflows/build.yml` and pushed to `ghcr.io/vlussenburg/octopus-iac-lab`. The control-plane stack registers GHCR as an external feed; the deployment process pulls the image from there.
 - `.github/workflows/release.yml` is a reusable workflow called by `build.yml` once per Octopus target via a job matrix (SaaS + Local). It creates a release on the chosen Octopus and deploys it tenanted via `OctopusDeploy/deploy-release-tenanted-action@v3` (the non-tenanted action doesn't support tenants).
+- `build.yml` also pushes **Octopus Build Information** to both Octopus targets after the image push (`OctopusDeploy/push-build-information-action@v4`), so the release page shows commits + a deep link back to the GHA run.
 - Local Octopus is reachable from GHA via Tailscale Funnel; if the funnel is down the local matrix leg cleanly skips with `continue-on-error: true`.
+- GHA secrets: `OCTOPUS_LOCAL_URL` / `OCTOPUS_LOCAL_API_KEY` for the local target, `OCTOPUS_SAAS_URL` / `OCTOPUS_SAAS_API_KEY` for SaaS. **After `make nuke` or any other event that rotates the local `OCTOPUS_API_KEY` in `.env`, sync the new key into the GHA secret**, otherwise build-info push (and any future release deploys) fails with `The API key you provided was not valid`:
+  ```
+  grep '^OCTOPUS_API_KEY=' .env | cut -d= -f2- | gh secret set OCTOPUS_LOCAL_API_KEY
+  ```
 
 ### Tenants + namespaces
 
