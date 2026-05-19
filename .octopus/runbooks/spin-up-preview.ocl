@@ -36,7 +36,7 @@ process {
                   name: randomquotes-config
                   labels:
                     lab.octopus.com/preview-pr: "#{PR.Number}"
-                    lab.octopus.com/preview-branch: "#{PR.Branch}"
+                    lab.octopus.com/preview-branch: "#{PR.Branch | Replace \"/\" \"-\"}"
                 data:
                   config.json: |
                     {
@@ -55,7 +55,7 @@ process {
                   labels:
                     app: randomquotes
                     lab.octopus.com/preview-pr: "#{PR.Number}"
-                    lab.octopus.com/preview-branch: "#{PR.Branch}"
+                    lab.octopus.com/preview-branch: "#{PR.Branch | Replace \"/\" \"-\"}"
                 spec:
                   replicas: 1
                   selector:
