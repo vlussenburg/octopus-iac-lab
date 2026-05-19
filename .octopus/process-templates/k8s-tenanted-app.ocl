@@ -13,15 +13,15 @@ parameter "Platform" {
     display_settings = {
         Octopus.ControlType = "TargetTags"
     }
-    help_text = "Target role(s) the workload step deploys to."
-    label = "Platform target role"
+    help_text = ""
+    label = ""
 }
 
 parameter "Namespace" {
     display_settings = {
         Octopus.ControlType = "SingleLineText"
     }
-    help_text = "K8s namespace. Auto-created if missing."
+    help_text = "K8s namespace."
     label = "Namespace"
 }
 
@@ -89,22 +89,6 @@ parameter "ConfigMapSubPath" {
     label = "ConfigMap subPath"
 }
 
-parameter "AppImage" {
-    display_settings = {
-        Octopus.ControlType = "Package"
-    }
-    help_text = "Container image package for the workload. Bound by the consuming project."
-    label = "App image package"
-}
-
-parameter "ArgoImage" {
-    display_settings = {
-        Octopus.ControlType = "Package"
-    }
-    help_text = "Container image package whose tag the Argo CD step writes into Application manifests. Usually the same package as App image."
-    label = "Argo image package"
-}
-
 step "deploy-manifests" {
     name = "Deploy Manifests"
     properties = {
@@ -118,7 +102,6 @@ step "deploy-manifests" {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "False"
             Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
             Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
-            Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
             Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
                 apiVersion: apps/v1
                 kind: Deployment
@@ -142,7 +125,7 @@ step "deploy-manifests" {
                     spec:
                       containers:
                         - name: #{AppName}
-                          image: #{Octopus.Action.Package[AppImage].Image}
+                          image: #{Octopus.Action.Package[app-image].Image}
                           ports:
                             - containerPort: #{ContainerPort}
                           resources:
@@ -189,38 +172,5 @@ step "deploy-manifests" {
             Octopus.Action.Script.ScriptSource = "Inline"
         }
         worker_pool_variable = ""
-
-        packages "AppImage" {
-            acquisition_location = "NotAcquired"
-            properties = {
-                Extract = "False"
-                Purpose = "DockerImageReference"
-                SelectionMode = "deferred"
-            }
-        }
-    }
-}
-
-step "update-argo-cd-application-image-tags" {
-    name = "Update Argo CD Application Image Tags"
-
-    action {
-        action_type = "Octopus.ArgoCDUpdateImageTags"
-        properties = {
-            Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
-            Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
-            Octopus.Action.ArgoCD.StepVerification.Method = "ArgoCDApplicationHealthy"
-            Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
-        }
-
-        packages "ArgoImage" {
-            acquisition_location = "NotAcquired"
-            properties = {
-                Extract = "False"
-                HelmReplacementPath = "image.tag"
-                Purpose = "DockerImageReference"
-                SelectionMode = "deferred"
-            }
-        }
     }
 }
