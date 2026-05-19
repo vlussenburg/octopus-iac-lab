@@ -1,2 +1,104 @@
 name = "k8s-tenanted-app"
 description = "Deploy a tenanted Kubernetes workload: Deployment + Service + Ingress, plus Argo CD image-tag update. The consuming project owns its ConfigMap and passes the name + mount path."
+
+parameter "Application name" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "Used as the workload/service/ingress name and the `app` label."
+    label = ""
+}
+
+parameter "Platform" {
+    display_settings = {
+        Octopus.ControlType = "TargetTags"
+    }
+    help_text = ""
+    label = ""
+}
+
+step "deploy-manifests" {
+    name = "Deploy Manifests"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Platform}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesDeployRawYaml"
+        properties = {
+            Octopus.Action.Kubernetes.DeploymentTimeout = "180"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "False"
+            Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: #{AppName}
+                  labels:
+                    app: #{AppName}
+                    tenant.octopus.com/tenant: "#{Tenant}"
+                    tenant.octopus.com/tier: "#{Tier}"
+                spec:
+                  replicas: #{Replicas}
+                  selector:
+                    matchLabels:
+                      app: #{AppName}
+                  template:
+                    metadata:
+                      labels:
+                        app: #{AppName}
+                        tenant.octopus.com/tenant: "#{Tenant}"
+                        tenant.octopus.com/tier: "#{Tier}"
+                    spec:
+                      containers:
+                        - name: #{AppName}
+                          image: #{Octopus.Action.Package[app-image].Image}
+                          ports:
+                            - containerPort: #{ContainerPort}
+                          resources:
+                            requests: { cpu: "100m", memory: "64Mi" }
+                            limits:   { cpu: "250m", memory: "128Mi" }
+                          volumeMounts:
+                            - name: config
+                              mountPath: #{ConfigMapMountPath}
+                              subPath: #{ConfigMapSubPath}
+                      volumes:
+                        - name: config
+                          configMap:
+                            name: #{ConfigMapName}
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata: { name: #{AppName} }
+                spec:
+                  type: ClusterIP
+                  selector: { app: #{AppName} }
+                  ports:
+                    - protocol: TCP
+                      port: 80
+                      targetPort: #{ContainerPort}
+                ---
+                apiVersion: networking.k8s.io/v1
+                kind: Ingress
+                metadata: { name: #{AppName} }
+                spec:
+                  ingressClassName: nginx
+                  rules:
+                    - host: #{Host}
+                      http:
+                        paths:
+                          - path: /
+                            pathType: Prefix
+                            backend:
+                              service:
+                                name: #{AppName}
+                                port: { number: 80 }
+                EOT
+            Octopus.Action.KubernetesContainers.DeploymentWait = "NoWait"
+            Octopus.Action.KubernetesContainers.Namespace = "#{Namespace}"
+            Octopus.Action.Script.ScriptSource = "Inline"
+        }
+        worker_pool_variable = ""
+    }
+}
