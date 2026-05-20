@@ -40,13 +40,23 @@ fs.mkdirSync(OUT, { recursive: true });
 
 // --- helpers ----------------------------------------------------------
 
-async function octoLogin(page) {
+async function octoLogin(page, user = OCTO.user, pass = OCTO.pass) {
   await page.goto(`${OCTO.base}/app#/users/sign-in`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2500);
-  await page.fill('input[type="text"]', OCTO.user);
-  await page.fill('input[type="password"]', OCTO.pass);
+  await page.fill('input[type="text"]', user);
+  await page.fill('input[type="password"]', pass);
   await page.click('button[type="submit"]');
   await page.waitForTimeout(4000);
+}
+
+// Switch to a different Octopus user. Hits /api/users/logout to drop the
+// server-side session, clears cookies, then signs in fresh. Used by the
+// locked-down-prod-pool demo to contrast what admin / developer /
+// prod-deployer see.
+async function octoSwitchUser(page, user, pass) {
+  await page.goto(`${OCTO.base}/api/users/logout`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+  await page.context().clearCookies();
+  await octoLogin(page, user, pass);
 }
 
 async function argoLogin(page) {
@@ -70,6 +80,105 @@ async function shot(page, slug, url, waitMs = 4500) {
   await page.screenshot({ path: path.join(OUT, `${slug}.png`), fullPage: false });
 }
 
+// Navigate to a task page, expand all log sections, scroll the
+// gate-check step into view, and screenshot the viewport. Octopus's
+// task log uses an inner virtualised scroll container, so fullPage:true
+// only captures the visible chunk — scrolling to the section we care
+// about is the reliable path.
+async function captureTaskLogAtGateCheck(page, taskUrl, slug) {
+  // Octopus's task-log UI uses a virtualised inner-scroll container —
+  // fullPage:true only captures the visible viewport's worth. The
+  // /api/tasks/{id}/raw endpoint returns the whole run as plain text;
+  // we render it inside a synthetic page that pretty-prints just the
+  // gate-check section, then screenshot that.
+  const taskIdMatch = taskUrl.match(/ServerTasks-\d+/);
+  if (!taskIdMatch) {
+    console.log(`    bad task URL for ${slug}`);
+    return;
+  }
+  const taskId = taskIdMatch[0];
+  const apiBase = OCTO.base.replace(/\/$/, '');
+  const ctx = await page.context();
+  const cookies = await ctx.cookies();
+  // Cookie auth doesn't include the API-key header — but the user is
+  // already signed in as admin via octoLogin, so the raw endpoint will
+  // honour the session cookie.
+  const resp = await page.request.get(`${apiBase}/api/tasks/${taskId}/raw`);
+  const fullLog = await resp.text();
+  // Crop to the "Production gate check" section + ~30 lines around it.
+  const lines = fullLog.split('\n');
+  // Find the LAST occurrence of "Leased worker ... gate check" — the
+  // actual step execution line where the worker pool name is logged.
+  // Slice forward to either the marker output (prod case) or the
+  // "no prod-only-check" line (dev case) plus a few lines of tail.
+  const startMatch = (() => {
+    for (let i = 0; i < lines.length; i++) {
+      if (/Executing Production gate check.*on .*-pool-worker/.test(lines[i])) return i;
+    }
+    return lines.findIndex(l => /Production gate check/.test(l));
+  })();
+  const start = Math.max(0, startMatch - 6);
+  // End: 2 lines after the LAST marker / non-prod-pool message, or 50 lines down.
+  const endMatch = (() => {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (/prod-only-check|non-prod pool/.test(lines[i])) return i + 2;
+    }
+    return Math.min(lines.length, startMatch + 50);
+  })();
+  const snippet = lines.slice(start, endMatch).join('\n');
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  const html = `<!doctype html><html><head><title>${slug}</title>
+    <style>
+      body{font-family:'SF Mono','Menlo','Consolas',monospace;font-size:14px;background:#0d1117;color:#e6edf3;padding:32px;margin:0;white-space:pre-wrap;line-height:1.55}
+      .h{color:#7ee787;font-weight:bold;font-size:18px;margin-bottom:16px;border-bottom:1px solid #30363d;padding-bottom:10px}
+      .marker{color:#ffa657;font-weight:bold}
+      .lease{color:#79c0ff;font-weight:bold}
+    </style></head><body>
+    <div class="h">${slug} — /api/tasks/${taskId}/raw (Production gate check step)</div>
+    ${snippet
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/(\[prod-only-check\][^\n]*)/g, '<span class="marker">$1</span>')
+      .replace(/(\(no \/usr\/local\/bin\/prod-only-check\.sh[^\n]*\))/g, '<span class="marker">$1</span>')
+      .replace(/(Leased worker[^\n]*)/g, '<span class="lease">$1</span>')
+      .replace(/(Executing Production gate check[^\n]*)/g, '<span class="lease">$1</span>')
+    }
+    </body></html>`;
+  await page.setContent(html);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/${slug}.png`, fullPage: true });
+  // Reset viewport so subsequent shots match the lab-wide 1440x1000.
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  console.log(`  [${slug}] (raw-log gate-check excerpt, rendered)`);
+}
+
+// On a task page, switch to the Task Log tab and expand every
+// collapsible section so the verbose per-step output (script body,
+// environment info, etc.) is visible in the screenshot. Octopus's task
+// UI defaults to collapsed; the "View Settings → Expand → All" menu is
+// the manual equivalent.
+async function expandAllInTaskLog(page) {
+  try {
+    await page.click('a:has-text("Task Log"), button:has-text("Task Log"), [role="tab"]:has-text("Task Log")', { timeout: 4000 });
+    await page.waitForTimeout(2000);
+  } catch (e) {
+    console.log(`    task-log tab not found: ${e.message}`);
+  }
+  try {
+    await page.click('button:has-text("View settings"), [aria-label="View settings"]', { timeout: 4000 });
+    await page.waitForTimeout(800);
+    // "Expand" group has four radios: Interesting / All / Errors / None.
+    // Target the "All" radio via Playwright's role-based locator.
+    await page.getByRole('radio', { name: 'All' }).click({ timeout: 3000 });
+    await page.waitForTimeout(2500);
+    await page.keyboard.press('Escape').catch(() => {});
+    // Click outside the menu to close it.
+    await page.click('h1, [role="heading"]', { timeout: 2000 }).catch(() => {});
+    await page.waitForTimeout(800);
+  } catch (e) {
+    console.log(`    expand-all skipped: ${e.message}`);
+  }
+}
+
 // The Help Sidebar steals ~300px on the right of every Octopus page. Close it
 // before screenshotting so the content area is the focus.
 async function dismissHelpSidebar(page) {
@@ -82,6 +191,59 @@ async function dismissHelpSidebar(page) {
 // --- demos ------------------------------------------------------------
 
 const DEMOS = {
+  'locked-down-prod-pool': async (page) => {
+    const pools     = `${OCTO.base}/app#/Spaces-2/infrastructure/workers`;
+    const prodPool  = `${OCTO.base}/app#/Spaces-2/infrastructure/workerpools/WorkerPools-22`;
+    const proj      = `${OCTO.base}/app#/Spaces-2/projects/locked-down-prod-pool-randomquotes`;
+    const variables = `${proj}/variables`;
+    const process   = `${proj}/deployments/process`;
+    // Prod + Dev tasks for release 1.0.5-demo — the canonical pair.
+    const prodTask  = `${OCTO.base}/app#/Spaces-2/tasks/ServerTasks-1096`;
+    const devTask   = `${OCTO.base}/app#/Spaces-2/tasks/ServerTasks-1095`;
+    const usersList = `${OCTO.base}/app#/configuration/users`;
+    const teamsList = `${OCTO.base}/app#/Spaces-2/configuration/teams`;
+
+    // === Admin's view ============================================
+    await octoLogin(page);
+    // Infrastructure overview — Workers landing shows both pools + workers.
+    await shot(page, 'ld-01-admin-workers',       pools, 5000);
+    // prod-pool detail — the polling tentacle registered into it.
+    await shot(page, 'ld-02-admin-prod-pool',     prodPool, 5000);
+    // System-wide users — `developer` + `prod-deployer` demo accounts.
+    await shot(page, 'ld-03-admin-users',         usersList, 4000);
+    // Teams page — `developers` + `prod-deployers` with their role bindings.
+    await shot(page, 'ld-04-admin-teams',         teamsList, 4000);
+    // The locked-down demo project's process — gate-check step visible.
+    await shot(page, 'ld-05-admin-process',       process, 5500);
+    // Project variables — Project.WorkerPool with env-scoped rows.
+    await shot(page, 'ld-06-admin-variables',     variables, 4500);
+    // Production deploy task log — proves prod-pool-worker ran the step.
+    // Scroll the expanded log down so the gate-check step output is in
+    // the viewport. (fullPage doesn't capture Octopus's inner-scroll
+    // log container; the raw log view is a separate page we render
+    // directly via the rawLog URL.)
+    await captureTaskLogAtGateCheck(page, prodTask, 'ld-07-admin-prod-task');
+    // Dev deploy task log — same step, no marker output (the contrast).
+    await captureTaskLogAtGateCheck(page, devTask, 'ld-08-admin-dev-task');
+
+    // === Developer's view (no WorkerView, no LibVarSet edit) =====
+    await octoSwitchUser(page, 'developer', 'Password01!');
+    // Worker pools — should be empty / "no permissions" message.
+    await shot(page, 'ld-09-developer-workers',   pools, 5000);
+    // Project process — process page loads but worker pool dropdowns
+    // are empty for a step that uses WorkerPoolVariable.
+    await shot(page, 'ld-10-developer-process',   process, 5500);
+    // Variables — read-only (LibraryVariableSetEdit absent → can't
+    // change the env-scoped Project.WorkerPool).
+    await shot(page, 'ld-11-developer-variables', variables, 4500);
+
+    // === Prod-Deployer's view (full Worker* + LibVarSet edit) ====
+    await octoSwitchUser(page, 'prod-deployer', 'Password01!');
+    // Worker pools — both visible, prod-pool selectable.
+    await shot(page, 'ld-12-prod-deployer-workers', pools, 5000);
+    // Variables — editable.
+    await shot(page, 'ld-13-prod-deployer-variables', variables, 4500);
+  },
   'smoke-step-template': async (page) => {
     await octoLogin(page);
     const tplList = `${OCTO.base}/app#/Spaces-2/library/steptemplates`;
