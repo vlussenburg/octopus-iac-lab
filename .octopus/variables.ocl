@@ -1,18 +1,18 @@
 variable "Replicas" {
     value "3" {
-        environment = ["Production"]
+        environment = ["production"]
         tenant_tag  = ["tier/enterprise"]
     }
     value "2" {
-        environment = ["Production"]
+        environment = ["production"]
         tenant_tag  = ["tier/pro"]
     }
     value "1" {
-        environment = ["Production"]
+        environment = ["production"]
         tenant_tag  = ["tier/free"]
     }
     value "1" {
-        environment = ["Dev"]
+        environment = ["dev"]
     }
 }
 
