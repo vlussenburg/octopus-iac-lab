@@ -8,7 +8,7 @@ resource "octopusdeploy_step_template" "smoke_test" {
     "Octopus.Action.Script.Syntax"       = "Bash"
     "Octopus.Action.Script.ScriptSource" = "Inline"
     "Octopus.Action.Script.ScriptBody"   = file("${path.module}/scripts/smoke-test.sh")
-    "Octopus.Action.RunOnServer"         = "true"
+    "Octopus.Action.RunOnServer"         = "false"
   }
 
   packages = []

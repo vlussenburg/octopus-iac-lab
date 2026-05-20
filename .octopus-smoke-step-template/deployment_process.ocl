@@ -150,7 +150,7 @@ step "smoke-test-http" {
         action_type = "Octopus.Script"
         properties = {
             Octopus.Action.Template.Id      = "ActionTemplates-1"
-            Octopus.Action.Template.Version = "1"
+            Octopus.Action.Template.Version = "2"
             BaseUrl                         = "http://randomquotes.randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.svc.cluster.local"
             Path                            = "/config.json"
             ExpectBody                      = "#{Octopus.Deployment.Tenant.Name}"
