@@ -95,7 +95,7 @@ step "deploy-manifests" {
                                 name: randomquotes
                                 port:
                                   number: 80
-                                        EOT
+                                            EOT
             Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
@@ -137,7 +137,7 @@ step "production-gate-check" {
                 else
                     echo "(no /usr/local/bin/prod-only-check.sh on this worker — this is a non-prod pool)"
                 fi
-            EOT
+                EOT
         }
     }
 }
