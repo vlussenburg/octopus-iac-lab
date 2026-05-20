@@ -66,7 +66,17 @@ async function shot(page, slug, url, waitMs = 4500) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
   await page.waitForTimeout(waitMs);
   await page.keyboard.press('Escape').catch(() => {});
+  await dismissHelpSidebar(page);
   await page.screenshot({ path: path.join(OUT, `${slug}.png`), fullPage: false });
+}
+
+// The Help Sidebar steals ~300px on the right of every Octopus page. Close it
+// before screenshotting so the content area is the focus.
+async function dismissHelpSidebar(page) {
+  try {
+    await page.click('button[aria-label="Close help panel"], button[aria-label="Close help sidebar"], [data-testid="close-help-sidebar"]', { timeout: 750 });
+    await page.waitForTimeout(500);
+  } catch {}
 }
 
 // --- demos ------------------------------------------------------------
@@ -91,9 +101,12 @@ const DEMOS = {
         console.log(`  [${slug}] (tab: ${tab})`);
       } catch (e) { console.log(`    skipped ${slug}: ${e.message}`); }
     }
-    // Project: process at demo branch + the consuming release showing expansion.
-    await shot(page, 'pt-05-project-releases',   `${proj}/deployments/releases`, 4000);
-    await shot(page, 'pt-06-release-expanded',   `${proj}/deployments/releases/2.0.0-demo`, 4000);
+    // Project's deployment process page: shows the process_template step
+    // AND its expansion (template's child steps indented underneath) — the
+    // before-and-after in a single view.
+    await shot(page, 'pt-05-project-process',    `${proj}/deployments/process`, 5000);
+    await shot(page, 'pt-06-project-releases',   `${proj}/deployments/releases`, 4000);
+    await shot(page, 'pt-07-release-expanded',   `${proj}/deployments/releases/2.0.0-demo`, 4000);
   },
   'platform-hub': async (page) => {
     await octoLogin(page);
