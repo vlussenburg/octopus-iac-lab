@@ -1,7 +1,7 @@
 variable "Project.WorkerPool" {
     type = "WorkerPool"
-    value "WorkerPools-23" {}
-    value "WorkerPools-22" {
+    value "dev-pool" {}
+    value "prod-pool" {
         environment = ["production"]
     }
 }
