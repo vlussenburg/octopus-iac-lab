@@ -123,13 +123,6 @@ step "production-gate-check" {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "Bash"
-            # WorkerPool with Octostache substitution rather than
-            # WorkerPoolVariable — the latter resolved to the unscoped
-            # default for us even on Production, because Octopus's worker
-            # selection runs before env-aware variable scoping kicks in
-            # for library variable sets. Direct substitution evaluates
-            # `#{Project.WorkerPool}` in the env-aware context and picks
-            # the right pool.
             Octopus.Action.WorkerPool = "#{Project.WorkerPool}"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 #!/usr/bin/env bash
