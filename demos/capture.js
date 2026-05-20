@@ -75,7 +75,7 @@ const DEMOS = {
   'process-template': async (page) => {
     await octoLogin(page);
     const tpl = `${OCTO.base}/app#/Spaces-2/platform-hub/process-templates/k8s-tenanted-app`;
-    const proj = `${OCTO.base}/app#/Spaces-2/projects/randomquotes`;
+    const proj = `${OCTO.base}/app#/Spaces-2/projects/process-template-randomquotes`;
     // Template definition (single-route SPA — tabs are buttons, not paths).
     await shot(page, 'pt-01-template',           tpl, 6000);
     // Click each tab in the template editor.
