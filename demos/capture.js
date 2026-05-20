@@ -72,6 +72,18 @@ async function shot(page, slug, url, waitMs = 4500) {
 // --- demos ------------------------------------------------------------
 
 const DEMOS = {
+  'process-template': async (page) => {
+    await octoLogin(page);
+    const tpl = `${OCTO.base}/app#/Spaces-2/platform-hub/process-templates/k8s-tenanted-app`;
+    const proj = `${OCTO.base}/app#/Spaces-2/projects/randomquotes`;
+    await shot(page, 'pt-01-template-overview',  tpl);
+    await shot(page, 'pt-02-template-parameters', `${tpl}/parameters`);
+    await shot(page, 'pt-03-template-steps',      `${tpl}/process`);
+    await shot(page, 'pt-04-template-versions',   `${tpl}/versions`);
+    await shot(page, 'pt-05-template-sharing',    `${tpl}/sharing`);
+    await shot(page, 'pt-06-project-process',     `${proj}/deployments/process`);
+    await shot(page, 'pt-07-project-releases',    `${proj}/deployments/releases`);
+  },
   'platform-hub': async (page) => {
     await octoLogin(page);
     const p = `${OCTO.base}/app#/Spaces-2/projects/platform-hub-opa-randomquotes`;
