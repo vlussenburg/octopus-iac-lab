@@ -1,3 +1,11 @@
+variable "Project.WorkerPool" {
+    type = "WorkerPool"
+    value "WorkerPools-23" {}
+    value "WorkerPools-22" {
+        environment = ["production"]
+    }
+}
+
 variable "Replicas" {
     value "3" {
         environment = ["production"]

@@ -123,7 +123,7 @@ step "production-gate-check" {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "Bash"
-            Octopus.Action.WorkerPool = "#{Project.WorkerPool}"
+            Octopus.Action.WorkerPoolVariable = "Project.WorkerPool"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 #!/usr/bin/env bash
                 set -euo pipefail
