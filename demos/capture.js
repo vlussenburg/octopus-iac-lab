@@ -82,6 +82,27 @@ async function dismissHelpSidebar(page) {
 // --- demos ------------------------------------------------------------
 
 const DEMOS = {
+  'smoke-step-template': async (page) => {
+    await octoLogin(page);
+    const tplList = `${OCTO.base}/app#/Spaces-2/library/steptemplates`;
+    const tpl     = `${OCTO.base}/app#/Spaces-2/library/steptemplates/ActionTemplates-1`;
+    const proj    = `${OCTO.base}/app#/Spaces-2/projects/smoke-step-template-randomquotes`;
+    // Library landing showing the custom step template.
+    await shot(page, 'ss-01-library',          tplList, 4500);
+    // Step template detail — script body + parameters.
+    await shot(page, 'ss-02-template',         tpl, 5000);
+    // Parameters tab.
+    try {
+      await page.click(`button:has-text("Parameters"), a:has-text("Parameters")`, { timeout: 3000 });
+      await page.waitForTimeout(1800);
+      await page.screenshot({ path: `${OUT}/ss-03-parameters.png`, fullPage: false });
+      console.log(`  [ss-03-parameters] (tab: Parameters)`);
+    } catch (e) { console.log(`    skipped ss-03-parameters: ${e.message}`); }
+    // Project deployment process — shows 4 steps including the smoke step.
+    await shot(page, 'ss-04-project-process',  `${proj}/deployments/process`, 5000);
+    // Latest release — task log will show the iteration table once deployed.
+    await shot(page, 'ss-05-project-releases', `${proj}/deployments/releases`, 4000);
+  },
   'process-template': async (page) => {
     await octoLogin(page);
     const tpl = `${OCTO.base}/app#/Spaces-2/platform-hub/process-templates/k8s-tenanted-app`;
