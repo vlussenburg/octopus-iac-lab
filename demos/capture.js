@@ -76,13 +76,24 @@ const DEMOS = {
     await octoLogin(page);
     const tpl = `${OCTO.base}/app#/Spaces-2/platform-hub/process-templates/k8s-tenanted-app`;
     const proj = `${OCTO.base}/app#/Spaces-2/projects/randomquotes`;
-    await shot(page, 'pt-01-template-overview',  tpl);
-    await shot(page, 'pt-02-template-parameters', `${tpl}/parameters`);
-    await shot(page, 'pt-03-template-steps',      `${tpl}/process`);
-    await shot(page, 'pt-04-template-versions',   `${tpl}/versions`);
-    await shot(page, 'pt-05-template-sharing',    `${tpl}/sharing`);
-    await shot(page, 'pt-06-project-process',     `${proj}/deployments/process`);
-    await shot(page, 'pt-07-project-releases',    `${proj}/deployments/releases`);
+    // Template definition (single-route SPA — tabs are buttons, not paths).
+    await shot(page, 'pt-01-template',           tpl, 6000);
+    // Click each tab in the template editor.
+    for (const [slug, tab] of [
+      ['pt-02-parameters', 'Parameters'],
+      ['pt-03-versions',   'Versions'],
+      ['pt-04-settings',   'Settings'],
+    ]) {
+      try {
+        await page.click(`button:has-text("${tab}"), a:has-text("${tab}")`, { timeout: 3000 });
+        await page.waitForTimeout(2000);
+        await page.screenshot({ path: `${OUT}/${slug}.png`, fullPage: false });
+        console.log(`  [${slug}] (tab: ${tab})`);
+      } catch (e) { console.log(`    skipped ${slug}: ${e.message}`); }
+    }
+    // Project: process at demo branch + the consuming release showing expansion.
+    await shot(page, 'pt-05-project-releases',   `${proj}/deployments/releases`, 4000);
+    await shot(page, 'pt-06-release-expanded',   `${proj}/deployments/releases/0.0.demo-pt-1`, 4000);
   },
   'platform-hub': async (page) => {
     await octoLogin(page);
