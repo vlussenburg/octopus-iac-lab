@@ -18,7 +18,20 @@ to "cross-space reusable steps" today is either:
 - a single Library step template registered identically per space.
 
 This stack is the latter — apply it against each Space that wants the
-step available. Idempotent: re-running upserts by name.
+step available. Idempotent: re-running matches state, no churn.
+
+## Provider note
+
+`octopusdeploy_step_template` ships in `OctopusDeploy/octopusdeploy
+~> 1.13` (the same release also added `octopusdeploy_process_step` and
+`octopusdeploy_process_templated_step` — handy for typed deployment
+process authoring). Earlier provider versions had nothing for this and
+forced a `null_resource + curl POST /api/Spaces-{n}/actiontemplates`
+shape.
+
+The `parameters[*].id` UUIDs are pinned in HCL so re-applies don't
+rotate them — Octopus keys per-step parameter bindings off the UUID,
+so rotation = silently breaking every consumer's bound values.
 
 ## What's registered
 
@@ -57,12 +70,12 @@ TF_VAR_octopus_api_key="$OCTOPUS_API_KEY" \
   tofu apply
 ```
 
-Re-run anytime — payload is hashed into the trigger so unchanged
-script + parameters = no-op.
+Re-run anytime — `tofu plan` is a no-op when the script + parameters
+haven't changed.
 
-`tofu destroy` removes the template via the same API; consumers that
-still reference it will fail at process-validation time, so destroy
-*after* removing the step from any consuming projects.
+`tofu destroy` removes the template; consumers that still reference it
+will fail at process-validation time, so destroy *after* removing the
+step from any consuming projects.
 
 ## Consuming the step in a project
 

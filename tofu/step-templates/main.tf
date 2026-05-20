@@ -4,25 +4,18 @@ terraform {
   required_providers {
     octopusdeploy = {
       source  = "OctopusDeploy/octopusdeploy"
-      version = "~> 1.12"
-    }
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.2"
+      version = "~> 1.13"
     }
   }
 }
 
 # Library step templates (custom action templates) live at
 # /api/Spaces-{n}/actiontemplates — they are NOT a Platform Hub artifact
-# and CANNOT be hosted in the PH Git repo. They're per-space resources.
+# and CANNOT be hosted in the PH Git repo. They're per-space resources
+# stored in the Octopus DB.
 #
-# The octopusdeploy provider v1.12 has no resource for action templates,
-# so the stack drives the REST API via a null_resource + curl (same
-# pattern as tofu/servicenow/integration.tf for the ITSM connection).
-#
-# Re-runs are idempotent: the script GETs by name, then PUTs to update or
-# POSTs to create.
+# Provider v1.13 ships `octopusdeploy_step_template` (typed resource);
+# v1.12 had nothing, so the prior shape here was a null_resource + curl.
 
 provider "octopusdeploy" {
   address  = var.octopus_url

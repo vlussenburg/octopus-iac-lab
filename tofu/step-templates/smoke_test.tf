@@ -6,166 +6,89 @@
 # from the UI. Replaces the copy-paste curl loops every team writes the
 # first time someone asks "did the deploy actually work?".
 
-locals {
-  smoke_test_template_name = "Smoke Test - HTTP"
-  smoke_test_script_body   = file("${path.module}/scripts/smoke-test.sh")
+resource "octopusdeploy_step_template" "smoke_test" {
+  name            = "Smoke Test - HTTP"
+  action_type     = "Octopus.Script"
+  step_package_id = "Octopus.Script"
+  description     = "Hits an HTTP endpoint N times and asserts latency + success-rate thresholds. Authored in tofu/step-templates/. Consume from Library → Step Templates."
 
-  smoke_test_parameters = [
+  properties = {
+    "Octopus.Action.Script.Syntax"       = "Bash"
+    "Octopus.Action.Script.ScriptSource" = "Inline"
+    "Octopus.Action.Script.ScriptBody"   = file("${path.module}/scripts/smoke-test.sh")
+    "Octopus.Action.RunOnServer"         = "true"
+  }
+
+  packages = []
+
+  # Parameter Ids are UUIDs — Octopus auto-assigned them on first create
+  # via the API. We pin them here so re-applies don't trigger churn (each
+  # Id rotation = "rename" in the eyes of the diff, which would force
+  # consumers to re-bind values).
+  parameters = [
     {
-      Name            = "BaseUrl"
-      Label           = "Base URL"
-      HelpText        = "Required. Scheme + host + optional port. Combined with Path. Example: http://#{AppName}.#{Namespace}.svc.cluster.local"
-      DefaultValue    = ""
-      DisplaySettings = { "Octopus.ControlType" = "SingleLineText" }
+      id               = "a384a893-c74c-4d59-b143-28690d866ea8"
+      name             = "BaseUrl"
+      label            = "Base URL"
+      help_text        = "Required. Scheme + host + optional port. Combined with Path. Example: http://#{AppName}.#{Namespace}.svc.cluster.local"
+      default_value    = ""
+      display_settings = { "Octopus.ControlType" = "SingleLineText" }
     },
     {
-      Name            = "Path"
-      Label           = "Path"
-      HelpText        = "Path appended to Base URL. Default `/`."
-      DefaultValue    = "/"
-      DisplaySettings = { "Octopus.ControlType" = "SingleLineText" }
+      id               = "6d735a9c-306d-4832-929f-49557efcc3cc"
+      name             = "Path"
+      label            = "Path"
+      help_text        = "Path appended to Base URL. Default `/`."
+      default_value    = "/"
+      display_settings = { "Octopus.ControlType" = "SingleLineText" }
     },
     {
-      Name            = "Iterations"
-      Label           = "Iterations"
-      HelpText        = "Number of requests to send. Default 20."
-      DefaultValue    = "20"
-      DisplaySettings = { "Octopus.ControlType" = "SingleLineText" }
+      id               = "c7bd4560-6032-43a6-877d-02425d1e1176"
+      name             = "Iterations"
+      label            = "Iterations"
+      help_text        = "Number of requests to send. Default 20."
+      default_value    = "20"
+      display_settings = { "Octopus.ControlType" = "SingleLineText" }
     },
     {
-      Name            = "ExpectedStatus"
-      Label           = "Expected HTTP status"
-      HelpText        = "Each iteration must return this status to count as success. Default 200."
-      DefaultValue    = "200"
-      DisplaySettings = { "Octopus.ControlType" = "SingleLineText" }
+      id               = "be6bf8a2-4214-4e16-9e93-27726c643b58"
+      name             = "ExpectedStatus"
+      label            = "Expected HTTP status"
+      help_text        = "Each iteration must return this status to count as success. Default 200."
+      default_value    = "200"
+      display_settings = { "Octopus.ControlType" = "SingleLineText" }
     },
     {
-      Name            = "MaxLatencyMs"
-      Label           = "Max latency (ms)"
-      HelpText        = "Per-request latency ceiling. Requests slower than this count as failures. Default 500."
-      DefaultValue    = "500"
-      DisplaySettings = { "Octopus.ControlType" = "SingleLineText" }
+      id               = "2ca895d7-af76-4286-922d-b9593602cd10"
+      name             = "MaxLatencyMs"
+      label            = "Max latency (ms)"
+      help_text        = "Per-request latency ceiling. Requests slower than this count as failures. Default 500."
+      default_value    = "500"
+      display_settings = { "Octopus.ControlType" = "SingleLineText" }
     },
     {
-      Name            = "MinSuccessPct"
-      Label           = "Min success %"
-      HelpText        = "Overall success-rate floor. If passing iterations are below this, the step fails. Default 95."
-      DefaultValue    = "95"
-      DisplaySettings = { "Octopus.ControlType" = "SingleLineText" }
+      id               = "80ecd16a-6916-43f9-b46e-d610fb6aaded"
+      name             = "MinSuccessPct"
+      label            = "Min success %"
+      help_text        = "Overall success-rate floor. If passing iterations are below this, the step fails. Default 95."
+      default_value    = "95"
+      display_settings = { "Octopus.ControlType" = "SingleLineText" }
     },
     {
-      Name            = "WarmupSeconds"
-      Label           = "Warmup (s)"
-      HelpText        = "Sleep this long before the first request — gives Service endpoints + ingress controllers time to settle. Default 5."
-      DefaultValue    = "5"
-      DisplaySettings = { "Octopus.ControlType" = "SingleLineText" }
+      id               = "92595758-5173-4d22-9c52-ac36e7710565"
+      name             = "WarmupSeconds"
+      label            = "Warmup (s)"
+      help_text        = "Sleep this long before the first request — gives Service endpoints + ingress controllers time to settle. Default 5."
+      default_value    = "5"
+      display_settings = { "Octopus.ControlType" = "SingleLineText" }
     },
     {
-      Name            = "ExpectBody"
-      Label           = "Body must contain (optional)"
-      HelpText        = "If set, response body must contain this substring to count as success. Use to catch 200-OK-but-wrong-page regressions (e.g. tenant config rendered)."
-      DefaultValue    = ""
-      DisplaySettings = { "Octopus.ControlType" = "SingleLineText" }
+      id               = "e689f877-d525-4519-ad49-f8d03c3e87c5"
+      name             = "ExpectBody"
+      label            = "Body must contain (optional)"
+      help_text        = "If set, response body must contain this substring to count as success. Use to catch 200-OK-but-wrong-page regressions (e.g. tenant config rendered)."
+      default_value    = ""
+      display_settings = { "Octopus.ControlType" = "SingleLineText" }
     },
   ]
-
-  smoke_test_payload = jsonencode({
-    Name          = local.smoke_test_template_name
-    Description   = "Hits an HTTP endpoint N times and asserts latency + success-rate thresholds. Authored in tofu/step-templates/. Consume from Library → Step Templates."
-    ActionType    = "Octopus.Script"
-    StepPackageId = "Octopus.Script"
-    Packages      = []
-    Properties = {
-      "Octopus.Action.Script.Syntax"       = "Bash"
-      "Octopus.Action.Script.ScriptSource" = "Inline"
-      "Octopus.Action.Script.ScriptBody"   = local.smoke_test_script_body
-      "Octopus.Action.RunOnServer"         = "true"
-    }
-    Parameters = local.smoke_test_parameters
-  })
-}
-
-resource "null_resource" "smoke_test" {
-  triggers = {
-    # Re-apply when name, script, or parameter shape changes.
-    payload_sha256 = sha256(local.smoke_test_payload)
-    space_id       = data.terraform_remote_state.space.outputs.space_id
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["bash", "-eu", "-o", "pipefail", "-c"]
-    environment = {
-      OCTO_URL = var.octopus_url
-      OCTO_KEY = var.octopus_api_key
-      SPACE_ID = data.terraform_remote_state.space.outputs.space_id
-      TPL_NAME = local.smoke_test_template_name
-      PAYLOAD  = local.smoke_test_payload
-    }
-    command = <<-EOT
-      base="$OCTO_URL/api/$SPACE_ID/actiontemplates"
-
-      # Look up existing by name (action templates have unique names per space).
-      existing_id=$(curl -s -fL \
-        -H "X-Octopus-ApiKey: $OCTO_KEY" \
-        --get --data-urlencode "partialName=$TPL_NAME" \
-        "$base" \
-        | jq -r --arg n "$TPL_NAME" '.Items[] | select(.Name == $n) | .Id' | head -1)
-
-      if [ -n "$existing_id" ]; then
-        echo "→ updating $existing_id ($TPL_NAME)"
-        curl -s -fL -X PUT \
-          -H "X-Octopus-ApiKey: $OCTO_KEY" \
-          -H "Content-Type: application/json" \
-          -d "$PAYLOAD" \
-          "$base/$existing_id" \
-          | jq -r '"✓ updated: " + .Id + " v" + (.Version|tostring) + " slug=" + (.Slug // "(none)")'
-      else
-        echo "→ creating $TPL_NAME"
-        curl -s -fL -X POST \
-          -H "X-Octopus-ApiKey: $OCTO_KEY" \
-          -H "Content-Type: application/json" \
-          -d "$PAYLOAD" \
-          "$base" \
-          | jq -r '"✓ created: " + .Id + " v" + (.Version|tostring) + " slug=" + (.Slug // "(none)")'
-      fi
-    EOT
-  }
-}
-
-# Destroy-time cleanup. Looks up by name (the resource Id isn't in tfstate
-# because null_resource doesn't capture it) and DELETEs.
-resource "null_resource" "smoke_test_destroy" {
-  triggers = {
-    octopus_url     = var.octopus_url
-    octopus_api_key = var.octopus_api_key
-    space_id        = data.terraform_remote_state.space.outputs.space_id
-    template_name   = local.smoke_test_template_name
-  }
-
-  provisioner "local-exec" {
-    when        = destroy
-    interpreter = ["bash", "-eu", "-o", "pipefail", "-c"]
-    environment = {
-      OCTO_URL = self.triggers.octopus_url
-      OCTO_KEY = self.triggers.octopus_api_key
-      SPACE_ID = self.triggers.space_id
-      TPL_NAME = self.triggers.template_name
-    }
-    command = <<-EOT
-      base="$OCTO_URL/api/$SPACE_ID/actiontemplates"
-      existing_id=$(curl -s -fL \
-        -H "X-Octopus-ApiKey: $OCTO_KEY" \
-        --get --data-urlencode "partialName=$TPL_NAME" \
-        "$base" \
-        | jq -r --arg n "$TPL_NAME" '.Items[] | select(.Name == $n) | .Id' | head -1)
-      if [ -n "$existing_id" ]; then
-        curl -s -fL -X DELETE \
-          -H "X-Octopus-ApiKey: $OCTO_KEY" \
-          "$base/$existing_id" \
-          && echo "✓ deleted $existing_id ($TPL_NAME)"
-      else
-        echo "(none) nothing to delete: no template named '$TPL_NAME'"
-      fi
-    EOT
-  }
 }
