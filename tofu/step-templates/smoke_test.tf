@@ -1,11 +1,3 @@
-# Smoke Test - HTTP : Library step template.
-#
-# Hits an HTTP endpoint N times and asserts latency + success-rate
-# thresholds. Authored once here, surfaced in the consuming Space's
-# Library → Step Templates, addable to any project's deployment process
-# from the UI. Replaces the copy-paste curl loops every team writes the
-# first time someone asks "did the deploy actually work?".
-
 resource "octopusdeploy_step_template" "smoke_test" {
   name            = "Smoke Test - HTTP"
   action_type     = "Octopus.Script"
@@ -21,10 +13,17 @@ resource "octopusdeploy_step_template" "smoke_test" {
 
   packages = []
 
-  # Parameter Ids are UUIDs — Octopus auto-assigned them on first create
-  # via the API. We pin them here so re-applies don't trigger churn (each
-  # Id rotation = "rename" in the eyes of the diff, which would force
-  # consumers to re-bind values).
+  # Parameter Ids must be UUIDs (provider rejects anything else) and
+  # must be PINNED in HCL, not generated. Octopus stores consumer step
+  # bindings keyed by these UUIDs, NOT by parameter name — so rotating
+  # an Id silently unbinds every project using the template, leaving
+  # the new param empty and the value orphaned in the step's properties.
+  #
+  # On first author, omit the `id` field, apply, then read the assigned
+  # UUIDs back and paste them in:
+  #   curl -s -H "X-Octopus-ApiKey: $K" \
+  #     "$OCTOPUS_URL/api/Spaces-{n}/actiontemplates/<id>" \
+  #     | jq '.Parameters[] | {Name, Id}'
   parameters = [
     {
       id               = "a384a893-c74c-4d59-b143-28690d866ea8"
