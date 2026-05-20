@@ -19,6 +19,8 @@ crash.*.log
 scripts/node_modules/
 scripts/snow-debug-*.png
 scripts/snow-debug-*.html
+demos/node_modules/
+demos/package*.json
 
 # macOS
 .DS_Store
