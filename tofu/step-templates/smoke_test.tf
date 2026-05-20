@@ -13,17 +13,11 @@ resource "octopusdeploy_step_template" "smoke_test" {
 
   packages = []
 
-  # Parameter Ids must be UUIDs (provider rejects anything else) and
-  # must be PINNED in HCL, not generated. Octopus stores consumer step
-  # bindings keyed by these UUIDs, NOT by parameter name — so rotating
-  # an Id silently unbinds every project using the template, leaving
-  # the new param empty and the value orphaned in the step's properties.
-  #
-  # On first author, omit the `id` field, apply, then read the assigned
-  # UUIDs back and paste them in:
-  #   curl -s -H "X-Octopus-ApiKey: $K" \
-  #     "$OCTOPUS_URL/api/Spaces-{n}/actiontemplates/<id>" \
-  #     | jq '.Parameters[] | {Name, Id}'
+  # Parameter Ids must be valid UUIDs (provider rejects anything else)
+  # and must be PINNED in HCL. Octopus keys consumer step bindings off
+  # the UUID, NOT off the parameter name — rotating an Id silently
+  # unbinds every project using the template. Pick any UUID (uuidgen)
+  # on first author and never touch it again.
   parameters = [
     {
       id               = "a384a893-c74c-4d59-b143-28690d866ea8"
