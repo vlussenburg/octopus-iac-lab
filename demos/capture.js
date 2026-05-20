@@ -93,7 +93,7 @@ const DEMOS = {
     }
     // Project: process at demo branch + the consuming release showing expansion.
     await shot(page, 'pt-05-project-releases',   `${proj}/deployments/releases`, 4000);
-    await shot(page, 'pt-06-release-expanded',   `${proj}/deployments/releases/0.0.demo-pt-1`, 4000);
+    await shot(page, 'pt-06-release-expanded',   `${proj}/deployments/releases/1.0.0-demo`, 4000);
   },
   'platform-hub': async (page) => {
     await octoLogin(page);
