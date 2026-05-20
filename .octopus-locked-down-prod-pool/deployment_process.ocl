@@ -114,6 +114,34 @@ step "deploy-manifests" {
     }
 }
 
+step "production-gate-check" {
+    name = "Production gate check"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "Bash"
+            Octopus.Action.WorkerPoolVariable = "Project.WorkerPool"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                #!/usr/bin/env bash
+                set -euo pipefail
+
+                ENV="$(get_octopusvariable 'Octopus.Environment.Name')"
+                POOL="$(get_octopusvariable 'Octopus.Action.WorkerPool.Name')"
+                echo "Step is running on worker pool: $POOL (env: $ENV)"
+
+                if [ -x /usr/local/bin/prod-only-check.sh ]; then
+                    /usr/local/bin/prod-only-check.sh
+                else
+                    echo "(no /usr/local/bin/prod-only-check.sh on this worker — this is a non-prod pool)"
+                fi
+            EOT
+        }
+    }
+}
+
 step "update-argo-cd-application-image-tags" {
     name = "Update Argo CD Application Image Tags"
 

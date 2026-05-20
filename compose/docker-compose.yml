@@ -61,8 +61,85 @@ services:
       - octopus-artifacts:/artifacts
       - octopus-tasklogs:/taskLogs
 
+  # Sibling worker for `dev-pool`. Same image, but NO marker script
+  # bind-mount — so the deployment process's gate-check step takes the
+  # "no /usr/local/bin/prod-only-check.sh" branch when it lands here.
+  # That contrast in the task log is what makes the demo readable: same
+  # step, different worker pool → different output.
+  dev-pool-worker:
+    image: octopusdeploy/tentacle:latest
+    platform: linux/amd64
+    privileged: true
+    depends_on:
+      octopus:
+        condition: service_started
+    environment:
+      ACCEPT_EULA: "Y"
+      ServerApiKey: "${OCTOPUS_API_KEY}"
+      ServerUrl: "http://octopus:8080"
+      ServerCommsAddress: "Polling://octopus:10943/"
+      Space: "IaC Sandbox"
+      TargetName: "dev-pool-worker"
+      TargetWorkerPool: "dev-pool"
+      MachinePolicy: "Default Machine Policy"
+    restart: unless-stopped
+    volumes:
+      - dev-pool-tentacle-config:/etc/octopus
+      - dev-pool-tentacle-home:/home/Octopus
+
+  # Polling Tentacle running as a worker in `prod-pool`. The second half
+  # of the locked-down-prod-pool demo: prod-pool isn't a dead pool — it
+  # has a real worker with prod-only tooling baked in (the marker script
+  # at /usr/local/bin/prod-only-check.sh). Steps using
+  # Octopus.Action.WorkerPoolVariable=Project.WorkerPool route to this
+  # worker on Production deploys, since the env-scoped variable resolves
+  # to prod-pool there.
+  #
+  # The image's entrypoint runs create-instance → new-certificate →
+  # configure → register-worker → run. Registration succeeds only after
+  # `make cp-apply` has created prod-pool — before that,
+  # restart: unless-stopped keeps the container retrying. Identity +
+  # thumbprint live in the named volumes so re-registration survives
+  # container restarts.
+  prod-pool-worker:
+    image: octopusdeploy/tentacle:latest
+    platform: linux/amd64
+    # The official Octopus tentacle image's entrypoint always starts a
+    # Docker-in-Docker daemon (so the tentacle can run Docker steps),
+    # and DinD requires privileged. There's no env-var off-switch.
+    # Sandbox-only choice; in production a worker would either run a
+    # non-DinD image or use a sidecar pattern.
+    privileged: true
+    depends_on:
+      octopus:
+        condition: service_started
+    environment:
+      ACCEPT_EULA: "Y"
+      ServerApiKey: "${OCTOPUS_API_KEY}"
+      ServerUrl: "http://octopus:8080"
+      # Polling tentacle connects on Halibut TCP — same port the K8s
+      # agent uses (10943), reached over the docker network.
+      ServerCommsAddress: "Polling://octopus:10943/"
+      Space: "IaC Sandbox"
+      TargetName: "prod-pool-worker"
+      TargetWorkerPool: "prod-pool"
+      MachinePolicy: "Default Machine Policy"
+    restart: unless-stopped
+    volumes:
+      - polling-tentacle-config:/etc/octopus
+      - polling-tentacle-home:/home/Octopus
+      # Bind-mount the marker script — the prod-only tooling. Only
+      # present on this worker; the "Production gate check" step calls
+      # it and includes its output in the task log as visible proof
+      # the step ran on prod-pool.
+      - ./tentacle/prod-only-check.sh:/usr/local/bin/prod-only-check.sh:ro
+
 volumes:
   mssql-data:
   octopus-repository:
   octopus-artifacts:
   octopus-tasklogs:
+  polling-tentacle-config:
+  polling-tentacle-home:
+  dev-pool-tentacle-config:
+  dev-pool-tentacle-home:
