@@ -49,7 +49,7 @@ data "octopusdeploy_worker_pools" "linux" {
 
 resource "octopusdeploy_variable" "linux_worker_pool" {
   owner_id = octopusdeploy_library_variable_set.lab_source.id
-  name     = "Linux.WorkerPool"
+  name     = "Runbook.LinuxWorker"
   type     = "WorkerPool"
   value    = data.octopusdeploy_worker_pools.linux.worker_pools[0].id
 }
