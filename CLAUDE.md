@@ -62,6 +62,24 @@ Downstream stacks read upstream outputs via `terraform_remote_state` with `backe
 | `tofu/argocd/` | Minimum-footprint stack — owns only the **control plane** of the Octopus↔Argo connection: ArgoCD helm install (gated `install_argocd`, local owns), the `octopus`-account JWT mint, and the Octopus Argo CD Gateway via the `octopus-argocd-gateway` local module. The bootstrap Application that syncs `gitops/argocd/` is created via a separate `null_resource` + `kubectl apply` after the helm release (NOT via `extraObjects`, which dies on the chicken-and-egg between the Application CRD and the resource referencing it). Everything else — App-of-Apps roots, ingress, 12 leaf Applications — lives in [`gitops/`](../gitops/) and is reconciled from git, not tofu state. |
 | `tofu/servicenow/` | ServiceNow ITSM connection (OAuth or basic-auth against a PDI) + per-project `servicenow_change_control_extension_settings`. Only applied when `OCTOPUS_SERVICENOW_ENABLED=true` and a connection exists. The env-level `servicenow_extension_settings` toggle on Production lives in `tofu/control-plane/environments.tf` (always present; harmless without a wired connection). The `demo/servicenow-cr-gate` demo demonstrates the full CR-gate flow on Production deploys. |
 
+### Local vs SaaS — what actually differs
+
+OCL is identical across instances (same git tree); the only switch is `local.source_kind = strcontains(var.octopus_url, "octopus.app") ? "saas" : "local"` in `tofu/control-plane/`. Everything else flows from it.
+
+| Aspect | local self-host | SaaS (octopus.app) |
+|---|---|---|
+| Reachability | `localhost:8090` (+ Tailscale Funnel for GHA) | `https://lussenburg.octopus.app` |
+| `compose/` | runs — db + octopus + workers | n/a, no compose stack |
+| `prod-pool` | **static** worker pool, populated by `prod-pool-worker` tentacle in compose | **dynamic** worker pool, Octopus Cloud spins up `UbuntuDefault` per task |
+| Built-in default pool | "Default Worker Pool" (slug `default-worker-pool`) | "Hosted Windows" + "Hosted Ubuntu" (slugs `hosted-windows`, `hosted-ubuntu`) |
+| `Runbook.LinuxWorker` library var | → "Default Worker Pool" | → "Hosted Ubuntu" (per `partial_name` lookup) |
+| `Source` library var | `local` | `saas` |
+| Namespaces on K8s | `randomquotes-local-<tenant>-<env>` | `randomquotes-saas-<tenant>-<env>` |
+| Platform Hub | enabled | enabled |
+| GHA `build.yml` | leg can skip if Funnel down (`continue-on-error: true`) | always runs |
+
+OCL pool references use slugs (e.g. `Project.WorkerPool = "prod-pool"`); naming the pool identically on both instances is what makes the same OCL resolve on both. Don't hardcode `default-worker-pool` in OCL — SaaS doesn't have a pool with that slug. Either omit (let Octopus pick the instance default) or scope per-env to a slug that exists on both.
+
 ### Secrets vs config split
 
 - `.env` (gitignored): `MASTER_KEY`, `OCTOPUS_URL`, `OCTOPUS_API_KEY`, `GITHUB_PAT`. Optionally `OCTOPUS_SERVER_BASE64_LICENSE`, `OCTOPUS_PLATFORM_HUB_ENABLED`, `OCTOPUS_URL_FROM_CLUSTER`, `OCTOPUS_POLLING_URL_FROM_CLUSTER`, `SERVICENOW_USERNAME` + `SERVICENOW_PASSWORD` (basic-auth creds for the ServiceNow PDI used by the `demo/servicenow-cr-gate` demo — paired with an Octopus ITSM connection that holds the instance URL).
