@@ -1,35 +1,23 @@
-# Local Octopus Server sandbox — HA topology. Two Octopus Server nodes share
-# one SQL DB and one set of named volumes, fronted by an nginx LB doing HTTP
-# (UI + REST) and TCP (Halibut polling, KLOS gRPC) load balancing.
-#
-# Why HA-only: Octopus's HA mode exercises real production semantics — node
-# coordination via the DB, shared task queue, master-key consistency — that
-# a single-node setup quietly skips. Easier to learn the right way once.
-#
-# Single-host caveat: this works because both nodes hit the same Linux
-# kernel, so fcntl/flock advisory locks behave correctly across the shared
-# volumes. Across multiple hosts you'd swap the named volumes for NFS / EFS
-# / Azure Files. (And in the lab, that's exactly what `tofu/k8s-agent/` sets
-# up via the NFS CSI driver — same trick, different layer.)
-#
-# Apple Silicon: both Octopus + SQL Server images are amd64 — enable Docker
-# Desktop → Settings → General → "Use Rosetta" for native-ish speed.
+# Local Octopus Server sandbox — HA topology. Two Octopus Server nodes
+# share one SQL DB and one set of named volumes, fronted by an nginx LB
+# doing HTTP (UI + REST) and TCP (Halibut polling, KLOS gRPC) load
+# balancing. Single-host caveat: works because both nodes hit the same
+# Linux kernel so fcntl/flock advisory locks behave; across hosts
+# you'd swap the named volumes for NFS / EFS / Azure Files.
 
-# Pinned project name so containers + named volumes stay stable regardless
-# of where this file lives on disk.
+# Pinned project name so containers + named volumes stay stable regardless of
+# where this file lives on disk. Kept as "selfhost-setup" — the original parent
+# folder before this compose moved here — so existing volumes keep being used.
 name: selfhost-setup
 
 services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     platform: linux/amd64
-    # SQL Server's default behaviour is to grow the buffer pool until it
-    # owns most of the container's available memory, which on this lab
-    # squeezes Octopus + Docker Desktop K8s into a noisy fight. Cap the
-    # engine + container explicitly. Tune up if you bump Docker Desktop's
-    # overall allocation (Settings → Resources). With Docker Desktop at
-    # 16 GB this leaves comfortable headroom for both Octopus nodes + K8s.
-    mem_limit: 8g
+    # Budget on a 16 GB Docker Desktop: db 4g + 2 octopus 2g + 2 workers
+    # 1.5g each + lb 256m = 11.5g, leaving ~4.5g for Docker Desktop K8s + system.
+    mem_limit: 4g
+    cpus: 2
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "Octop@s!Sandb0x"
@@ -45,7 +33,7 @@ services:
       - mssql-data:/var/opt/mssql
 
   # First Octopus node. Boots solo against the empty DB so first-run
-  # migrations and master-key setup happen on a single node before the
+  # migrations + master-key setup happen on a single node before the
   # second joins.
   octopus-1:
     image: octopusdeploy/octopusdeploy:latest
@@ -62,9 +50,9 @@ services:
       ADMIN_PASSWORD: "Password01!"
       OCTOPUS_SERVER_NODE_NAME: "OctopusNode1"
       MASTER_KEY: "${MASTER_KEY}"
-      # If set, install.sh runs `Octopus.Server license --licenseBase64=…`
-      # on boot. Empty = skip (paste in UI). Sourced from .env via
-      # --env-file; encode once with `base64 -i license.xml | tr -d '\n'`.
+      # If set, install.sh runs `Octopus.Server license --licenseBase64=…` on
+      # boot. Empty = skip (paste in UI). Sourced from .env via --env-file;
+      # encode once with `base64 -i license.xml | tr -d '\n'`.
       OCTOPUS_SERVER_BASE64_LICENSE: "${OCTOPUS_SERVER_BASE64_LICENSE:-}"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/api > /dev/null || exit 1"]
@@ -77,12 +65,13 @@ services:
       - octopus-artifacts:/artifacts
       - octopus-tasklogs:/taskLogs
 
-  # Second node waits for octopus-1 to be healthy so first-boot migrations
-  # finish before the second joins. Skip licence apply on this one — node 1
-  # already did it.
+  # Second node — waits for octopus-1 healthy so migrations finish first.
+  # Skip license apply (node 1 already did it).
   octopus-2:
     image: octopusdeploy/octopusdeploy:latest
     platform: linux/amd64
+    mem_limit: 2g
+    cpus: 2
     depends_on:
       db:
         condition: service_healthy
@@ -107,12 +96,15 @@ services:
       - octopus-artifacts:/artifacts
       - octopus-tasklogs:/taskLogs
 
-  # nginx with the `stream` module — load-balances HTTP (UI + REST API) and
-  # TCP (Halibut polling, KLOS gRPC). Both modules ship in nginx:alpine.
-  # Host 18443 → container 8443 dodges Docker Desktop's own *:8443 binding;
-  # Argo CD Gateway connects via grpc://host.docker.internal:18443.
+  # nginx with the `stream` module — load-balances HTTP (UI + REST API)
+  # and TCP (Halibut polling, KLOS gRPC). Both modules ship in
+  # nginx:alpine. Host 18443 → container 8443 dodges Docker Desktop's
+  # own *:8443 binding; Argo CD Gateway connects via
+  # grpc://host.docker.internal:18443.
   lb:
     image: nginx:alpine
+    mem_limit: 256m
+    cpus: 1
     depends_on:
       octopus-1:
         condition: service_healthy
@@ -125,6 +117,12 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
 
+  # Worker for Octopus's built-in Default Worker Pool — handles all
+  # non-Production work for this demo. No prod-only marker script
+  # bind-mounted, so the deployment process's gate-check step takes the
+  # "no /usr/local/bin/prod-only-check.sh" branch when it lands here.
+  # The contrast against prod-pool-worker's output is what makes the
+  # demo readable: same step, different pool → different log line.
   default-pool-worker:
     image: octopusdeploy/tentacle:latest
     platform: linux/amd64
@@ -148,9 +146,28 @@ services:
       - default-pool-tentacle-config:/etc/octopus
       - default-pool-tentacle-home:/home/Octopus
 
+  # Polling Tentacle running as a worker in `prod-pool`. The second half
+  # of the locked-down-prod-pool demo: prod-pool isn't a dead pool — it
+  # has a real worker with prod-only tooling baked in (the marker script
+  # at /usr/local/bin/prod-only-check.sh). Steps using
+  # Octopus.Action.WorkerPoolVariable=Project.WorkerPool route to this
+  # worker on Production deploys, since the env-scoped variable resolves
+  # to prod-pool there.
+  #
+  # The image's entrypoint runs create-instance → new-certificate →
+  # configure → register-worker → run. Registration succeeds only after
+  # `make cp-apply` has created prod-pool — before that,
+  # restart: unless-stopped keeps the container retrying. Identity +
+  # thumbprint live in the named volumes so re-registration survives
+  # container restarts.
   prod-pool-worker:
     image: octopusdeploy/tentacle:latest
     platform: linux/amd64
+    # The official Octopus tentacle image's entrypoint always starts a
+    # Docker-in-Docker daemon (so the tentacle can run Docker steps),
+    # and DinD requires privileged. There's no env-var off-switch.
+    # Sandbox-only choice; in production a worker would either run a
+    # non-DinD image or use a sidecar pattern.
     privileged: true
     mem_limit: 1500m
     cpus: 2
@@ -161,6 +178,8 @@ services:
       ACCEPT_EULA: "Y"
       ServerApiKey: "${OCTOPUS_API_KEY}"
       ServerUrl: "http://lb:80"
+      # Polling tentacle connects on Halibut TCP — same port the K8s
+      # agent uses (10943), reached over the docker network via the LB.
       ServerCommsAddress: "Polling://lb:10943/"
       Space: "IaC Sandbox"
       TargetName: "prod-pool-worker"
