@@ -147,7 +147,8 @@ step "update-argo-cd-application-image-tags" {
     name = "Update Argo CD Application Image Tags"
 
     action {
-        action_type = "Octopus.ArgoCDUpdateImageTags"
+        action_type          = "Octopus.ArgoCDUpdateImageTags"
+        worker_pool_variable = "Project.WorkerPool"
         properties = {
             Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
             Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"

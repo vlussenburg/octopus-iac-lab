@@ -61,12 +61,13 @@ services:
       - octopus-artifacts:/artifacts
       - octopus-tasklogs:/taskLogs
 
-  # Sibling worker for `dev-pool`. Same image, but NO marker script
-  # bind-mount — so the deployment process's gate-check step takes the
+  # Worker for Octopus's built-in Default Worker Pool — handles all
+  # non-Production work for this demo. No prod-only marker script
+  # bind-mounted, so the deployment process's gate-check step takes the
   # "no /usr/local/bin/prod-only-check.sh" branch when it lands here.
-  # That contrast in the task log is what makes the demo readable: same
-  # step, different worker pool → different output.
-  dev-pool-worker:
+  # The contrast against prod-pool-worker's output is what makes the
+  # demo readable: same step, different pool → different log line.
+  default-pool-worker:
     image: octopusdeploy/tentacle:latest
     platform: linux/amd64
     privileged: true
@@ -79,13 +80,13 @@ services:
       ServerUrl: "http://octopus:8080"
       ServerCommsAddress: "Polling://octopus:10943/"
       Space: "IaC Sandbox"
-      TargetName: "dev-pool-worker"
-      TargetWorkerPool: "dev-pool"
+      TargetName: "default-pool-worker"
+      TargetWorkerPool: "Default Worker Pool"
       MachinePolicy: "Default Machine Policy"
     restart: unless-stopped
     volumes:
-      - dev-pool-tentacle-config:/etc/octopus
-      - dev-pool-tentacle-home:/home/Octopus
+      - default-pool-tentacle-config:/etc/octopus
+      - default-pool-tentacle-home:/home/Octopus
 
   # Polling Tentacle running as a worker in `prod-pool`. The second half
   # of the locked-down-prod-pool demo: prod-pool isn't a dead pool — it
@@ -141,5 +142,5 @@ volumes:
   octopus-tasklogs:
   polling-tentacle-config:
   polling-tentacle-home:
-  dev-pool-tentacle-config:
-  dev-pool-tentacle-home:
+  default-pool-tentacle-config:
+  default-pool-tentacle-home:
