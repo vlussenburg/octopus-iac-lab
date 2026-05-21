@@ -132,11 +132,6 @@ services:
     volumes:
       - polling-tentacle-config:/etc/octopus
       - polling-tentacle-home:/home/Octopus
-      # Bind-mount the marker script — the prod-only tooling. Only
-      # present on this worker; the "Production gate check" step calls
-      # it and includes its output in the task log as visible proof
-      # the step ran on prod-pool.
-      - ./tentacle/prod-only-check.sh:/usr/local/bin/prod-only-check.sh:ro
 
 volumes:
   mssql-data:

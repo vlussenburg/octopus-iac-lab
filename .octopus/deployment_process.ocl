@@ -116,13 +116,13 @@ step "deploy-manifests" {
     }
 }
 
-step "production-gate-check" {
-    name = "Production gate check"
+step "worker-pool-readout" {
+    name = "Worker pool readout"
 
     action {
         action_type          = "Octopus.Script"
         worker_pool_variable = "Project.WorkerPool"
-        notes                = "Runs on the worker pool resolved by Project.WorkerPool (env-scoped: Production → prod-pool, else dev-pool). On prod-pool, the bind-mounted /usr/local/bin/prod-only-check.sh fires; on dev-pool the if-block's else branch prints the no-marker line. Task log lines 'Leased worker ... from pool ...' and the script output prove which pool ran."
+        notes                = "Prints the worker pool that Project.WorkerPool resolved to for this env. Visible proof of the env-scoped routing in the task log."
         properties = {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
@@ -130,16 +130,9 @@ step "production-gate-check" {
             Octopus.Action.Script.ScriptBody = <<-EOT
                 #!/usr/bin/env bash
                 set -euo pipefail
-
                 ENV="$(get_octopusvariable 'Octopus.Environment.Name')"
                 POOL="$(get_octopusvariable 'Octopus.Action.WorkerPool.Name')"
-                echo "Step is running on worker pool: $POOL (env: $ENV)"
-
-                if [ -x /usr/local/bin/prod-only-check.sh ]; then
-                    /usr/local/bin/prod-only-check.sh
-                else
-                    echo "(no /usr/local/bin/prod-only-check.sh on this worker — this is a non-prod pool)"
-                fi
+                echo "Step running on worker pool '$POOL' for env '$ENV'"
                 EOT
         }
     }
