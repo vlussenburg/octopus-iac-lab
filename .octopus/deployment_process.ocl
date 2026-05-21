@@ -5,7 +5,8 @@ step "deploy-configmap" {
     }
 
     action {
-        action_type = "Octopus.KubernetesDeployConfigMap"
+        action_type          = "Octopus.KubernetesDeployConfigMap"
+        worker_pool_variable = "Project.WorkerPool"
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
@@ -22,7 +23,8 @@ step "deploy-manifests" {
     }
 
     action {
-        action_type = "Octopus.KubernetesDeployRawYaml"
+        action_type          = "Octopus.KubernetesDeployRawYaml"
+        worker_pool_variable = "Project.WorkerPool"
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
@@ -95,7 +97,7 @@ step "deploy-manifests" {
                                 name: randomquotes
                                 port:
                                   number: 80
-                                        EOT
+                                            EOT
             Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
@@ -114,11 +116,41 @@ step "deploy-manifests" {
     }
 }
 
+step "production-gate-check" {
+    name = "Production gate check"
+
+    action {
+        action_type          = "Octopus.Script"
+        worker_pool_variable = "Project.WorkerPool"
+        notes                = "Runs on the worker pool resolved by Project.WorkerPool (env-scoped: Production → prod-pool, else dev-pool). On prod-pool, the bind-mounted /usr/local/bin/prod-only-check.sh fires; on dev-pool the if-block's else branch prints the no-marker line. Task log lines 'Leased worker ... from pool ...' and the script output prove which pool ran."
+        properties = {
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "Bash"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                #!/usr/bin/env bash
+                set -euo pipefail
+
+                ENV="$(get_octopusvariable 'Octopus.Environment.Name')"
+                POOL="$(get_octopusvariable 'Octopus.Action.WorkerPool.Name')"
+                echo "Step is running on worker pool: $POOL (env: $ENV)"
+
+                if [ -x /usr/local/bin/prod-only-check.sh ]; then
+                    /usr/local/bin/prod-only-check.sh
+                else
+                    echo "(no /usr/local/bin/prod-only-check.sh on this worker — this is a non-prod pool)"
+                fi
+                EOT
+        }
+    }
+}
+
 step "update-argo-cd-application-image-tags" {
     name = "Update Argo CD Application Image Tags"
 
     action {
-        action_type = "Octopus.ArgoCDUpdateImageTags"
+        action_type          = "Octopus.ArgoCDUpdateImageTags"
+        worker_pool_variable = "Project.WorkerPool"
         properties = {
             Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
             Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
