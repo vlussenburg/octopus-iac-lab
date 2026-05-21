@@ -37,6 +37,13 @@ resource "helm_release" "argocd" {
   values = [
     yamlencode({
       configs = {
+        # Static admin password — the chart writes the bcrypt hash into
+        # the argocd-secret. Avoids the argocd-initial-admin-secret
+        # bootstrap dance and means the password is stable across reinstalls.
+        secret = {
+          argocdServerAdminPassword      = var.argocd_password_bcrypt
+          argocdServerAdminPasswordMtime = "2026-05-21T00:00:00Z"
+        }
         cm = {
           # `octopus` is the account each Gateway authenticates as. apiKey
           # capability is sufficient — the Gateway only consumes JWTs, it
@@ -130,16 +137,3 @@ resource "kubernetes_manifest" "argocd_bootstrap" {
   depends_on = [helm_release.argocd]
 }
 
-# The chart auto-generates an admin password into argocd-initial-admin-secret
-# on first install. We use it to authenticate the argocd provider — works
-# the same whether THIS worktree installed argocd or the other one did.
-data "kubernetes_secret_v1" "argocd_admin_initial" {
-  metadata {
-    name      = "argocd-initial-admin-secret"
-    namespace = local.argocd_namespace_name
-  }
-
-  # Only depend on the helm release if WE installed it. Otherwise the
-  # secret is assumed to already exist (the other worktree owns it).
-  depends_on = [helm_release.argocd]
-}

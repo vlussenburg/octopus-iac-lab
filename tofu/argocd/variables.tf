@@ -68,3 +68,17 @@ variable "ingress_host" {
   type        = string
   default     = "argocd.localtest.me"
 }
+
+variable "argocd_password" {
+  description = "Static admin password for ArgoCD. Used by the argocd provider to authenticate AND injected (bcrypt'd) into the helm release so the chart installs with this password. Default Password01! matches the lab's Octopus admin."
+  type        = string
+  default     = "Password01!"
+  sensitive   = true
+}
+
+variable "argocd_password_bcrypt" {
+  description = "Bcrypt hash of argocd_password. Helm chart sets configs.secret.argocdServerAdminPassword to this. Default matches Password01! (cost=10)."
+  type        = string
+  default     = "$2y$10$AqFVvMLTOKPKUyraFEoy5.V47mpGRuAAm0A7Q6j8GmMEVpNtYxi7K"
+  sensitive   = true
+}

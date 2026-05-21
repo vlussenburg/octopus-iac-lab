@@ -3,9 +3,10 @@ output "argocd_url" {
   value       = "http://${var.ingress_host}:8080"
 }
 
-output "argocd_admin_password_command" {
-  description = "kubectl one-liner that prints the admin password for the Argo UI."
-  value       = "kubectl -n ${local.argocd_namespace_name} get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+output "argocd_admin_login" {
+  description = "ArgoCD UI admin login. Password is set statically in the helm release."
+  value       = "admin / ${var.argocd_password}"
+  sensitive   = true
 }
 
 output "gateway_name" {

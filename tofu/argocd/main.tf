@@ -12,9 +12,9 @@
 #
 # Provider dependency note: the `argocd` provider has to authenticate to
 # argocd-server, which doesn't exist until the argocd helm release applies.
-# We solve that by using its `port_forward` mode + reading the auto-generated
-# admin password from `argocd-initial-admin-secret`. The argocd provider
-# only configures lazily when an `argocd_*` resource is read.
+# We use its `port_forward` mode + the static admin password set at install
+# time (var.argocd_password + var.argocd_password_bcrypt). The argocd
+# provider only configures lazily when an `argocd_*` resource is read.
 
 terraform {
   required_version = ">= 1.5.0"
@@ -63,12 +63,12 @@ provider "helm" {
 }
 
 # Port-forwards to argocd-server itself; no host-side port forward needed.
-# Authenticates with the auto-generated admin password from the standard
-# argocd-initial-admin-secret. We read it via a kubernetes data source.
+# Authenticates with the static admin password (var.argocd_password) that
+# was bcrypt'd + injected into the helm release at install time.
 provider "argocd" {
   port_forward_with_namespace = local.argocd_namespace_name
   username                    = "admin"
-  password                    = data.kubernetes_secret_v1.argocd_admin_initial.data["password"]
+  password                    = var.argocd_password
   insecure                    = true
   # argocd-server runs HTTP-only (configs.params.server.insecure=true in
   # argocd_install.tf) — the provider needs to dial it without TLS, otherwise
