@@ -1,8 +1,10 @@
 variable "Project.WorkerPool" {
     type = "WorkerPool"
 
-    value "default-worker-pool" {}
-
+    # Production-scoped only. The unscoped default-worker-pool slug
+    # doesn't exist on SaaS (its built-in is "Hosted Windows" /
+    # "Hosted Ubuntu"); Dev deploys fall through to the instance's
+    # built-in default pool, which is correct on both targets.
     value "prod-pool" {
         environment = ["production"]
     }
