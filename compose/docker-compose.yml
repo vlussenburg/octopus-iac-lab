@@ -125,6 +125,52 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
 
+  default-pool-worker:
+    image: octopusdeploy/tentacle:latest
+    platform: linux/amd64
+    privileged: true
+    mem_limit: 1500m
+    cpus: 2
+    depends_on:
+      lb:
+        condition: service_started
+    environment:
+      ACCEPT_EULA: "Y"
+      ServerApiKey: "${OCTOPUS_API_KEY}"
+      ServerUrl: "http://lb:80"
+      ServerCommsAddress: "Polling://lb:10943/"
+      Space: "IaC Sandbox"
+      TargetName: "default-pool-worker"
+      TargetWorkerPool: "Default Worker Pool"
+      MachinePolicy: "Default Machine Policy"
+    restart: unless-stopped
+    volumes:
+      - default-pool-tentacle-config:/etc/octopus
+      - default-pool-tentacle-home:/home/Octopus
+
+  prod-pool-worker:
+    image: octopusdeploy/tentacle:latest
+    platform: linux/amd64
+    privileged: true
+    mem_limit: 1500m
+    cpus: 2
+    depends_on:
+      lb:
+        condition: service_started
+    environment:
+      ACCEPT_EULA: "Y"
+      ServerApiKey: "${OCTOPUS_API_KEY}"
+      ServerUrl: "http://lb:80"
+      ServerCommsAddress: "Polling://lb:10943/"
+      Space: "IaC Sandbox"
+      TargetName: "prod-pool-worker"
+      TargetWorkerPool: "prod-pool"
+      MachinePolicy: "Default Machine Policy"
+    restart: unless-stopped
+    volumes:
+      - polling-tentacle-config:/etc/octopus
+      - polling-tentacle-home:/home/Octopus
+
 volumes:
   mssql-data:
   octopus-repository:
