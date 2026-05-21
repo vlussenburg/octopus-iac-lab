@@ -120,6 +120,7 @@ step "production-gate-check" {
     action {
         action_type          = "Octopus.Script"
         worker_pool_variable = "Project.WorkerPool"
+        notes                = "Runs on the worker pool resolved by Project.WorkerPool (env-scoped: Production → prod-pool, else dev-pool). On prod-pool, the bind-mounted /usr/local/bin/prod-only-check.sh fires; on dev-pool the if-block's else branch prints the no-marker line. Task log lines 'Leased worker ... from pool ...' and the script output prove which pool ran."
         properties = {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"

@@ -1,5 +1,6 @@
 variable "Project.WorkerPool" {
-    type = "WorkerPool"
+    type        = "WorkerPool"
+    description = "Worker pool this project's gate-check step runs on. Default is dev-pool; Production-scoped value pins prod-pool. Read by the Production gate check step via its worker_pool_variable. Editing requires VariableEdit (not granted to Developer-Restricted)."
 
     value "dev-pool" {}
 

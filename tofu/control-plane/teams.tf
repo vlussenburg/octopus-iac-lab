@@ -7,12 +7,11 @@
 #
 # The teams use the standalone `octopusdeploy_scoped_user_role` resource
 # (NOT inline `user_role` blocks on the team) — the provider docs note
-# inline + standalone bindings conflict. We have no env/project/tenant
-# scopes on either binding; the entire space is in scope for each role.
-# Worker-pool scoping doesn't exist in Octopus at the scoped-role level
-# (WorkerView is space-wide on/off) — see worker_pools.tf for the gory
-# detail. The demo achieves "developer can't see prod-pool" by giving
-# Developer-Restricted no Worker* permission at all.
+# inline + standalone bindings conflict. No env/project/tenant scopes on
+# either binding; the entire space is in scope for each role. Worker-pool
+# scoping doesn't exist at the scoped-role level either (`WorkerView` is
+# space-wide on/off — see worker_pools.tf). The roles in user_roles.tf
+# carry the actual gate via permission selection.
 
 locals {
   demo_user_password = "Password01!"
@@ -38,14 +37,14 @@ resource "octopusdeploy_user" "prod_deployer_demo" {
 
 resource "octopusdeploy_team" "developers" {
   name        = "developers"
-  description = "Project work in the sandbox. No worker pool visibility, no library variable set edit."
+  description = "Project authors. Read-only WorkerView (can browse the pool list); no WorkerEdit, no LibraryVariableSetEdit, no VariableEdit. ProcessEdit means they can still hand-pin any pool on their steps — only the OPA process-validation policy closes that."
   space_id    = data.terraform_remote_state.space.outputs.space_id
   users       = [octopusdeploy_user.developer_demo.id]
 }
 
 resource "octopusdeploy_team" "prod_deployers" {
   name        = "prod-deployers"
-  description = "Promoters / on-call. Full worker pool visibility + library variable set edit so they can change the env-scoped pool binding."
+  description = "Promoters / on-call. Full Worker* + LibraryVariableSetEdit + VariableEdit. The role that owns the env-scoped pool binding and can change worker registration."
   space_id    = data.terraform_remote_state.space.outputs.space_id
   users       = [octopusdeploy_user.prod_deployer_demo.id]
 }
