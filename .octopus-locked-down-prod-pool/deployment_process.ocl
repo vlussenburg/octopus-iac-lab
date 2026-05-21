@@ -5,7 +5,8 @@ step "deploy-configmap" {
     }
 
     action {
-        action_type = "Octopus.KubernetesDeployConfigMap"
+        action_type          = "Octopus.KubernetesDeployConfigMap"
+        worker_pool_variable = "Project.WorkerPool"
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
@@ -22,7 +23,8 @@ step "deploy-manifests" {
     }
 
     action {
-        action_type = "Octopus.KubernetesDeployRawYaml"
+        action_type          = "Octopus.KubernetesDeployRawYaml"
+        worker_pool_variable = "Project.WorkerPool"
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
