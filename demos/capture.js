@@ -80,75 +80,47 @@ async function shot(page, slug, url, waitMs = 4500) {
   await page.screenshot({ path: path.join(OUT, `${slug}.png`), fullPage: false });
 }
 
-// Navigate to a task page, expand all log sections, scroll the
-// gate-check step into view, and screenshot the viewport. Octopus's
-// task log uses an inner virtualised scroll container, so fullPage:true
-// only captures the visible chunk — scrolling to the section we care
-// about is the reliable path.
+// Capture Octopus's real task-log UI scrolled to the "Production gate
+// check" step. The log container scrolls separately from the page, so
+// we (a) bump viewport height for breathing room, (b) "Expand All",
+// (c) scroll the step header into view in its scroll container, and
+// (d) screenshot the viewport.
 async function captureTaskLogAtGateCheck(page, taskUrl, slug) {
-  // Octopus's task-log UI uses a virtualised inner-scroll container —
-  // fullPage:true only captures the visible viewport's worth. The
-  // /api/tasks/{id}/raw endpoint returns the whole run as plain text;
-  // we render it inside a synthetic page that pretty-prints just the
-  // gate-check section, then screenshot that.
-  const taskIdMatch = taskUrl.match(/ServerTasks-\d+/);
-  if (!taskIdMatch) {
-    console.log(`    bad task URL for ${slug}`);
-    return;
+  await page.setViewportSize({ width: 1440, height: 1600 });
+  await page.goto(taskUrl, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(5000);
+  await dismissHelpSidebar(page);
+  await expandAllInTaskLog(page);
+  try {
+    await page.evaluate(() => {
+      const all = Array.from(document.querySelectorAll('*'));
+      const header = all.find(e => {
+        const t = (e.textContent || '').trim();
+        return /^Step 3: Production gate check$/.test(t) && e.children.length < 5;
+      });
+      if (header) {
+        header.scrollIntoView({ block: 'start' });
+        // Nudge upward so a few preceding lines are also visible for context.
+        const scroller = (function findScroller(node) {
+          let n = node;
+          while (n && n !== document.body) {
+            const s = getComputedStyle(n);
+            if (/(auto|scroll)/.test(s.overflowY) && n.scrollHeight > n.clientHeight) return n;
+            n = n.parentElement;
+          }
+          return null;
+        })(header);
+        if (scroller) scroller.scrollTop = Math.max(0, scroller.scrollTop - 120);
+        else window.scrollBy(0, -120);
+      }
+    });
+    await page.waitForTimeout(1500);
+  } catch (e) {
+    console.log(`    scroll-into-view skipped: ${e.message}`);
   }
-  const taskId = taskIdMatch[0];
-  const apiBase = OCTO.base.replace(/\/$/, '');
-  const ctx = await page.context();
-  const cookies = await ctx.cookies();
-  // Cookie auth doesn't include the API-key header — but the user is
-  // already signed in as admin via octoLogin, so the raw endpoint will
-  // honour the session cookie.
-  const resp = await page.request.get(`${apiBase}/api/tasks/${taskId}/raw`);
-  const fullLog = await resp.text();
-  // Crop to the "Production gate check" section + ~30 lines around it.
-  const lines = fullLog.split('\n');
-  // Find the LAST occurrence of "Leased worker ... gate check" — the
-  // actual step execution line where the worker pool name is logged.
-  // Slice forward to either the marker output (prod case) or the
-  // "no prod-only-check" line (dev case) plus a few lines of tail.
-  const startMatch = (() => {
-    for (let i = 0; i < lines.length; i++) {
-      if (/Executing Production gate check.*on .*-pool-worker/.test(lines[i])) return i;
-    }
-    return lines.findIndex(l => /Production gate check/.test(l));
-  })();
-  const start = Math.max(0, startMatch - 6);
-  // End: 2 lines after the LAST marker / non-prod-pool message, or 50 lines down.
-  const endMatch = (() => {
-    for (let i = lines.length - 1; i >= 0; i--) {
-      if (/prod-only-check|non-prod pool/.test(lines[i])) return i + 2;
-    }
-    return Math.min(lines.length, startMatch + 50);
-  })();
-  const snippet = lines.slice(start, endMatch).join('\n');
-  await page.setViewportSize({ width: 1600, height: 1100 });
-  const html = `<!doctype html><html><head><title>${slug}</title>
-    <style>
-      body{font-family:'SF Mono','Menlo','Consolas',monospace;font-size:14px;background:#0d1117;color:#e6edf3;padding:32px;margin:0;white-space:pre-wrap;line-height:1.55}
-      .h{color:#7ee787;font-weight:bold;font-size:18px;margin-bottom:16px;border-bottom:1px solid #30363d;padding-bottom:10px}
-      .marker{color:#ffa657;font-weight:bold}
-      .lease{color:#79c0ff;font-weight:bold}
-    </style></head><body>
-    <div class="h">${slug} — /api/tasks/${taskId}/raw (Production gate check step)</div>
-    ${snippet
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/(\[prod-only-check\][^\n]*)/g, '<span class="marker">$1</span>')
-      .replace(/(\(no \/usr\/local\/bin\/prod-only-check\.sh[^\n]*\))/g, '<span class="marker">$1</span>')
-      .replace(/(Leased worker[^\n]*)/g, '<span class="lease">$1</span>')
-      .replace(/(Executing Production gate check[^\n]*)/g, '<span class="lease">$1</span>')
-    }
-    </body></html>`;
-  await page.setContent(html);
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: `${OUT}/${slug}.png`, fullPage: true });
-  // Reset viewport so subsequent shots match the lab-wide 1440x1000.
+  await page.screenshot({ path: path.join(OUT, `${slug}.png`), fullPage: false });
+  console.log(`  [${slug}] (Octopus task log, scrolled to gate-check)`);
   await page.setViewportSize({ width: 1440, height: 1000 });
-  console.log(`  [${slug}] (raw-log gate-check excerpt, rendered)`);
 }
 
 // On a task page, switch to the Task Log tab and expand every
@@ -205,43 +177,24 @@ const DEMOS = {
 
     // === Admin's view ============================================
     await octoLogin(page);
-    // Infrastructure overview — Workers landing shows both pools + workers.
     await shot(page, 'ld-01-admin-workers',       pools, 5000);
-    // prod-pool detail — the polling tentacle registered into it.
     await shot(page, 'ld-02-admin-prod-pool',     prodPool, 5000);
-    // System-wide users — `developer` + `prod-deployer` demo accounts.
     await shot(page, 'ld-03-admin-users',         usersList, 4000);
-    // Teams page — `developers` + `prod-deployers` with their role bindings.
     await shot(page, 'ld-04-admin-teams',         teamsList, 4000);
-    // The locked-down demo project's process — gate-check step visible.
     await shot(page, 'ld-05-admin-process',       process, 5500);
-    // Project variables — Project.WorkerPool with env-scoped rows.
     await shot(page, 'ld-06-admin-variables',     variables, 4500);
-    // Production deploy task log — proves prod-pool-worker ran the step.
-    // Scroll the expanded log down so the gate-check step output is in
-    // the viewport. (fullPage doesn't capture Octopus's inner-scroll
-    // log container; the raw log view is a separate page we render
-    // directly via the rawLog URL.)
     await captureTaskLogAtGateCheck(page, prodTask, 'ld-07-admin-prod-task');
-    // Dev deploy task log — same step, no marker output (the contrast).
-    await captureTaskLogAtGateCheck(page, devTask, 'ld-08-admin-dev-task');
+    await captureTaskLogAtGateCheck(page, devTask,  'ld-08-admin-dev-task');
 
-    // === Developer's view (no WorkerView, no LibVarSet edit) =====
+    // === Developer's view (no WorkerView, no LibVarSet/Variable edit) ===
     await octoSwitchUser(page, 'developer', 'Password01!');
-    // Worker pools — should be empty / "no permissions" message.
     await shot(page, 'ld-09-developer-workers',   pools, 5000);
-    // Project process — process page loads but worker pool dropdowns
-    // are empty for a step that uses WorkerPoolVariable.
     await shot(page, 'ld-10-developer-process',   process, 5500);
-    // Variables — read-only (LibraryVariableSetEdit absent → can't
-    // change the env-scoped Project.WorkerPool).
     await shot(page, 'ld-11-developer-variables', variables, 4500);
 
-    // === Prod-Deployer's view (full Worker* + LibVarSet edit) ====
+    // === Prod-Deployer's view (full Worker* + LibVarSet/Variable edit) ===
     await octoSwitchUser(page, 'prod-deployer', 'Password01!');
-    // Worker pools — both visible, prod-pool selectable.
-    await shot(page, 'ld-12-prod-deployer-workers', pools, 5000);
-    // Variables — editable.
+    await shot(page, 'ld-12-prod-deployer-workers',   pools, 5000);
     await shot(page, 'ld-13-prod-deployer-variables', variables, 4500);
   },
   'smoke-step-template': async (page) => {

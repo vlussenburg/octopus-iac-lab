@@ -1,11 +1,18 @@
 # Two custom user roles for the locked-down-prod-pool demo.
 #
 # `Developer-Restricted`: project work — read/edit processes, create
-#   releases, deploy — but NO Worker* and NO LibraryVariableSetEdit.
-#   Without WorkerView the worker pool list is empty in their UI and
-#   worker-pool dropdowns inside step editors are blank. Without
-#   LibraryVariableSetEdit they can't flip the env-scoped
-#   `Project.WorkerPool` value to escape prod-pool on Production.
+#   releases, deploy — but NO Worker*, NO LibraryVariableSetEdit, AND
+#   NO VariableEdit. Without WorkerView the pool list is empty in their
+#   UI and worker-pool dropdowns are blank. Without LibraryVariableSetEdit
+#   they can't flip library-variable-set values. Without VariableEdit
+#   they can't touch project-level variables either — which matters
+#   because `Project.WorkerPool` lives on the project, and Octopus's API
+#   happily accepts PUTs against a CaC project's variables endpoint
+#   (Octopus commits the change back via the configured Git credential).
+#   Empirically verified during the build: a developer with
+#   VariableEdit successfully PUT a tampered Production value and
+#   Octopus auto-committed it to the branch. Without VariableEdit, that
+#   path is closed. Project variables change via PRs on the OCL file.
 #
 # `Prod-Deployer`: same project surface area + full Worker* + lib var
 #   edit. The role the on-call promoter uses.
@@ -49,14 +56,13 @@ locals {
     "TriggerCreate",
     "TriggerEdit",
     "TriggerView",
-    "VariableEdit",
     "VariableView",
   ]
 }
 
 resource "octopusdeploy_user_role" "developer_restricted" {
   name        = "Developer-Restricted"
-  description = "Project edit + release create + deploy. No worker visibility, no library-variable-set edit — so they can't pick a pool or change the env-scoped pool variable."
+  description = "Project edit + release create + deploy. No worker visibility, no library-variable-set edit, no VariableEdit — so they can't pick a pool, change library vars, or PUT a tampered project-level Project.WorkerPool."
 
   granted_space_permissions = local.developer_restricted_permissions
 }
@@ -71,6 +77,7 @@ resource "octopusdeploy_user_role" "prod_deployer" {
       "LibraryVariableSetCreate",
       "LibraryVariableSetEdit",
       "MachineEdit",
+      "VariableEdit",
       "WorkerEdit",
       "WorkerView",
     ]
