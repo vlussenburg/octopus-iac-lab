@@ -163,10 +163,10 @@ async function dismissHelpSidebar(page) {
 // --- demos ------------------------------------------------------------
 
 const DEMOS = {
-  'locked-down-prod-pool': async (page) => {
+  'main': async (page) => {
     const pools     = `${OCTO.base}/app#/Spaces-2/infrastructure/workers`;
     const prodPool  = `${OCTO.base}/app#/Spaces-2/infrastructure/workerpools/WorkerPools-22`;
-    const proj      = `${OCTO.base}/app#/Spaces-2/projects/locked-down-prod-pool-randomquotes`;
+    const proj      = `${OCTO.base}/app#/Spaces-2/projects/randomquotes`;
     const variables = `${proj}/variables`;
     const process   = `${proj}/deployments/process`;
     // Prod + Dev tasks for release 1.0.5-demo — the canonical pair.
@@ -297,6 +297,21 @@ const DEMOS = {
     await shot(page, 'nbg-01-process', `${p}/deployments/process`);
     await shot(page, 'nbg-02-release', `${p}/deployments/releases`);
   },
+  'canary': async (page) => {
+    await octoLogin(page);
+    const p = `${OCTO.base}/app#/Spaces-2/projects/canary-randomquotes`;
+    await shot(page, 'cn-01-process', `${p}/deployments/process`);
+    await shot(page, 'cn-02-release', `${p}/deployments/releases`);
+  },
+  'servicenow-cr-gate': async (page) => {
+    // Light shots only — the full deploy → CR → approve → resume flow
+    // lives in demos/capture-snow.mjs (needs a ServiceNow PDI login).
+    await octoLogin(page);
+    const p = `${OCTO.base}/app#/Spaces-2/projects/servicenow-cr-gate-randomquotes`;
+    await shot(page, 'snow-01-process', `${p}/deployments/process`);
+    await shot(page, 'snow-02-release', `${p}/deployments/releases`);
+    await shot(page, 'snow-03-prod-env', `${OCTO.base}/app#/Spaces-2/infrastructure/environments`);
+  },
   'bg-preview': async (page) => {
     await octoLogin(page);
     const p = `${OCTO.base}/app#/Spaces-2/projects/bg-preview-randomquotes`;
@@ -330,19 +345,44 @@ const DEMOS = {
   },
 };
 
-(async () => {
-  const want = process.argv[2];
-  const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 }, ignoreHTTPSErrors: true });
+// Servicenow-cr-gate has its own runner — see demos/capture-snow.mjs
+// — because it triggers a mid-flow CR approval against a ServiceNow PDI,
+// which doesn't fit the navigate-and-screenshot pattern here.
+
+// Each context can record one continuous WebM via recordVideo. When
+// --record is passed we run each demo in its own context (one WebM per
+// demo, named after the demo slug). Without --record everything runs in
+// a single context — screenshots only.
+async function runDemo(browser, slug, record) {
+  const ctxOpts = { viewport: { width: 1440, height: 1000 }, ignoreHTTPSErrors: true };
+  if (record) ctxOpts.recordVideo = { dir: OUT, size: { width: 1440, height: 1000 } };
+  const ctx = await browser.newContext(ctxOpts);
   const page = await ctx.newPage();
+  try { await DEMOS[slug](page); } catch (e) { console.log(`    skipped: ${e.message}`); }
+  await ctx.close();
+  if (record) {
+    const video = await page.video();
+    if (video) {
+      const target = path.join(OUT, `${slug}.webm`);
+      await video.saveAs(target);
+      console.log(`  [video] ${target}`);
+    }
+  }
+}
+
+(async () => {
+  const args = process.argv.slice(2);
+  const record = args.includes('--record');
+  const want = args.find(a => !a.startsWith('--'));
+  const browser = await chromium.launch();
 
   if (want && DEMOS[want]) {
-    console.log(`>>> ${want}`);
-    await DEMOS[want](page);
+    console.log(`>>> ${want}${record ? ' (recording)' : ''}`);
+    await runDemo(browser, want, record);
   } else {
-    for (const [name, fn] of Object.entries(DEMOS)) {
-      console.log(`>>> ${name}`);
-      try { await fn(page); } catch (e) { console.log(`    skipped: ${e.message}`); }
+    for (const name of Object.keys(DEMOS)) {
+      console.log(`>>> ${name}${record ? ' (recording)' : ''}`);
+      await runDemo(browser, name, record);
     }
   }
   await browser.close();
