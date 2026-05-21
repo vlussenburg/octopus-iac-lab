@@ -1,15 +1,16 @@
 # tofu/
 
-Six OpenTofu stacks, each with its own state. Non-sensitive lab config (space name, CaC repo, etc.) lives in committed `defaults.auto.tfvars` per stack. Sensitive values (API key, GitHub PAT, Octopus URL) come in via `TF_VAR_*` from the root `.env`.
+Seven OpenTofu stacks, each with its own state. Non-sensitive lab config (space name, CaC repo, etc.) lives in committed `defaults.auto.tfvars` per stack. Sensitive values (API key, GitHub PAT, Octopus URL) come in via `TF_VAR_*` from the root `.env`.
 
 | Stack | Owns | Why separate |
 |-------|------|--------------|
 | [`space/`](space/) | The non-default `IaC Sandbox` Space (slug pinned `iac-sandbox`) | Kill-switch. Destroying this cascades through every project, env, lifecycle, target inside. |
-| [`control-plane/`](control-plane/) | Environments, lifecycle, project group, GHCR feed, library variable set, tenants + tags + tenant logos, GitHub PAT credential | Shared infra. Apply once, leave alone. |
+| [`control-plane/`](control-plane/) | Environments, lifecycle, project group, GHCR feed, library variable set, tenants + tags + tenant logos, GitHub PAT credential, `prod-pool` worker pool (static on local, dynamic on SaaS), demo users + teams + roles | Shared infra. Apply once, leave alone. |
 | [`platform-hub/`](platform-hub/) | Octopus Platform Hub Git wiring (versioncontrol + git-credentials) | Optional — gated by `OCTOPUS_PLATFORM_HUB_ENABLED` so SaaS targets without the feature can opt out. |
-| [`app-randomquotes/`](app-randomquotes/) | The `randomquotes` project (CaC-enabled, tenanted) | App-specific. Reads control-plane outputs via `terraform_remote_state`. |
-| [`k8s-agent/`](k8s-agent/) | NFS CSI driver + nginx-ingress controller + Octopus K8s Agent helm release | Cluster-side install. Independent — useful to apply/destroy without touching the project. Also reads control-plane state. |
-| [`argocd/`](argocd/) | ArgoCD helm release + Octopus Argo CD Gateway helm release + 6 annotated Argo Applications | The GitOps half of the dual-delivery story. Surfaces Argo Applications back to Octopus via the Gateway + `argo.octopus.com/*` annotations. |
+| [`app-randomquotes/`](app-randomquotes/) | The `randomquotes` project (CaC-enabled, tenanted) + a `<slug>-randomquotes` clone per branch in `var.demo_branches` | App-specific. Reads control-plane outputs via `terraform_remote_state`. |
+| [`k8s-agent/`](k8s-agent/) | NFS CSI driver + nginx-ingress controller + Argo Rollouts + Sealed Secrets + Octopus K8s Agent helm release | Cluster-side install. Independent — useful to apply/destroy without touching the project. Also reads control-plane state. |
+| [`argocd/`](argocd/) | ArgoCD helm release (static admin password) + Octopus Argo CD Gateway + bootstrap Application that syncs `gitops/argocd/` | The GitOps control plane. Leaf Applications + App-of-Apps roots live in `../gitops/`, reconciled from git. |
+| [`servicenow/`](servicenow/) | ServiceNow ITSM connection (OAuth or basic-auth against a PDI) + per-project `servicenow_change_control_extension_settings` | Optional — only applied when `OCTOPUS_SERVICENOW_ENABLED=true`. Drives the `demo/servicenow-cr-gate` flow. |
 
 Plus one local module under [`modules/octopus-argocd-gateway/`](modules/octopus-argocd-gateway/) — placeholders the future `octopusdeploy_argocd_gateway` provider resource that doesn't exist yet.
 
@@ -41,7 +42,7 @@ data "terraform_remote_state" "space" {
 }
 ```
 
-`control-plane`, `platform-hub`, `app-randomquotes`, and `k8s-agent` all bind their `octopusdeploy` provider's `space_id` to the Space stack's output, so the destroy of `space` cleans up everything they created inside it. `app` and `agent` additionally read `control-plane` for env/lifecycle/project-group/library-variable-set IDs.
+`control-plane`, `platform-hub`, `app-randomquotes`, `k8s-agent`, `argocd`, and `servicenow` all bind their `octopusdeploy` provider's `space_id` to the Space stack's output, so the destroy of `space` cleans up everything they created inside it. `app` and `agent` additionally read `control-plane` for env/lifecycle/project-group/library-variable-set IDs.
 
 ## Why split into stacks?
 

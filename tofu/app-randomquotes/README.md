@@ -6,14 +6,15 @@ The `randomquotes` Octopus project — the application-level scaffold. Tenanted,
 |------|--------------|
 | [`main.tf`](main.tf) | Provider config + `terraform_remote_state` data sources for the Space and control-plane |
 | [`variables.tf`](variables.tf) | Inputs (fed via `TF_VAR_*` from the root `Makefile`) |
-| [`project.tf`](project.tf) | The `randomquotes` project. `is_version_controlled = true`, `tenanted_deployment_participation = "Tenanted"`, `git_library_persistence_settings` pointing at this repo's `.octopus/`. Includes the `Lab Defaults` library variable set. Linked to the three tenants via `octopusdeploy_tenant_project`. |
+| [`project.tf`](project.tf) | The `randomquotes` project. `is_version_controlled = true`, `tenanted_deployment_participation = "Tenanted"`, `git_library_persistence_settings` pointing at this repo's `.octopus/`. Includes the `lab-source` library variable set. Linked to the three tenants via `octopusdeploy_tenant_project`. |
+| [`branch_demos.tf`](branch_demos.tf) + [`branch_demo_triggers.tf`](branch_demo_triggers.tf) | `for_each` over `var.demo_branches` (set in `defaults.auto.tfvars`) — provisions one `<slug>-randomquotes` project per kept-open demo branch, each CaC-tracking that branch with `base_path = .octopus-<slug>/`. Auto-release trigger on the new GHCR image is also created per branch (skipped for `demo/process-template` since `Octopus.ProcessTemplate` action types can't anchor triggers). |
 | [`outputs.tf`](outputs.tf) | Project URL + ID for convenience |
 
 ## What's NOT here
 
-- **Deployment process** — lives in [`../../.octopus/deployment_process.ocl`](../../.octopus/deployment_process.ocl) (CaC-managed by Octopus). Inlines the K8s manifests (Deployment + Service + Ingress) and a ConfigMap step.
-- **Runbooks** — live in [`../../.octopus/runbooks/`](../../.octopus/runbooks/) (`maintenance-on.ocl`, `maintenance-off.ocl`).
-- **Project variables** — live in [`../../.octopus/variables.ocl`](../../.octopus/) alongside the deployment process.
+- **Deployment process** — lives in [`../../.octopus/deployment_process.ocl`](../../.octopus/deployment_process.ocl) (CaC-managed by Octopus). Three steps: `deploy-configmap` (K8s ConfigMap), `deploy-manifests` (inlined Deployment + Service + Ingress), and `update-argo-cd-application-image-tags` (Argo CD image-tag promotion). All four actions bind `worker_pool_variable = "Project.WorkerPool"` so Production deploys lease from `prod-pool`.
+- **Runbooks** — live in [`../../.octopus/runbooks/`](../../.octopus/runbooks/) (`maintenance-on.ocl`, `maintenance-off.ocl`, `spin-up-preview.ocl`, `teardown-preview.ocl`).
+- **Project variables** — live in [`../../.octopus/variables.ocl`](../../.octopus/) alongside the deployment process. Includes the env-scoped `Project.WorkerPool` (Production → `prod-pool`).
 - **Image build** — happens in [`.github/workflows/build.yml`](../../.github/workflows/build.yml). Image is `ghcr.io/vlussenburg/octopus-iac-lab` (built from this repo's [`app/Dockerfile`](../../app/Dockerfile)), pulled via the GHCR feed registered in `control-plane`.
 - **K8s manifests as files** — packaged as a helm chart in [`../../gitops/charts/randomquotes/`](../../gitops/charts/randomquotes/) and instantiated 12 times by the leaf Applications under `gitops/applications/randomquotes/{local,saas}/`. Each leaf supplies its own `helm.valuesObject` for tenant/mood/icon/color/host/replicas. The deployment process OCL inlines its own manifests for the K8s agent path; the gitops/ tree is the source for the Argo path.
 

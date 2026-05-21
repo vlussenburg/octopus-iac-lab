@@ -7,8 +7,10 @@ Installs the **Octopus Kubernetes Agent** + shared cluster infra (NFS CSI driver
 | [`main.tf`](main.tf) | Provider config (octopus + helm + kubernetes) and `terraform_remote_state` for the Space and control-plane |
 | [`variables.tf`](variables.tf) | Inputs (kube context, agent name, server URL from cluster's POV, etc.) |
 | [`nfs_csi.tf`](nfs_csi.tf) | NFS CSI driver helm release (`csi-driver-nfs` in `kube-system`). `helm upgrade --install` so it survives `make agent-destroy` and serves any other agents on the cluster. |
-| [`nginx_ingress.tf`](nginx_ingress.tf) | nginx-ingress controller helm release (`ingress-nginx` in `ingress-nginx`). Same survive-destroy pattern. Means one `kubectl port-forward svc/ingress-nginx-controller 80:80` covers every tenant×env via `*.localtest.me`. |
-| [`agent_install.tf`](agent_install.tf) | A `kubernetes_namespace_v1` for the agent + the `helm_release` for `octopusdeploy/kubernetes-agent`. KLOS toggle off (compose doesn't expose gRPC port 8443). |
+| [`nginx_ingress.tf`](nginx_ingress.tf) | nginx-ingress controller helm release (`ingress-nginx` in `ingress-nginx`). Same survive-destroy pattern. Means one `kubectl port-forward svc/ingress-nginx-controller 8080:8080` covers every tenant×env via `*.localtest.me`. |
+| [`agent_install.tf`](agent_install.tf) | A `kubernetes_namespace_v1` for the agent + the `helm_release` for `octopusdeploy/kubernetes-agent`. KLOS toggle off (the agent doesn't need to expose anything inbound; deploys flow Octopus → agent over Halibut). |
+| [`argo_rollouts.tf`](argo_rollouts.tf) | Argo Rollouts controller (`argo-rollouts` in `argo-rollouts`). Shared cluster infra so the BG / canary demo branches don't each have to install it. Survives `make agent-destroy`. |
+| [`sealed_secrets.tf`](sealed_secrets.tf) | Sealed Secrets controller install with key-restore / key-save `null_resource`s — mirrors the active keypair to `.env` as `SEALED_SECRETS_TLS_B64` so cluster resets keep decrypting existing SealedSecrets. |
 | [`deregister.tf`](deregister.tf) | Destroy-time `null_resource` that DELETEs the registered deployment target out of Octopus before `helm uninstall` runs. Without this, the orphaned target blocks env deletion later. |
 | [`outputs.tf`](outputs.tf) | Convenience kubectl command + helm release info |
 

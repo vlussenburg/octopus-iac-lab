@@ -1,23 +1,23 @@
 # compose/
 
-Local Octopus Server stack — the runtime that the [`../tofu/`](../tofu/) scaffold then configures.
+Local Octopus Server stack — the runtime that [`../tofu/`](../tofu/) then configures. Four services: SQL Server, Octopus Server, and two polling-tentacle workers that register into Octopus as `default-pool-worker` (built-in Default Worker Pool) and `prod-pool-worker` (`prod-pool`).
 
 | File | Purpose |
 |------|---------|
-| [`docker-compose.yml`](docker-compose.yml) | SQL Server 2022 + Octopus Server, host port `8090`. Apple-Silicon ready (both images forced to `linux/amd64`; turn on Docker Desktop → "Use Rosetta" for native-ish speed). |
+| [`docker-compose.yml`](docker-compose.yml) | `db` (SQL Server 2022) + `octopus` (Server) + `default-pool-worker` + `prod-pool-worker` (polling tentacles). Host port `8090`. Apple-Silicon ready (all images `linux/amd64`; turn on Docker Desktop → "Use Rosetta"). |
 | Licence | Set `OCTOPUS_SERVER_BASE64_LICENSE` in the repo-root `.env` (base64 of your licence XML) — `install.sh` applies it on first boot. If unset, paste via the UI under Configuration → License after first login. |
 
-Reads `MASTER_KEY` from the repo-root `.env`.
+Reads `MASTER_KEY` and `OCTOPUS_API_KEY` from the repo-root `.env`. The workers need `OCTOPUS_API_KEY` so they can self-register; they retry until `make cp-apply` has created `prod-pool`.
 
 ## Run
 
 From the **repo root** (so `--env-file .env` resolves):
 
 ```bash
-make up        # docker compose up -d
+make up        # docker compose up -d  (db → octopus → 2 workers)
 make down      # stop + remove containers (data persists in named volumes)
-make logs      # tail octopus logs
-make nuke      # ⚠️ remove volumes too — wipes the DB and master key
+make logs      # tail logs across all services
+make nuke      # ⚠️ remove volumes too — wipes the DB, master key, worker identities
 ```
 
 First boot takes ~60–90s. Then:
@@ -26,25 +26,27 @@ First boot takes ~60–90s. Then:
 open http://localhost:8090
 ```
 
-Login: `admin` / `Password01!`. If you didn't set `OCTOPUS_SERVER_BASE64_LICENSE` in `.env` before `make up`, paste a licence under Configuration → License now.
+Login: `admin` / `Password01!`. If you didn't set `OCTOPUS_SERVER_BASE64_LICENSE` in `.env` before `make up`, paste a licence under Configuration → License now. After `make cp-apply`, Infrastructure → Workers shows `default-pool-worker` and `prod-pool-worker`.
 
 ## Why these choices
 
 - **Host port 8090** — 8080 is reserved for a local ArgoCD port-forward.
-- **`linux/amd64` pinned on both images** — the Octopus image isn't published for arm64; Rosetta makes this acceptable on M-series Macs.
-- **Named volumes** (`mssql-data`, `octopus-repository`, `octopus-artifacts`, `octopus-tasklogs`) — survive container recreation. `make nuke` is the only way to drop them.
-- **`MASTER_KEY` lives in `.env`** — this key encrypts secrets in the Octopus DB. Changing it after first boot makes existing encrypted data unreadable, so it's generated once and held still.
-- **SQL Server memory cap** (`MSSQL_MEMORY_LIMIT_MB=6144`, `mem_limit: 8g`) — without it the engine grows its buffer pool unbounded and starves Octopus + Docker Desktop K8s. Sized for Docker Desktop at 16 GB; bump in step if you grow that allocation.
-- **Octopus host port `18443:8443`** for gRPC — Docker Desktop reserves `*:8443` on macOS, so we bind 18443 on the host. The container still listens on 8443, and the Argo Gateway uses `grpc://host.docker.internal:18443`.
+- **`linux/amd64` pinned on all images** — the Octopus images aren't published for arm64; Rosetta makes this acceptable on M-series Macs.
+- **Named volumes** — `mssql-data`, `octopus-repository`, `octopus-artifacts`, `octopus-tasklogs` (server-side) plus `default-pool-tentacle-config/-home` and `polling-tentacle-config/-home` (worker identities + thumbprints). Survive container recreation. `make nuke` is the only way to drop them.
+- **`MASTER_KEY` lives in `.env`** — encrypts secrets in the Octopus DB. Changing it after first boot makes existing encrypted data unreadable, so it's generated once and held still.
+- **Workers are `privileged: true`** — the `octopusdeploy/tentacle:latest` image always starts a Docker-in-Docker daemon; DinD requires privileged. Sandbox-only choice.
+- **Octopus host port `18443:8443`** for gRPC — Docker Desktop reserves `*:8443` on macOS, so we bind 18443 on the host. The container listens on 8443; Argo Gateway uses `grpc://host.docker.internal:18443`.
 
 ## Resource sizing
 
-Docker Desktop allocates a single memory pool across the compose stack AND the Docker Desktop Kubernetes cluster (which hosts the K8s agent + ArgoCD + nginx-ingress + the deployed apps). Default 8 GB is tight once the lab is fully wired:
+Limits set in `docker-compose.yml`. Budget targets a 16 GB Docker Desktop allocation.
 
-| Consumer | Approx need |
-|---|---|
-| `db` (SQL Server) | 4 GB cap, ~3 GB working |
-| `octopus` | ~2 GB |
-| Docker Desktop K8s + ArgoCD + agents + apps | 3–4 GB |
+| Service | mem_limit | cpus |
+|---|---|---|
+| `db` (SQL Server, `MSSQL_MEMORY_LIMIT_MB=2048`) | 4 GB | 2 |
+| `octopus` | 2 GB | 2 |
+| `default-pool-worker` / `prod-pool-worker` (each) | 1.5 GB | 2 |
 
-**Recommendation: Docker Desktop → Settings → Resources → bump memory to 12–16 GB.** Then optionally raise `MSSQL_MEMORY_LIMIT_MB` here in step.
+Total compose footprint: ~9 GB, leaving ~7 GB for Docker Desktop K8s (which hosts the K8s agent + ArgoCD + nginx-ingress + the deployed apps) + system.
+
+**Recommendation: Docker Desktop → Settings → Resources → 16 GB.** Less than that and you'll feel it.
