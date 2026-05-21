@@ -11,18 +11,15 @@ services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     platform: linux/amd64
-    # SQL Server's default behaviour is to grow the buffer pool until it
-    # owns most of the container's available memory, which on this lab
-    # squeezes Octopus + Docker Desktop K8s into a noisy fight. Cap the
-    # engine + container explicitly. Tune up if you bump Docker Desktop's
-    # overall allocation (Settings → Resources). With Docker Desktop at
-    # 16 GB this leaves comfortable headroom for Octopus + K8s.
-    mem_limit: 8g
+    # Budget on a 16 GB Docker Desktop: db 4g + octopus 2g + 2 workers
+    # 1.5g each = 9g, leaving ~7g for Docker Desktop's K8s + system.
+    mem_limit: 4g
+    cpus: 2
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "Octop@s!Sandb0x"
       MSSQL_PID: "Developer"
-      MSSQL_MEMORY_LIMIT_MB: "6144"
+      MSSQL_MEMORY_LIMIT_MB: "2048"
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Octop@s!Sandb0x' -C -Q 'SELECT 1' || exit 1"]
       interval: 10s
@@ -35,6 +32,8 @@ services:
   octopus:
     image: octopusdeploy/octopusdeploy:latest
     platform: linux/amd64
+    mem_limit: 2g
+    cpus: 2
     depends_on:
       db:
         condition: service_healthy
@@ -71,6 +70,8 @@ services:
     image: octopusdeploy/tentacle:latest
     platform: linux/amd64
     privileged: true
+    mem_limit: 1500m
+    cpus: 2
     depends_on:
       octopus:
         condition: service_started
@@ -111,6 +112,8 @@ services:
     # Sandbox-only choice; in production a worker would either run a
     # non-DinD image or use a sidecar pattern.
     privileged: true
+    mem_limit: 1500m
+    cpus: 2
     depends_on:
       octopus:
         condition: service_started

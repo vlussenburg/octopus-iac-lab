@@ -22,14 +22,14 @@ resource "octopusdeploy_user" "prod_deployer_demo" {
 
 resource "octopusdeploy_team" "developers" {
   name        = "developers"
-  description = "Project viewer + Environment viewer + Deployment creator (Dev only) + Release creator + GitCredentialView overlay."
+  description = "Project viewer + Environment viewer + Deployment creator (Dev only) + Release creator + GitCredentialView/VariableView overlay."
   space_id    = data.terraform_remote_state.space.outputs.space_id
   users       = [octopusdeploy_user.developer_demo.id]
 }
 
 resource "octopusdeploy_team" "prod_deployers" {
   name        = "prod-deployers"
-  description = "Project lead + Deployment creator + Environment manager. Promoter / on-call surface, unscoped envs."
+  description = "Project lead + Deployment creator + Environment manager."
   space_id    = data.terraform_remote_state.space.outputs.space_id
   users       = [octopusdeploy_user.prod_deployer_demo.id]
 }

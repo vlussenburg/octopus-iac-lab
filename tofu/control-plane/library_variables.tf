@@ -54,9 +54,3 @@ resource "octopusdeploy_variable" "linux_worker_pool" {
   value    = data.octopusdeploy_worker_pools.linux.worker_pools[0].id
 }
 
-# Note: Project.WorkerPool lives at the project level (in the demo's
-# .octopus-locked-down-prod-pool/variables.ocl), NOT in this library
-# variable set. We tried the library-set approach first and Octopus's
-# worker-pool selection picked the unscoped default even on Production
-# deploys — env-scoped resolution of library-set variables happens too
-# late in the worker-selection path. Project-level scoping works.

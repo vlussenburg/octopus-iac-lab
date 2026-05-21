@@ -7,4 +7,4 @@ cac_base_path = ".octopus"
 
 # Demo branches that get their own randomquotes-<slug> project, CaC-tracking
 # the branch. Each branch carries its own `.octopus-<slug>/` folder.
-demo_branches = ["demo/locked-down-prod-pool"]
+demo_branches = []
