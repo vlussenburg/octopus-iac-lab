@@ -116,28 +116,6 @@ step "deploy-manifests" {
     }
 }
 
-step "worker-pool-readout" {
-    name = "Worker pool readout"
-
-    action {
-        action_type          = "Octopus.Script"
-        worker_pool_variable = "Project.WorkerPool"
-        notes                = "Prints the worker pool that Project.WorkerPool resolved to for this env. Visible proof of the env-scoped routing in the task log."
-        properties = {
-            Octopus.Action.RunOnServer = "false"
-            Octopus.Action.Script.ScriptSource = "Inline"
-            Octopus.Action.Script.Syntax = "Bash"
-            Octopus.Action.Script.ScriptBody = <<-EOT
-                #!/usr/bin/env bash
-                set -euo pipefail
-                ENV="$(get_octopusvariable 'Octopus.Environment.Name')"
-                POOL="$(get_octopusvariable 'Octopus.Action.WorkerPool.Name')"
-                echo "Step running on worker pool '$POOL' for env '$ENV'"
-                EOT
-        }
-    }
-}
-
 step "update-argo-cd-application-image-tags" {
     name = "Update Argo CD Application Image Tags"
 
