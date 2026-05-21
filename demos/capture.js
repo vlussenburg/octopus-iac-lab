@@ -182,7 +182,17 @@ const DEMOS = {
     await shot(page, 'ld-03-admin-users',         usersList, 4000);
     await shot(page, 'ld-04-admin-teams',         teamsList, 4000);
     await shot(page, 'ld-05-admin-process',       process, 5500);
-    await shot(page, 'ld-06-admin-variables',     variables, 4500);
+    // Variables page with the search filter set to "Project.WorkerPool"
+    // so the env-scoped row that anchors the demo is in-frame.
+    await page.goto(variables, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(4500);
+    await dismissHelpSidebar(page);
+    try {
+      await page.getByPlaceholder(/by variable name/i).first().fill('Project.WorkerPool', { timeout: 5000 });
+      await page.waitForTimeout(1500);
+    } catch (e) { console.log(`    variable filter skipped: ${e.message}`); }
+    await page.screenshot({ path: path.join(OUT, 'ld-06-admin-variables.png'), fullPage: false });
+    console.log(`  [ld-06-admin-variables] (filtered to Project.WorkerPool)`);
     await captureTaskLogAtGateCheck(page, prodTask, 'ld-07-admin-prod-task');
     await captureTaskLogAtGateCheck(page, devTask,  'ld-08-admin-dev-task');
 
@@ -190,12 +200,33 @@ const DEMOS = {
     await octoSwitchUser(page, 'developer', 'Password01!');
     await shot(page, 'ld-09-developer-workers',   pools, 5000);
     await shot(page, 'ld-10-developer-process',   process, 5500);
-    await shot(page, 'ld-11-developer-variables', variables, 4500);
+    // Filter to Project.WorkerPool for the developer view too — same
+    // single-row context, so the "VariableEdit permission required"
+    // banner is the contrast.
+    await page.goto(variables, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(4500);
+    await dismissHelpSidebar(page);
+    try {
+      await page.getByPlaceholder(/by variable name/i).first().fill('Project.WorkerPool', { timeout: 5000 });
+      await page.waitForTimeout(1500);
+    } catch (e) { console.log(`    variable filter skipped: ${e.message}`); }
+    await page.screenshot({ path: path.join(OUT, 'ld-11-developer-variables.png'), fullPage: false });
+    console.log(`  [ld-11-developer-variables] (filtered to Project.WorkerPool)`);
 
     // === Prod-Deployer's view (full Worker* + LibVarSet/Variable edit) ===
     await octoSwitchUser(page, 'prod-deployer', 'Password01!');
     await shot(page, 'ld-12-prod-deployer-workers',   pools, 5000);
-    await shot(page, 'ld-13-prod-deployer-variables', variables, 4500);
+    // Same filter for prod-deployer view — editable inputs replace the
+    // greyed-out controls the dev saw.
+    await page.goto(variables, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(4500);
+    await dismissHelpSidebar(page);
+    try {
+      await page.getByPlaceholder(/by variable name/i).first().fill('Project.WorkerPool', { timeout: 5000 });
+      await page.waitForTimeout(1500);
+    } catch (e) { console.log(`    variable filter skipped: ${e.message}`); }
+    await page.screenshot({ path: path.join(OUT, 'ld-13-prod-deployer-variables.png'), fullPage: false });
+    console.log(`  [ld-13-prod-deployer-variables] (filtered to Project.WorkerPool)`);
   },
   'smoke-step-template': async (page) => {
     await octoLogin(page);
