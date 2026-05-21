@@ -117,7 +117,7 @@ Three tenants (`acme-corp`/`globex`/`initech`), each tagged with `tier/{free,pro
 
 ### Ingress
 
-Apps are reached via the cluster's nginx-ingress controller at `*.localtest.me` (which resolves to 127.0.0.1). One `kubectl port-forward svc/ingress-nginx-controller 80:80 -n ingress-nginx` covers all 12 tenant×env combinations. Hostnames are `#{Source}-#{tenant}-#{env}.localtest.me`. The ArgoCD UI also rides this ingress at `argocd.localtest.me:8080`.
+Apps are reached via the cluster's nginx-ingress controller at `*.localtest.me` (which resolves to 127.0.0.1). One `kubectl port-forward svc/ingress-nginx-controller 8080:8080 -n ingress-nginx` covers all 12 tenant×env combinations. Hostnames are `#{Source}-#{tenant}-#{env}.localtest.me`. The ArgoCD UI also rides this ingress at `argocd.localtest.me:8080`.
 
 ### GitOps + push: two delivery paths into one project
 

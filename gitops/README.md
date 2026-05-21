@@ -45,7 +45,7 @@ gitops/
 - `randomquotes-root-local` → syncs `gitops/applications/randomquotes/local/`
 - `randomquotes-root-saas`  → syncs `gitops/applications/randomquotes/saas/`
 
-When the root syncs, Argo applies every YAML in the matching folder, materialising the six leaf Applications. Each leaf carries `argo.octopus.com/{project,environment,tenant}` annotations that the Gateway forwards to the right Octopus.
+When the root syncs, Argo applies every YAML in the matching folder, materialising six leaf Applications per root (12 total across both worktrees). Each leaf carries `argo.octopus.com/{project,environment,tenant}` annotations that the Gateway forwards to the right Octopus.
 
 So the 12 Application objects in `argocd` namespace are owned by Argo (created from these YAMLs), not by terraform. Hand-edits to a YAML take effect on the next Argo sync — that's the GitOps loop.
 
