@@ -1,18 +1,27 @@
 # Two custom user roles for the locked-down-prod-pool demo.
 #
 # `Developer-Restricted`: project work — read/edit processes, create
-#   releases, deploy — but NO Worker*, NO LibraryVariableSetEdit, AND
-#   NO VariableEdit. Without WorkerView the pool list is empty in their
-#   UI and worker-pool dropdowns are blank. Without LibraryVariableSetEdit
-#   they can't flip library-variable-set values. Without VariableEdit
-#   they can't touch project-level variables either — which matters
-#   because `Project.WorkerPool` lives on the project, and Octopus's API
-#   happily accepts PUTs against a CaC project's variables endpoint
-#   (Octopus commits the change back via the configured Git credential).
-#   Empirically verified during the build: a developer with
-#   VariableEdit successfully PUT a tampered Production value and
-#   Octopus auto-committed it to the branch. Without VariableEdit, that
-#   path is closed. Project variables change via PRs on the OCL file.
+#   releases, deploy — and read-only WorkerView (browse the pool list,
+#   see who's healthy) but NO WorkerEdit, NO LibraryVariableSetEdit,
+#   and NO VariableEdit.
+#
+#   Things that DO stop a malicious dev:
+#     - Without VariableEdit they can't PUT a tampered Project.WorkerPool
+#       to the CaC project's variables endpoint. (Octopus's API DOES
+#       accept variable writes against VCS projects and auto-commits
+#       them back via the configured Git credential — empirically
+#       verified during the build before this gate was added.)
+#     - Without LibraryVariableSetEdit they can't change library-set
+#       values either.
+#
+#   Things that DON'T stop them — and there's no Octopus-side fix:
+#     - ProcessEdit lets them assign any pool to any step they own.
+#       Octopus has no per-pool ACL at the process-edit layer; WorkerView
+#       is space-wide (RestrictedTo: []) and so is its read counterpart.
+#       The only true gate against "dev pins prod-pool on their own step"
+#       is Platform Hub process-validation policy — the Rego rule on
+#       demo/platform-hub-opa is the placeholder for that, awaiting
+#       Octopus's provider exposing the resource.
 #
 # `Prod-Deployer`: same project surface area + full Worker* + lib var
 #   edit. The role the on-call promoter uses.
@@ -57,12 +66,13 @@ locals {
     "TriggerEdit",
     "TriggerView",
     "VariableView",
+    "WorkerView",
   ]
 }
 
 resource "octopusdeploy_user_role" "developer_restricted" {
   name        = "Developer-Restricted"
-  description = "Project edit + release create + deploy. No worker visibility, no library-variable-set edit, no VariableEdit — so they can't pick a pool, change library vars, or PUT a tampered project-level Project.WorkerPool."
+  description = "Project edit + release create + deploy. Read-only WorkerView (can browse pools) but no WorkerEdit, LibraryVariableSetEdit, or VariableEdit — so they can't tamper with library variables, project-level variables (incl. Project.WorkerPool), or worker config. ProcessEdit still allows them to pin any pool on their own steps; that gap is closed by Platform Hub process-validation policy, not by Octopus RBAC."
 
   granted_space_permissions = local.developer_restricted_permissions
 }
@@ -79,7 +89,6 @@ resource "octopusdeploy_user_role" "prod_deployer" {
       "MachineEdit",
       "VariableEdit",
       "WorkerEdit",
-      "WorkerView",
     ]
   )
 }
