@@ -36,6 +36,21 @@ node demos/capture.js canary --record       # just one
 
 `--record` wraps each demo's context with `recordVideo` — same scenario, just produces a WebM alongside the PNGs. Convert to MP4 if needed: `ffmpeg -i demos/out/<slug>.webm -c:v libx264 -preset slow -crf 22 demos/out/<slug>.mp4`.
 
+## Narrated recordings (`record-*.mjs`)
+
+When `--record` on a screenshot scenario isn't enough — banner overlays, a live `kubectl` panel that updates during the recording, mid-flow deploy triggers — use the per-demo scripts under `demos/record-*.mjs`. Each file is a scene-driven scenario with explicit timing:
+
+```bash
+node demos/record-blue-green.mjs        # PR #28
+node demos/record-bg-preview.mjs        # PR #30
+node demos/record-canary.mjs            # PR #58
+node demos/record-octopus-native-bg.mjs # PR #29
+node demos/record-platform-hub-opa.mjs  # PR #46
+node demos/record-snow.mjs              # PR #53
+```
+
+Shared helpers — env loading, Octopus REST client, banner-overlay injector, kubectl-panel HTTP server — live in [`recorder-lib.mjs`](recorder-lib.mjs). Each per-demo file is constants + scene script + minor demo-specific helpers.
+
 The `demo/servicenow-cr-gate` flow has full orchestration in [`capture-snow.mjs`](capture-snow.mjs) (deploy → CR creation → mid-flow PDI approval → resume) — light shots are in `capture.js`'s case above.
 
 ## Env
