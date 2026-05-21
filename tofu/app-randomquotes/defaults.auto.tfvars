@@ -4,3 +4,14 @@
 cac_repo_url  = "https://github.com/vlussenburg/octopus-iac-lab.git"
 cac_branch    = "main"
 cac_base_path = ".octopus"
+
+demo_branches = [
+  "demo/blue-green",
+  "demo/bg-preview",
+  "demo/canary",
+  "demo/octopus-native-bg",
+  "demo/platform-hub-opa",
+  "demo/process-template",
+  "demo/servicenow-cr-gate",
+  "demo/smoke-step-template",
+]
