@@ -4,7 +4,3 @@
 cac_repo_url  = "https://github.com/vlussenburg/octopus-iac-lab.git"
 cac_branch    = "main"
 cac_base_path = ".octopus"
-
-# Demo branches that get their own randomquotes-<slug> project, CaC-tracking
-# the branch. Each branch carries its own `.octopus-<slug>/` folder.
-demo_branches = []
