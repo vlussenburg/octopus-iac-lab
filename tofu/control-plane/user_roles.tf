@@ -41,6 +41,7 @@ locals {
     "EnvironmentView",
     "EventView",
     "FeedView",
+    "GitCredentialView",
     "InterruptionSubmit",
     "InterruptionView",
     "LibraryVariableSetView",
