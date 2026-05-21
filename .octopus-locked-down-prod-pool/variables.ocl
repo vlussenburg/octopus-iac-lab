@@ -3,7 +3,7 @@ variable "Project.WorkerPool" {
 
     value "dev-pool" {}
 
-    value "dev-pool" {
+    value "prod-pool" {
         environment = ["production"]
     }
 }
