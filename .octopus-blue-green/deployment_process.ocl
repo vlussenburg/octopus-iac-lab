@@ -17,13 +17,120 @@ step "deploy-configmap" {
 }
 
 step "deploy-manifests" {
-    name = "Deploy Manifests"
+    name = "Deploy Manifests (Production — blue/green)"
     properties = {
         Octopus.Action.TargetRoles = "k8s"
     }
 
     action {
         action_type          = "Octopus.KubernetesDeployRawYaml"
+        environments         = ["production"]
+        worker_pool_variable = "Project.WorkerPool"
+        properties = {
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                apiVersion: argoproj.io/v1alpha1
+                kind: Rollout
+                metadata:
+                  name: randomquotes
+                  labels:
+                    app: randomquotes
+                    tenant.octopus.com/tier: "#{Tier}"
+                spec:
+                  replicas: #{Replicas}
+                  selector:
+                    matchLabels:
+                      app: randomquotes
+                  strategy:
+                    blueGreen:
+                      activeService: randomquotes
+                      autoPromotionEnabled: true
+                      scaleDownDelaySeconds: 30
+                  template:
+                    metadata:
+                      labels:
+                        app: randomquotes
+                    spec:
+                      containers:
+                        - name: randomquotes
+                          image: #{Octopus.Action.Package[randomquotes-image].Image}
+                          ports:
+                            - containerPort: 80
+                          resources:
+                            requests:
+                              cpu: "100m"
+                              memory: "64Mi"
+                            limits:
+                              cpu: "250m"
+                              memory: "128Mi"
+                          volumeMounts:
+                            - name: config
+                              mountPath: /usr/share/nginx/html/config.json
+                              subPath: config.json
+                      volumes:
+                        - name: config
+                          configMap:
+                            name: randomquotes-config
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: randomquotes
+                spec:
+                  type: ClusterIP
+                  selector:
+                    app: randomquotes
+                  ports:
+                    - protocol: TCP
+                      port: 80
+                      targetPort: 80
+                ---
+                apiVersion: networking.k8s.io/v1
+                kind: Ingress
+                metadata:
+                  name: randomquotes
+                spec:
+                  ingressClassName: nginx
+                  rules:
+                    - host: #{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.localtest.me
+                      http:
+                        paths:
+                          - path: /
+                            pathType: Prefix
+                            backend:
+                              service:
+                                name: randomquotes
+                                port:
+                                  number: 80
+                                                EOT
+            Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptSource = "Inline"
+        }
+
+        packages "randomquotes-image" {
+            acquisition_location = "NotAcquired"
+            feed = "ghcr"
+            package_id = "vlussenburg/octopus-iac-lab"
+            properties = {
+                Extract = "False"
+                Purpose = "DockerImageReference"
+                SelectionMode = "immediate"
+            }
+        }
+    }
+}
+
+step "deploy-manifests-dev" {
+    name = "Deploy Manifests (Dev — plain Deployment)"
+    properties = {
+        Octopus.Action.TargetRoles = "k8s"
+    }
+
+    action {
+        action_type          = "Octopus.KubernetesDeployRawYaml"
+        environments         = ["dev"]
         worker_pool_variable = "Project.WorkerPool"
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
@@ -97,7 +204,7 @@ step "deploy-manifests" {
                                 name: randomquotes
                                 port:
                                   number: 80
-                                            EOT
+                                                EOT
             Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
@@ -112,6 +219,28 @@ step "deploy-manifests" {
                 Purpose = "DockerImageReference"
                 SelectionMode = "immediate"
             }
+        }
+    }
+}
+
+step "smoke-test-after-flip" {
+    name = "Smoke test (post-flip)"
+    properties = {
+        Octopus.Action.TargetRoles = "k8s"
+    }
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.Template.Id      = "ActionTemplates-1"
+            Octopus.Action.Template.Version = "0"
+            BaseUrl                         = "http://randomquotes.randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.svc.cluster.local"
+            Path                            = "/config.json"
+            ExpectBody                      = "#{Octopus.Deployment.Tenant.Name}"
+            Iterations                      = "10"
+            MaxLatencyMs                    = "1500"
+            MinSuccessPct                   = "90"
+            WarmupSeconds                   = "8"
         }
     }
 }

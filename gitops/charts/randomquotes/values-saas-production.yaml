@@ -9,6 +9,11 @@
 # tag renders a no-op Application (namespace + Service + Ingress still
 # created, but zero pods). First Octopus promote writes a real tag here
 # and the Deployment materialises.
+# Renders templates/rollout.yaml (Argo Rollout blue-green) on
+# Production — 3 replicas (enterprise tier acme-corp) makes a real
+# ReplicaSet swap visible.
+envType: production
+
 image:
   repository: vlussenburg/octopus-iac-lab
   tag: ""

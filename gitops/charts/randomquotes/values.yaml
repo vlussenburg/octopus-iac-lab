@@ -22,6 +22,12 @@
 
 replicaCount: 1
 
+# Drives which workload kind the chart renders:
+#   production → templates/rollout.yaml (Argo Rollout blue-green)
+#   anything else → templates/deployment.yaml (plain Deployment)
+# Overridden per-env in values-{local,saas}-{dev,production}.yaml.
+envType: dev
+
 # Subscription tier — drives per-tier policy in Platform Hub's Rego bundle
 # (replica caps, watermark, …). Mirrors the existing Octopus `tier/*` tenant
 # tag so the chart and Octopus agree on which tenant is which.

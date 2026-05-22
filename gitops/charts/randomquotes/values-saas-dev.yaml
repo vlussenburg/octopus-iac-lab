@@ -3,6 +3,10 @@
 # tag here on every deployment to dev from the saas project. Do not
 # hand-edit unless you know what you're doing; the next deploy will
 # overwrite. Leaf Apps reference this via spec.source.helm.valueFiles.
+# Renders templates/deployment.yaml (plain Deployment) instead of
+# templates/rollout.yaml (Argo Rollout blue-green). See chart comments.
+envType: dev
+
 image:
   repository: vlussenburg/octopus-iac-lab
   tag: "1.1.142"

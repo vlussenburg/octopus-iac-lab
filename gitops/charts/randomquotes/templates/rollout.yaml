@@ -1,12 +1,15 @@
-{{- if and .Values.image.tag (ne .Values.envType "production") }}
-# Plain Kubernetes Deployment for non-production (Dev). The
-# blue-green demo only renders an Argo Rollout on Production (where
-# acme-corp runs 3 replicas — enough for a real ReplicaSet swap).
-# Dev runs 1 replica, so a blue/green strategy degenerates to a
-# single-pod cut-over with no demo value. Convention: Dev = simple,
-# fast-feedback; no progressive-delivery ceremony.
-apiVersion: apps/v1
-kind: Deployment
+{{- if and .Values.image.tag (eq .Values.envType "production") }}
+# Atomic blue/green via Argo Rollouts — production only. On Dev the
+# tenant runs a single replica, which makes blue/green degenerate to a
+# 1-pod swap with no meaningful "blue" vs "green" — so Dev renders the
+# plain Deployment in deployment.yaml instead. autoPromotionEnabled=true
+# means the controller cuts the active Service over to the new
+# ReplicaSet the moment it becomes healthy — no operator gate, no
+# preview hostname. Companion to the agent-path Rollout in
+# .octopus-blue-green/deployment_process.ocl; this is the GitOps path's
+# rendering of the same shape.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: randomquotes
   labels:
@@ -20,6 +23,11 @@ spec:
   selector:
     matchLabels:
       app: randomquotes
+  strategy:
+    blueGreen:
+      activeService: randomquotes
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 30
   template:
     metadata:
       labels:
@@ -29,6 +37,8 @@ spec:
         app.kubernetes.io/part-of: randomquotes
         tenant.octopus.com/tier: {{ .Values.tier | quote }}
       annotations:
+        # Roll the pod when the ConfigMap content changes — k8s doesn't
+        # auto-restart on volume-mount updates.
         configmap-checksum: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       containers:
