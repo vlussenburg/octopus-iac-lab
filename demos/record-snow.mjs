@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 // ServiceNow CR-gate demo recorder — single-tab WebM walking through the
 // full deploy → CR → approval → resume flow against the running lab.
-// Same orchestration as demos/capture-snow.mjs (which produces stills)
-// but wraps the Playwright session in a recordVideo context and
-// converts to MP4 for the demo/servicenow-cr-gate PR.
 //
 // Sequence:
 //   0. (off-camera) trigger deploy: Dev (lifecycle precondition) →
@@ -17,7 +14,7 @@
 //      approved).
 //   6. Back to the Octopus task page — gate cleared, deploy resumes,
 //      task lands green.
-//   7. Live app on Production-initech hostname.
+//   7. Live app on Production-globex hostname.
 //
 // Prereqs (in repo root .env):
 //   OCTOPUS_URL, OCTOPUS_API_KEY        — talk to local Octopus
@@ -30,19 +27,23 @@
 //
 // Output → demos/out/snow.mp4
 
-// Reuse the playwright install from scripts/ — no need for a second copy.
-import { chromium } from "../scripts/node_modules/playwright/index.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  loadEnv, sleep, octoLogin, octoGet, octoPost,
+  waitForTaskState, cancelSiblingDeploys, readLiveImageTag,
+  launchRecorder, saveRecording, withPinnedScroll,
+  banner, dismissOctoChrome,
+} from "./recorder-lib.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
-const OUT = path.join(__dirname, "out");
-fs.mkdirSync(OUT, { recursive: true });
 
-// ---------- env reader ----------
-function envMap() {
+// ---------- env ----------
+const env = loadEnv();
+// ServiceNow-specific env (not in lib).
+function snowEnv() {
   const txt = fs.readFileSync(path.join(REPO_ROOT, ".env"), "utf8");
   const m = new Map();
   for (const line of txt.split("\n")) {
@@ -51,81 +52,28 @@ function envMap() {
   }
   return m;
 }
-const E = envMap();
-const OCTO_URL = E.get("OCTOPUS_URL") || "http://localhost:8090";
-const OCTO_KEY = E.get("OCTOPUS_API_KEY");
-const OCTO_USER = process.env.OCTO_USER || "admin";
-const OCTO_PASS = process.env.OCTO_PASS || "Password01!";
-const SNOW_URL = E.get("SERVICENOW_URL").replace(/\/$/, "");
+const E = snowEnv();
+const SNOW_URL = (E.get("SERVICENOW_URL") || "").replace(/\/$/, "");
 const SNOW_USER = "admin";
 const SNOW_PASS = E.get("SERVICENOW_PASSWORD");
+
 const SPACE_ID = "Spaces-2";
 const PROJECT_SLUG = "servicenow-cr-gate-randomquotes";
-const PROJECT_ID = "Projects-4";
-const DEV_ENV_ID = "Environments-1";
-const ENV_ID = "Environments-2"; // Production — the change-controlled one
 const TENANT_SLUG = "globex";
-// Each capture run mints a fresh release so Octopus creates a NEW CR
-// (CRs are keyed on release+env+tenant — reusing a release reuses the CR).
+// PROJECT_ID + DEV_ENV_ID + ENV_ID resolved at runtime from slug/name —
+// Octopus rotates these on every `make nuke`, so hardcoding them rots
+// quickly. Also, the prior hardcoded values had Dev/Prod swapped.
+let PROJECT_ID;
+let DEV_ENV_ID;
+let ENV_ID;
 // Production namespace + app URL — the snow demo flows through Production
 // (Dev is the lifecycle precondition, off-camera).
 const NS = `randomquotes-local-servicenow-cr-gate-${TENANT_SLUG}-production`;
-
-const log = (...a) => console.log("[record-snow]", ...a);
 const APP_URL = `http://local-servicenow-cr-gate-${TENANT_SLUG}-production.localtest.me:8080/`;
 
-// ---------- Octopus REST helpers ----------
-async function octoGet(p) {
-  const r = await fetch(`${OCTO_URL}${p}`, { headers: { "X-Octopus-ApiKey": OCTO_KEY } });
-  if (!r.ok) throw new Error(`octo GET ${p} → ${r.status}`);
-  return r.json();
-}
-async function octoPost(p, body) {
-  const r = await fetch(`${OCTO_URL}${p}`, {
-    method: "POST",
-    headers: { "X-Octopus-ApiKey": OCTO_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`octo POST ${p} → ${r.status}: ${await r.text()}`);
-  return r.json();
-}
+const log = (...a) => console.log("[record-snow]", ...a);
 
-import { execSync } from "node:child_process";
-
-// Pick a release that's NOT the version currently running in
-// Production for our tenant. Octopus's deploy form auto-skips
-// tenants whose current Production version matches the release
-// being deployed, so deploying the live version is a no-op. This
-// is "next if exists, previous otherwise":
-//   - Newest semver release with a version > live → roll forward.
-//   - Else newest semver release with a version != live → roll
-//     back (also fires a fresh CR, also exercises the gate).
-async function resolveRelease() {
-  const liveTag = currentLiveTag() || "0.0.0";
-  log(`Production / ${TENANT_SLUG} currently running: ${liveTag}`);
-  const releases = await octoGet(`/api/${SPACE_ID}/projects/${PROJECT_ID}/releases?take=10`);
-  const semver = (releases.Items || []).filter((r) => /^\d+\.\d+\.\d+$/.test(r.Version));
-  if (!semver.length) throw new Error("no semver releases on the project");
-  const release =
-    semver.find((r) => isNewer(liveTag, r.Version)) ||
-    semver.find((r) => r.Version !== liveTag);
-  if (!release) throw new Error(`no release differs from the current live tag ${liveTag}`);
-  log(`using release ${release.Version} (${release.Id})`);
-  return { release };
-}
-
-// "Current live" = whatever the live Production pod is running.
-function currentLiveTag() {
-  try {
-    const img = execSync(
-      `kubectl get pods -n ${NS} -l app=randomquotes ` +
-      `-o jsonpath='{.items[0].spec.containers[0].image}'`,
-      { encoding: "utf8" },
-    ).trim();
-    return img.split(":").pop() || "";
-  } catch { return ""; }
-}
-
+// ---------- semver compare (NOT in lib) ----------
 function isNewer(a, b) {
   const p = (v) => v.split(/[^0-9]+/).filter(Boolean).map(Number);
   const xs = p(a), ys = p(b);
@@ -137,18 +85,27 @@ function isNewer(a, b) {
   return false;
 }
 
-// Cancel sibling tasks the auto-trigger fans out across the other
-// projects + tenants so MaxConcurrentTasks=2 doesn't bury our own.
-async function cancelOtherQueued(keep = []) {
-  const r = await octoGet(`/api/tasks?states=Executing,Queued&take=30`);
-  const others = (r.Items || []).filter((t) => !keep.includes(t.Id) && /Deploy /.test(t.Description || ""));
-  for (const t of others) {
-    await fetch(`${OCTO_URL}/api/tasks/${t.Id}/cancel`, {
-      method: "POST",
-      headers: { "X-Octopus-ApiKey": OCTO_KEY },
-    }).catch(() => {});
-  }
-  if (others.length) log(`cancelled ${others.length} sibling tasks`);
+// ---------- release selection ----------
+// Pick a release that's NOT the version currently running in
+// Production for our tenant. Octopus's deploy form auto-skips
+// tenants whose current Production version matches the release
+// being deployed, so deploying the live version is a no-op. This
+// is "next if exists, previous otherwise":
+//   - Newest semver release with a version > live → roll forward.
+//   - Else newest semver release with a version != live → roll
+//     back (also fires a fresh CR, also exercises the gate).
+async function resolveRelease() {
+  const liveTag = readLiveImageTag(NS) || "0.0.0";
+  log(`Production / ${TENANT_SLUG} currently running: ${liveTag}`);
+  const releases = await octoGet(env, `/api/${SPACE_ID}/projects/${PROJECT_ID}/releases?take=10`);
+  const semver = (releases.Items || []).filter((r) => /^\d+\.\d+\.\d+$/.test(r.Version));
+  if (!semver.length) throw new Error("no semver releases on the project");
+  const release =
+    semver.find((r) => isNewer(liveTag, r.Version)) ||
+    semver.find((r) => r.Version !== liveTag);
+  if (!release) throw new Error(`no release differs from the current live tag ${liveTag}`);
+  log(`using release ${release.Version} (${release.Id})`);
+  return { release };
 }
 
 // Ensure the release has been successfully deployed to Dev for the
@@ -157,25 +114,34 @@ async function cancelOtherQueued(keep = []) {
 // created, but the recorder may need to deploy explicitly if the
 // trigger fan-out was cancelled or the release pre-existed.
 async function ensureDevDeployed(release) {
-  const tenants = await octoGet(`/api/${SPACE_ID}/tenants?name=${TENANT_SLUG}`);
+  // The Dev-phase precondition for Production is satisfied by *any* tenant
+  // having a successful Dev deploy on this release — not specifically our
+  // target tenant. globex is Production-only on this project (Dev isn't
+  // even a connected env for it), so we seed Dev via acme-corp instead.
+  const DEV_SEED_TENANT = "acme-corp";
+  const tenants = await octoGet(env, `/api/${SPACE_ID}/tenants?name=${DEV_SEED_TENANT}`);
   const tenantId = tenants.Items[0].Id;
-  const progression = await octoGet(`/api/${SPACE_ID}/releases/${release.Id}/progression`);
+  const progression = await octoGet(env, `/api/${SPACE_ID}/releases/${release.Id}/progression`);
   const devPhase = (progression.Phases || []).find((p) => p.Name === "Dev") || progression.Phases[0];
   const devCell = (devPhase.Deployments || []).find((d) => d.EnvironmentId === DEV_ENV_ID);
   const successful = (devCell?.Deployments || []).find((d) =>
     d.State === "Success" && d.TenantId === tenantId,
   );
-  if (successful) { log(`Dev already green for ${TENANT_SLUG}`); return; }
+  if (successful) { log(`Dev already green for ${DEV_SEED_TENANT}`); return; }
 
-  log(`Dev not green for ${TENANT_SLUG} — submitting`);
-  const dep = await octoPost(`/api/${SPACE_ID}/deployments`, {
+  log(`Dev not green for ${DEV_SEED_TENANT} — submitting`);
+  // Refresh the release's variable snapshot before deploying — old
+  // releases captured their snapshot before later `tofu apply`s and may
+  // otherwise fail with "No variable named 'Project.WorkerPool' was in scope".
+  await octoPost(env, `/api/${SPACE_ID}/releases/${release.Id}/snapshot-variables`, {});
+  const dep = await octoPost(env, `/api/${SPACE_ID}/deployments`, {
     ReleaseId: release.Id,
     EnvironmentId: DEV_ENV_ID,
     TenantId: tenantId,
     ProjectId: PROJECT_ID,
   });
   log(`Dev deployment ${dep.Id} → task ${dep.TaskId}`);
-  await waitForTaskState(dep.TaskId, ["Success", "Failed"]);
+  await waitForTaskState(env, dep.TaskId, ["Success", "Failed"]);
   log("Dev deploy complete");
 }
 
@@ -189,13 +155,18 @@ async function ensureDevDeployed(release) {
 //     cell already has an existing deployment — a redeploy lands on
 //     the same form.
 async function submitProductionDeployViaUI(page, release) {
-  const tenants = await octoGet(`/api/${SPACE_ID}/tenants?name=${TENANT_SLUG}`);
+  const tenants = await octoGet(env, `/api/${SPACE_ID}/tenants?name=${TENANT_SLUG}`);
   const tenantId = tenants.Items[0].Id;
+
+  // Refresh the release's variable snapshot before the on-camera deploy —
+  // old releases captured their snapshot before later `tofu apply`s and may
+  // otherwise fail with "No variable named 'Project.WorkerPool' was in scope".
+  await octoPost(env, `/api/${SPACE_ID}/releases/${release.Id}/snapshot-variables`, {});
 
   // Scene a: deployments grid filtered to this release. Kept brief —
   // the grid is just context; the click + gate are what matter.
   const gridUrl =
-    `${OCTO_URL}/app#/${SPACE_ID}/projects/${PROJECT_SLUG}` +
+    `${env.OCTO_URL}/app#/${SPACE_ID}/projects/${PROJECT_SLUG}` +
     `/deployments?groupBy=None&page=1&pageSize=50&release=${release.Id}`;
   log(`opening deployments grid for ${release.Version}`);
   await page.goto(gridUrl, { waitUntil: "domcontentloaded" });
@@ -206,7 +177,7 @@ async function submitProductionDeployViaUI(page, release) {
 
   // Scene b: pre-populated deploy form.
   const deployFormUrl =
-    `${OCTO_URL}/app#/${SPACE_ID}/projects/${PROJECT_SLUG}` +
+    `${env.OCTO_URL}/app#/${SPACE_ID}/projects/${PROJECT_SLUG}` +
     `/deployments/releases/${release.Version}/deployments/create` +
     `?environmentIds=${ENV_ID}&tenantIds=${tenantId}`;
   log(`opening deploy form for Production / ${TENANT_SLUG}`);
@@ -230,38 +201,26 @@ async function submitProductionDeployViaUI(page, release) {
     if (m) { deploymentId = m[1]; break; }
   }
   if (!deploymentId) throw new Error("did not land on deployment URL after Deploy click");
-  const dep = await octoGet(`/api/${SPACE_ID}/deployments/${deploymentId}`);
+  const dep = await octoGet(env, `/api/${SPACE_ID}/deployments/${deploymentId}`);
   log(`UI deploy created ${deploymentId} → task ${dep.TaskId}`);
   return { deploymentId, taskId: dep.TaskId, version: release.Version };
 }
 
+// Poll the task until its log mentions "Change Number CHG…" — that's when
+// Octopus has registered the CR and shown the "Awaiting change request"
+// banner in the UI.
 async function waitForCRBanner(taskId, timeoutMs = 90_000) {
-  // Poll the task until its log mentions "Change Number CHG…" — that's when
-  // Octopus has registered the CR and shown the "Awaiting change request"
-  // banner in the UI.
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const log = await fetch(`${OCTO_URL}/api/tasks/${taskId}/raw`, {
-      headers: { "X-Octopus-ApiKey": OCTO_KEY },
+    const taskLog = await fetch(`${env.OCTO_URL}/api/tasks/${taskId}/raw`, {
+      headers: { "X-Octopus-ApiKey": env.OCTO_KEY },
     }).then((r) => r.text());
-    const m = log.match(/Change Number \[?(CHG\d+)\]?/);
+    const m = taskLog.match(/Change Number \[?(CHG\d+)\]?/);
     if (m) return m[1];
     await sleep(3000);
   }
   throw new Error("timed out waiting for CR creation in task log");
 }
-
-async function waitForTaskState(taskId, wantedStates, timeoutMs = 240_000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const t = await octoGet(`/api/tasks/${taskId}`);
-    if (wantedStates.includes(t.State)) return t;
-    await sleep(4000);
-  }
-  throw new Error(`timed out waiting for ${wantedStates.join("|")}`);
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- ServiceNow REST helpers ----------
 async function snowAuthHeader() {
@@ -347,34 +306,7 @@ async function approveCRviaREST(crNumber) {
   }
 }
 
-// ---------- Playwright helpers ----------
-async function octoLogin(page) {
-  await page.goto(`${OCTO_URL}/app#/users/sign-in`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(2000);
-  await page.fill('input[type="text"]', OCTO_USER);
-  await page.fill('input[type="password"]', OCTO_PASS);
-  await page.click('button[type="submit"]');
-  await page.waitForURL(/dashboard|spaces/i, { timeout: 15_000 });
-  await page.waitForTimeout(2000);
-}
-
-async function dismissOctoChrome(page) {
-  // Close the Help Sidebar if it's open — it covers the right third of the page.
-  for (const sel of [
-    'button[aria-label="Close help sidebar"]',
-    'button[aria-label="Close"]',
-    'aside[aria-label*="Help"] button',
-    '[data-testid*="help"] button[aria-label*="lose"]',
-  ]) {
-    const b = page.locator(sel).first();
-    if (await b.isVisible().catch(() => false)) {
-      await b.click().catch(() => {});
-      await page.waitForTimeout(400);
-    }
-  }
-  // Cookie / "what's new" toasts
-  await page.keyboard.press("Escape").catch(() => {});
-}
+// ---------- SNow Playwright login (SNow-specific, not in lib) ----------
 async function snowLogin(page) {
   await page.goto(`${SNOW_URL}/login.do`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2000);
@@ -384,40 +316,16 @@ async function snowLogin(page) {
   await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
   await page.waitForTimeout(2500);
 }
-// Sticky banner — same shape as the bg-preview / blue-green recorders.
-// Re-injected after each navigation so the audience always sees what
-// scene they're in.
-async function banner(page, label) {
-  await page.evaluate((text) => {
-    let el = document.getElementById("__demo_banner");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "__demo_banner";
-      el.style.cssText = [
-        "position:fixed",
-        "top:0",
-        "left:0",
-        "right:0",
-        "z-index:2147483647",
-        "padding:14px 20px",
-        "background:linear-gradient(90deg,#0f1f33,#1a3a5c)",
-        "color:#fff",
-        "font:600 18px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
-        "letter-spacing:0.3px",
-        "text-align:center",
-        "box-shadow:0 2px 8px rgba(0,0,0,0.3)",
-        "pointer-events:none",
-      ].join(";");
-      document.documentElement.appendChild(el);
-    }
-    el.textContent = text;
-  }, label);
-}
 
 // ---------- main ----------
 (async () => {
-  if (!OCTO_KEY) throw new Error("OCTOPUS_API_KEY missing from .env");
+  if (!env.OCTO_KEY) throw new Error("OCTOPUS_API_KEY missing from .env");
   if (!SNOW_PASS) throw new Error("SERVICENOW_PASSWORD missing from .env");
+
+  PROJECT_ID = (await octoGet(env, `/api/${SPACE_ID}/projects?partialName=${encodeURIComponent(PROJECT_SLUG)}`)).Items.find((p) => p.Slug === PROJECT_SLUG).Id;
+  DEV_ENV_ID = (await octoGet(env, `/api/${SPACE_ID}/environments?partialName=Dev`)).Items.find((e) => e.Name === "Dev").Id;
+  ENV_ID = (await octoGet(env, `/api/${SPACE_ID}/environments?partialName=Production`)).Items.find((e) => e.Name === "Production").Id;
+  log(`resolved: project=${PROJECT_ID} dev=${DEV_ENV_ID} prod=${ENV_ID}`);
 
   // ----- Pre-recording (off-camera) -----
   // Find / build the next release, make sure Dev is green for our
@@ -427,29 +335,22 @@ async function banner(page, label) {
   // viewer sees.
   log("pre: resolve release + ensure Dev success");
   const { release } = await resolveRelease();
-  await cancelOtherQueued();
+  await cancelSiblingDeploys(env, null);
   await ensureDevDeployed(release);
-  await cancelOtherQueued();
+  await cancelSiblingDeploys(env, null);
   await purgeExistingCRs(release);
 
-  const browser = await chromium.launch({ headless: false, slowMo: 200 });
-  const VIEW = { width: 1680, height: 1000 };
-  const ctx = await browser.newContext({
-    viewport: VIEW,
-    recordVideo: { dir: OUT, size: VIEW },
-    ignoreHTTPSErrors: true,
-  });
-  const page = await ctx.newPage();
+  const { browser, ctx, page } = await launchRecorder({ slowMo: 200 });
 
   try {
     // ----- Scene 1: log into Octopus (off-screen prelude) -----
     log("scene 1: Octopus login");
-    await octoLogin(page);
+    await octoLogin(page, env);
 
     // ----- Scene 2: Octopus deploy form — click Deploy to Production -----
     log("scene 2: click Deploy to Production");
     const { deploymentId, taskId, version } = await submitProductionDeployViaUI(page, release);
-    const taskUrl = `${OCTO_URL}/app#/${SPACE_ID}/projects/${PROJECT_SLUG}/deployments/releases/${version}/deployments/${deploymentId}`;
+    const taskUrl = `${env.OCTO_URL}/app#/${SPACE_ID}/projects/${PROJECT_SLUG}/deployments/releases/${version}/deployments/${deploymentId}`;
     const crNumber = await waitForCRBanner(taskId);
     log(`CR created — ${crNumber}`);
     const lookup = await fetch(
@@ -496,7 +397,7 @@ async function banner(page, label) {
     await page.goto(taskUrl, { waitUntil: "domcontentloaded" });
     await dismissOctoChrome(page);
     await banner(page, "Octopus picks up the approval — gate clears, deploy resumes");
-    await waitForTaskState(taskId, ["Success", "Failed"]);
+    await withPinnedScroll(page, () => waitForTaskState(env, taskId, ["Success", "Failed"]));
     await page.reload({ waitUntil: "domcontentloaded" });
     await dismissOctoChrome(page);
     await banner(page, `Task green — release ${version} deployed to Production / ${TENANT_SLUG}`);
@@ -511,25 +412,10 @@ async function banner(page, label) {
 
     log("done");
   } finally {
+    await saveRecording(page, "snow");
     await ctx.close();
     await browser.close();
   }
-
-  // ----- Post: convert WebM → MP4 -----
-  const webms = fs.readdirSync(OUT)
-    .filter((f) => f.endsWith(".webm"))
-    .map((f) => ({ f, mtime: fs.statSync(path.join(OUT, f)).mtimeMs }))
-    .sort((a, b) => b.mtime - a.mtime);
-  if (!webms.length) { log("no WebM produced"); process.exit(1); }
-  const src = path.join(OUT, webms[0].f);
-  const dst = path.join(OUT, "snow.mp4");
-  log(`ffmpeg: ${path.relative(REPO_ROOT, src)} → ${path.relative(REPO_ROOT, dst)}`);
-  execSync(
-    `ffmpeg -y -i "${src}" -c:v libx264 -pix_fmt yuv420p -crf 23 -preset fast "${dst}"`,
-    { stdio: "inherit" },
-  );
-  const sizeMb = (fs.statSync(dst).size / 1024 / 1024).toFixed(2);
-  log(`written: ${path.relative(REPO_ROOT, dst)} (${sizeMb} MiB)`);
 })().catch((err) => {
   console.error("[record-snow] ERROR:", err.message);
   process.exit(1);
