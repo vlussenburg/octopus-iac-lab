@@ -101,16 +101,8 @@ parameter "AppImage" {
     display_settings = {
         Octopus.ControlType = "Package"
     }
-    help_text = "Container image package for the workload. Bound by the consuming project."
+    help_text = "Container image package for the workload AND for the Argo CD image-tag update. One parameter for both — so the auto-release-on-image trigger (which can only resolve one package per fire) doesn't fail with 'no version specified' on the second action."
     label = "App image package"
-}
-
-parameter "ArgoImage" {
-    display_settings = {
-        Octopus.ControlType = "Package"
-    }
-    help_text = "Container image package whose tag the Argo CD step writes into Application manifests. Usually the same package as App image."
-    label = "Argo image package"
 }
 
 step "deploy-manifests" {
@@ -224,12 +216,12 @@ step "update-argo-cd-application-image-tags" {
             Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
         }
 
-        packages "ArgoImage" {
+        packages "AppImage" {
             acquisition_location = "NotAcquired"
             properties = {
                 Extract = "False"
                 HelmReplacementPath = "image.tag"
-                PackageParameterName = "ArgoImage"
+                PackageParameterName = "AppImage"
                 Purpose = "DockerImageReference"
                 SelectionMode = "deferred"
             }
