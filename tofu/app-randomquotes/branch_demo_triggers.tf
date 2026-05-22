@@ -29,24 +29,28 @@ locals {
   }
 }
 
-# Skip the auto-release trigger for branches whose deployment process is
-# driven by a process_template usage. The trigger's package validation
-# rejects Octopus.ProcessTemplate action types — Octopus only allows
-# "real" action slugs (KubernetesDeployRawYaml etc.) as trigger anchors.
-# Templated branches deploy on-demand or via the build.yml release matrix
-# until Octopus supports template-driven triggers natively.
+# Per-branch overrides for the trigger's action slug + package reference.
+# Branches whose deployment process uses a `process_template` usage need the
+# EXPANDED step slug (`{template-usage-slug}-{step-in-template-slug}`) — not
+# the usage label — and the package reference name comes from the template's
+# `package_parameter`. Discoverable via:
+#   GET /api/Spaces-{S}/projects/{P}/{commitSha}/deploymentprocesses/resolved
+# (each Steps[].Actions[].Slug is the value to use as deployment_action_slug.)
 locals {
-  branch_demo_trigger_skip = toset([
-    "demo/process-template",
-  ])
-  branch_demo_trigger_branches = setsubtract(
-    var.demo_branches,
-    local.branch_demo_trigger_skip,
-  )
+  branch_demo_trigger_override = {
+    "demo/process-template" = {
+      deployment_action_slug = "deploy-workload-deploy-manifests"
+      package_reference      = "AppImage"
+    }
+  }
+  branch_demo_trigger_default = {
+    deployment_action_slug = "deploy-manifests"
+    package_reference      = "randomquotes-image"
+  }
 }
 
 resource "octopusdeploy_external_feed_create_release_trigger" "branch_demo" {
-  for_each = local.branch_demo_trigger_branches
+  for_each = var.demo_branches
 
   name       = "Auto-release on new randomquotes-image"
   space_id   = data.terraform_remote_state.space.outputs.space_id
@@ -54,7 +58,7 @@ resource "octopusdeploy_external_feed_create_release_trigger" "branch_demo" {
   channel_id = local.branch_demo_default_channel[each.key]
 
   package {
-    deployment_action_slug = "deploy-manifests"
-    package_reference      = "randomquotes-image"
+    deployment_action_slug = lookup(local.branch_demo_trigger_override, each.key, local.branch_demo_trigger_default).deployment_action_slug
+    package_reference      = lookup(local.branch_demo_trigger_override, each.key, local.branch_demo_trigger_default).package_reference
   }
 }
