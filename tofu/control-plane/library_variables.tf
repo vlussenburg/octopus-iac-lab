@@ -54,3 +54,16 @@ resource "octopusdeploy_variable" "linux_worker_pool" {
   value    = data.octopusdeploy_worker_pools.linux.worker_pools[0].id
 }
 
+# Default for Project.WorkerPool — keeps Dev deploys working on both
+# instances. The CaC OCL (.octopus/variables.ocl) layers a Production-scoped
+# override on top → prod-pool. With no library-level default, Dev deploys
+# fail with "No variable named 'Project.WorkerPool' was in scope" because
+# worker_pool_variable on an action doesn't fall back to the instance
+# default. Slug-per-instance can't live in OCL (shared across both Octopi).
+resource "octopusdeploy_variable" "project_worker_pool_default" {
+  owner_id = octopusdeploy_library_variable_set.lab_source.id
+  name     = "Project.WorkerPool"
+  type     = "WorkerPool"
+  value    = data.octopusdeploy_worker_pools.linux.worker_pools[0].id
+}
+
