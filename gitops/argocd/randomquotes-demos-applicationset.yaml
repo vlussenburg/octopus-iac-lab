@@ -61,7 +61,7 @@ spec:
                         mood: comedy
                         icon: "🃏"
                         brandColor: "#F5C518"
-                        replicaCount: "3"
+                        replicaCount: "1"
                         tier: enterprise
                       - tenant: acme-corp
                         env: Production
