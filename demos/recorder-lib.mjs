@@ -250,16 +250,85 @@ export async function requireReleases(env, projectId, min = 2) {
 }
 
 // One-stop "watch this deploy" helper: navigates `page` to the task URL,
-// dismisses Octopus's chrome, then polls the task to completion WHILE
-// pinning every scrollable container on the page to the bottom — so the
-// task log streams stay on camera as new lines append. Octopus's task view
-// has an inner overflow div (not window-level scroll), hence the
-// querySelectorAll fallback. Returns the final task object.
-export async function watchDeployment(env, page, taskId, { dismissChrome = true, bannerText = null, scrollIntervalMs = 2500, timeoutMs = 600_000 } = {}) {
+// dismisses Octopus's chrome, then polls the task to completion. While the
+// task is streaming we tail the Task Log (with pinned-bottom scroll so new
+// lines stay on camera). When the task transitions to Success/Failed we
+// switch to the Task Summary tab and pin the scroll to the top of the page
+// so the audience sees the green-check title + Start/End/Duration + the
+// step result list — NOT the log tail (which is usually whitespace or
+// noisy stderr-equivalent).
+//
+// Strategy comment for the deploy-completion scroll choice: we click the
+// "Task Summary" tab on completion rather than scrolling-to-selector on the
+// log view, because Task Summary is a stable, naturally-pinned view that
+// always shows the most useful end-state lines together. It survives the
+// next React re-render and doesn't drift. linger=8s lets the audience read
+// it before we move on.
+export async function watchDeployment(env, page, taskId, {
+  dismissChrome = true,
+  bannerText = null,
+  scrollIntervalMs = 2500,
+  timeoutMs = 600_000,
+  completionLingerMs = 8_000,
+  completionBannerText = null,
+} = {}) {
   await page.goto(`${env.OCTO_URL}/app#/Spaces-2/tasks/${taskId}`, { waitUntil: "domcontentloaded" });
   if (dismissChrome) await dismissOctoChrome(page);
   if (bannerText) await banner(page, bannerText);
-  return withPinnedScroll(page, () => waitForTaskState(env, taskId, ["Success", "Failed"], timeoutMs), { intervalMs: scrollIntervalMs });
+
+  // Stay on the default Task Summary view during the run: it shows step
+  // icons flipping green in-place as the deployment progresses (more
+  // legible than a scrolling raw log at recording resolution). Pin every
+  // scrollable container to the TOP every few seconds — without this, the
+  // inner overflow drifts to the bottom (showing only the last 1–2 steps
+  // + whitespace) as new step rows expand. block:'start' on the h1 anchors
+  // the camera on the title + tabs so the audience always knows what
+  // they're watching.
+  const stopPinTop = await pinToTop(page, scrollIntervalMs);
+  const finalTask = await waitForTaskState(env, taskId, ["Success", "Failed"], timeoutMs);
+  await stopPinTop();
+
+  // Completion: one explicit final scroll-to-top so the camera lands on
+  // the green-check title + Ran on/Start/End/Duration table + all-green
+  // step list. Then linger so the audience can read it.
+  await page.evaluate(() => {
+    document.querySelectorAll("*").forEach((el) => {
+      const s = getComputedStyle(el);
+      if (!/auto|scroll/.test(s.overflowY)) return;
+      if (el.scrollHeight > el.clientHeight) el.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    const h1 = document.querySelector("h1");
+    if (h1) h1.scrollIntoView({ behavior: "smooth", block: "start" });
+  }).catch(() => {});
+  if (completionBannerText) await banner(page, completionBannerText);
+  if (completionLingerMs > 0) await sleep(completionLingerMs);
+  return finalTask;
+}
+
+// Periodically pin every overflow container on the page to the top. Mirror
+// of withPinnedScroll but for the opposite anchor — used by watchDeployment
+// to keep the Task Summary header on camera instead of letting it drift
+// off as the step list expands. Returns a stop() async function.
+async function pinToTop(page, intervalMs = 2500) {
+  await page.evaluate((intervalMs) => {
+    if (window.__demoPinTopTimer) clearInterval(window.__demoPinTopTimer);
+    window.__demoPinTopTimer = setInterval(() => {
+      document.querySelectorAll("*").forEach((el) => {
+        const s = getComputedStyle(el);
+        if (!/auto|scroll/.test(s.overflowY)) return;
+        if (el.scrollHeight <= el.clientHeight) return;
+        if (el.scrollTop > 8) el.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }, intervalMs);
+  }, intervalMs);
+  return async () => {
+    await page.evaluate(() => {
+      if (window.__demoPinTopTimer) {
+        clearInterval(window.__demoPinTopTimer);
+        window.__demoPinTopTimer = null;
+      }
+    }).catch(() => {});
+  };
 }
 
 // Launch Chromium headless with a recordVideo context. Single entry point so
@@ -375,6 +444,100 @@ export async function banner(page, label) {
     }
     el.textContent = text;
   }, label);
+}
+
+// Scroll the page's main overflow container by `pixels` (smoothly). Used to
+// reveal content below the fold on long pages (insights charts, audit list)
+// during a hold without burning a separate scene. Targets the *largest*
+// overflow:auto/scroll element on the page — Octopus's main content lives
+// in an inner overflow div, not the window.
+export async function scrollMainBy(page, pixels = 400) {
+  await page.evaluate((dy) => {
+    let best = null;
+    let bestArea = 0;
+    document.querySelectorAll("*").forEach((el) => {
+      const s = getComputedStyle(el);
+      if (!/auto|scroll/.test(s.overflowY)) return;
+      if (el.scrollHeight <= el.clientHeight) return;
+      const area = el.clientWidth * el.clientHeight;
+      if (area > bestArea) { bestArea = area; best = el; }
+    });
+    if (best) best.scrollBy({ top: dy, behavior: "smooth" });
+    else window.scrollBy({ top: dy, behavior: "smooth" });
+  }, pixels);
+}
+
+// Draw a coloured ring + pulsing glow around an element so the viewer's eye
+// snaps to it. Auto-removes after `durationMs`. No-op if the selector
+// doesn't match (e.g. when a user can't see the element — which is itself
+// the point sometimes). Multiple highlights can stack via different keys.
+// Selector goes through page.locator() so Playwright-syntax pseudo-classes
+// like :has-text() and :near() work — using document.querySelectorAll
+// directly would throw on those.
+export async function highlight(page, selector, { durationMs = 4000, color = "#ff8a00", key = "default" } = {}) {
+  await page.evaluate(() => {
+    const styleId = "__demo_highlight_style";
+    if (document.getElementById(styleId)) return;
+    const st = document.createElement("style");
+    st.id = styleId;
+    st.textContent = `
+      @keyframes __demo_pulse {
+        0%   { box-shadow: 0 0 0 0 var(--demo-hi), 0 0 0 0 var(--demo-hi); }
+        70%  { box-shadow: 0 0 0 14px rgba(255,138,0,0), 0 0 18px 6px var(--demo-hi); }
+        100% { box-shadow: 0 0 0 0 rgba(255,138,0,0), 0 0 0 0 var(--demo-hi); }
+      }
+      .__demo_hi {
+        outline: 3px solid var(--demo-hi) !important;
+        outline-offset: 3px !important;
+        border-radius: 6px !important;
+        animation: __demo_pulse 1.4s ease-out infinite !important;
+        position: relative !important;
+        z-index: 999998 !important;
+      }
+    `;
+    document.head.appendChild(st);
+  });
+
+  let handles = [];
+  try { handles = await page.locator(selector).elementHandles(); } catch {}
+  for (const h of handles) {
+    await h.evaluate((el, args) => {
+      el.style.setProperty("--demo-hi", args.col);
+      el.classList.add("__demo_hi");
+      el.dataset.demoHiKey = args.k;
+    }, { col: color, k: key }).catch(() => {});
+  }
+
+  if (handles.length) {
+    await page.evaluate(({ dur, k }) => {
+      setTimeout(() => {
+        document.querySelectorAll(`[data-demo-hi-key="${k}"]`).forEach((el) => {
+          el.classList.remove("__demo_hi");
+          delete el.dataset.demoHiKey;
+          el.style.removeProperty("--demo-hi");
+        });
+      }, dur);
+    }, { dur: durationMs, k: key });
+  }
+}
+
+// Log out the current Octopus session and log in fresh as a different
+// user. Must clear storage on the *Octopus origin* — if the page is
+// currently on a non-Octopus origin (e.g. the ttyd kubectl panel) then
+// localStorage.clear() targets the wrong storage and Octopus auto-logs
+// in as the previous user from its lingering JWT. So: navigate to
+// Octopus sign-in first, clear, reload, then fill the form.
+export async function switchUser(page, env, { username, password }) {
+  await page.goto(`${env.OCTO_URL}/app#/users/sign-in`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1000);
+  await page.context().clearCookies();
+  await page.evaluate(() => { try { sessionStorage.clear(); localStorage.clear(); } catch {} });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2500);
+  await page.fill('input[type="text"]', username);
+  await page.fill('input[type="password"]', password);
+  await page.click('button[type="submit"]');
+  await page.waitForTimeout(4000);
 }
 
 // Close help sidebar + cookie banner / signup nags Octopus shows.

@@ -13,7 +13,10 @@ resource "octopusdeploy_space" "this" {
   # invalidate GHA secrets when the slug is locked here.
   slug                  = "iac-sandbox"
   description           = var.space_description
-  is_default            = false
+  # Make IaC Sandbox the post-login landing space — otherwise non-admin
+  # users (dev / prod-deployer) land in the empty Default space and see
+  # the "Deploy your first application" welcome screen.
+  is_default            = true
   is_task_queue_stopped = false
   space_managers_teams  = ["teams-administrators", "teams-managers"]
 }
