@@ -32,7 +32,7 @@ spec:
       valueFiles:
         - values-saas-dev.yaml
       valuesObject:
-        replicaCount: 3
+        replicaCount: 1
         tier: enterprise
         tenant: acme-corp
         mood: comedy
