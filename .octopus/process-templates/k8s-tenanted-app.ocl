@@ -212,10 +212,6 @@ step "update-argo-cd-application-image-tags" {
         properties = {
             Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
             Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
-            # See deployment_process.ocl for the same rationale: step-
-            # level helm path is required on current Octopus (2026.1+)
-            # for the step to honor helm.valueFiles; package-level
-            # HelmReplacementPath alone falls into a no-op path.
             Octopus.Action.ArgoCD.HelmImageTagPaths = "image.tag"
             Octopus.Action.ArgoCD.StepVerification.Method = "ArgoCDApplicationHealthy"
             Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
