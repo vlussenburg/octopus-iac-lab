@@ -10,4 +10,5 @@
 # created, but zero pods). First Octopus promote writes a real tag here
 # and the Deployment materialises.
 image:
+  repository: vlussenburg/octopus-iac-lab
   tag: ""

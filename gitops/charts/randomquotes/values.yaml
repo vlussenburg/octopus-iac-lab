@@ -10,18 +10,15 @@
 # not inline valuesObject — so image.tag has to live in a referenced
 # file to be reachable by the step.
 
-image:
-  # Full path is "ghcr.io/{{ .Values.image.repository }}:{{ .Values.image.tag }}".
-  repository: vlussenburg/octopus-iac-lab
-  # No tag default on purpose. Every Application overrides via its
-  # values-<src>-<env>.yaml — that's where Octopus's annotation-driven
-  # update-image-tags step writes per-environment. A default here used
-  # to silently mask Octopus's writes: chart default rendered as a fixed
-  # tag even after Octopus had updated the per-env file, because Helm
-  # precedence picked the per-env override but Octopus's step had been
-  # writing to this chart-default value (no Argo render consumed it).
-  # Without a default, the chart strictly requires a values file —
-  # exactly what every leaf Application provides via valueFiles.
+# image: { repository, tag } lives ENTIRELY in each per-env values
+# file (values-<src>-<env>.yaml). Don't put any image.* defaults here.
+# Calamari's HelmContainerImageReplacer parses the annotation template
+# (argo.octopus.com/image-replace-paths) against EACH values file in
+# isolation — if any path used by the template (image.repository,
+# image.tag) is missing from the file being processed, the step can't
+# resolve the image reference and bails with "Nothing to update".
+# Every file the step touches must independently carry the WHOLE image
+# ref. See PR that introduced this (decompiled the Calamari source).
 
 replicaCount: 1
 
