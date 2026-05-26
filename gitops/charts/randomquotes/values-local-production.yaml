@@ -11,4 +11,4 @@
 # and the Deployment materialises.
 image:
   repository: vlussenburg/octopus-iac-lab
-  tag: "1.1.142"
+  tag: ""
