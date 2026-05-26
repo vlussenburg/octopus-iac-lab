@@ -212,7 +212,6 @@ step "update-argo-cd-application-image-tags" {
         properties = {
             Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
             Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
-            Octopus.Action.ArgoCD.HelmImageTagPaths = "image.tag"
             Octopus.Action.ArgoCD.StepVerification.Method = "ArgoCDApplicationHealthy"
             Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
         }
@@ -221,7 +220,6 @@ step "update-argo-cd-application-image-tags" {
             acquisition_location = "NotAcquired"
             properties = {
                 Extract = "False"
-                HelmReplacementPath = "image.tag"
                 PackageParameterName = "AppImage"
                 Purpose = "DockerImageReference"
                 SelectionMode = "deferred"

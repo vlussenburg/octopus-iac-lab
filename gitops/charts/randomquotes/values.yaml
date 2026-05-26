@@ -13,10 +13,15 @@
 image:
   # Full path is "ghcr.io/{{ .Values.image.repository }}:{{ .Values.image.tag }}".
   repository: vlussenburg/octopus-iac-lab
-  # Sentinel default — every Application overrides via its values-<src>-<env>.yaml.
-  # If you ever see this tag in a rendered manifest, a values file got
-  # disconnected.
-  tag: 1.1.65
+  # No tag default on purpose. Every Application overrides via its
+  # values-<src>-<env>.yaml — that's where Octopus's annotation-driven
+  # update-image-tags step writes per-environment. A default here used
+  # to silently mask Octopus's writes: chart default rendered as a fixed
+  # tag even after Octopus had updated the per-env file, because Helm
+  # precedence picked the per-env override but Octopus's step had been
+  # writing to this chart-default value (no Argo render consumed it).
+  # Without a default, the chart strictly requires a values file —
+  # exactly what every leaf Application provides via valueFiles.
 
 replicaCount: 1
 
