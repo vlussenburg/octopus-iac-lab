@@ -125,6 +125,16 @@ step "update-argo-cd-application-image-tags" {
         properties = {
             Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
             Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
+            # Step-level helm path — without this the step warns
+            # "annotations superseded by values specified in the step's
+            # parameters" and bails with "Nothing to update". The
+            # package-level HelmReplacementPath below alone isn't
+            # enough on current Octopus (2026.1+); the step needs an
+            # explicit path at the action level too. Restores the
+            # PR #34 fix that PR #43 replaced with the package-only
+            # form. Keep both — package property still documents which
+            # package supplies the version.
+            Octopus.Action.ArgoCD.HelmImageTagPaths = "image.tag"
             Octopus.Action.ArgoCD.StepVerification.Method = "ArgoCDApplicationHealthy"
             Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
         }
