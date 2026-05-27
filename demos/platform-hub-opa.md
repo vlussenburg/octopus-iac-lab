@@ -195,7 +195,7 @@ $ tofu apply -auto-approve -target='octopusdeploy_project.this' \
                           -target='octopusdeploy_project.branch_demo'
 Apply complete! Resources: 4 added
 $ tofu apply -auto-approve
-# 3/4 branch-demo projects succeed (blue-green, octopus-native-bg, bg-preview)
+# 3/4 branch-demo projects succeed (blue-green, bg-preview, canary)
 # 4th (demo/platform-hub-opa) trigger create fails:
 Error: Trigger 'Auto-release on new randomquotes-image' has an action slug
        'deploy-manifests' which does not exist in the project's deployment process.
@@ -281,9 +281,9 @@ Apply complete! Resources: 1 added,  0 changed, 0 destroyed.   # space
 Apply complete! Resources: 26 added, 0 changed, 0 destroyed.   # control-plane
 Apply complete! Resources: 2 added,  0 changed, 0 destroyed.   # platform-hub
 # app-randomquotes: 3/4 demo-branch triggers succeed
-#   ProjectTriggers-3 ← demo/octopus-native-bg
-#   ProjectTriggers-4 ← demo/blue-green
-#   ProjectTriggers-5 ← demo/bg-preview
+#   ProjectTriggers-3 ← demo/blue-green
+#   ProjectTriggers-4 ← demo/bg-preview
+#   ProjectTriggers-5 ← demo/canary
 #   FAIL ← demo/platform-hub-opa (no deploy-manifests step, see below)
 
 Error: octopus deploy api returned an error on endpoint /api/Spaces-2/projecttriggers -

@@ -18,9 +18,8 @@ node demos/capture.js
 # Just one
 node demos/capture.js main                  # canonical randomquotes
 node demos/capture.js platform-hub          # PR #46 (demo/platform-hub-opa)
-node demos/capture.js blue-green            # PR #28
+node demos/capture.js blue-green            # PR #59 (Octopus-native)
 node demos/capture.js bg-preview            # PR #30
-node demos/capture.js octopus-native-bg     # PR #29
 node demos/capture.js canary                # PR #58
 node demos/capture.js process-template      # PR #92
 node demos/capture.js smoke-step-template   # PR #103
@@ -42,10 +41,9 @@ When `--record` on a screenshot scenario isn't enough — banner overlays, a liv
 
 ```bash
 node demos/record-main.mjs              # canonical randomquotes — worker-pool story (PR #105)
-node demos/record-blue-green.mjs        # PR #28
+node demos/record-blue-green.mjs        # PR #59 (Octopus-native)
 node demos/record-bg-preview.mjs        # PR #30
 node demos/record-canary.mjs            # PR #58
-node demos/record-octopus-native-bg.mjs # PR #29
 node demos/record-platform-hub-opa.mjs  # PR #46
 node demos/record-snow.mjs              # PR #53
 ```

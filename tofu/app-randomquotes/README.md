@@ -12,8 +12,8 @@ The `randomquotes` Octopus project — the application-level scaffold. Tenanted,
 
 ## What's NOT here
 
-- **Deployment process** — lives in [`../../.octopus/deployment_process.ocl`](../../.octopus/deployment_process.ocl) (CaC-managed by Octopus). Three steps: `deploy-configmap` (K8s ConfigMap), `deploy-manifests` (inlined Deployment + Service + Ingress), and `update-argo-cd-application-image-tags` (Argo CD image-tag promotion). All four actions bind `worker_pool_variable = "Project.WorkerPool"` so Production deploys lease from `prod-pool`.
-- **Runbooks** — live in [`../../.octopus/runbooks/`](../../.octopus/runbooks/) (`maintenance-on.ocl`, `maintenance-off.ocl`, `spin-up-preview.ocl`, `teardown-preview.ocl`).
+- **Deployment process** — lives in [`../../.octopus/deployment_process.ocl`](../../.octopus/deployment_process.ocl) (CaC-managed by Octopus). All actions bind `worker_pool_variable = "Project.WorkerPool"` so Production deploys lease from `prod-pool`.
+- **Runbooks** — live in [`../../.octopus/runbooks/`](../../.octopus/runbooks/).
 - **Project variables** — live in [`../../.octopus/variables.ocl`](../../.octopus/) alongside the deployment process. Includes the env-scoped `Project.WorkerPool` (Production → `prod-pool`).
 - **Image build** — happens in [`.github/workflows/build.yml`](../../.github/workflows/build.yml). Image is `ghcr.io/vlussenburg/octopus-iac-lab` (built from this repo's [`app/Dockerfile`](../../app/Dockerfile)), pulled via the GHCR feed registered in `control-plane`.
 - **K8s manifests as files** — packaged as a helm chart in [`../../gitops/charts/randomquotes/`](../../gitops/charts/randomquotes/) and instantiated 12 times by the leaf Applications under `gitops/applications/randomquotes/{local,saas}/`. Each leaf supplies its own `helm.valuesObject` for tenant/mood/icon/color/host/replicas. The deployment process OCL inlines its own manifests for the K8s agent path; the gitops/ tree is the source for the Argo path.

@@ -1,20 +1,20 @@
 # Argo CD Applications for the demo-branch flavours of randomquotes.
 #
-# Each Octopus demo project (blue-green-, bg-preview-, octopus-native-bg-,
+# Each Octopus demo project (blue-green-, bg-preview-,
 # servicenow-cr-gate-randomquotes) has its `Update Argo CD Application
 # Image Tags` step look up Applications by annotation match — this
 # ApplicationSet generates the matching Applications.
 #
-# Each flavour reads its chart from its own demo branch, so the GitOps
-# shape stays self-contained per demo (blue-green → Argo Rollout atomic,
-# bg-preview → Argo Rollout gated + preview Service/Ingress) without
-# spilling demo-specific manifests into main's chart.
+# Each flavour reads from its own demo branch so the GitOps shape is
+# reproducible from that branch alone — even when the cluster manifests
+# match main (blue-green via Octopus's KubernetesDeployContainers step
+# is special on the Octopus side, not the chart side; bg-preview adds
+# Argo Rollout gated + preview Service/Ingress).
 #
-# octopus-native-bg and servicenow-cr-gate use a plain Deployment shape
-# — for now they point at main's chart since the cluster manifests are
-# identical to randomquotes (their special semantics live entirely on
-# the Octopus side). Switch their `branch` to their own demo branch if
-# you ever want to specialise.
+# servicenow-cr-gate is the exception — it still points at HEAD because
+# its special semantics live entirely on the Octopus side and there's
+# no chart divergence worth pinning. Switch to its own branch if you
+# ever want to specialise.
 #
 # platform-hub-opa-randomquotes is intentionally absent — its OCL has
 # no Update Argo step (the demo's enforcement is K8s admission via
@@ -47,9 +47,6 @@ spec:
                       - flavour: bg-preview
                         branch: refs/heads/demo/bg-preview
                         previewEnabled: "true"
-                      - flavour: octopus-native-bg
-                        branch: HEAD
-                        previewEnabled: "false"
                       - flavour: servicenow-cr-gate
                         branch: HEAD
                         previewEnabled: "false"
