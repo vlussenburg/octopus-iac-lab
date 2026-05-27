@@ -204,6 +204,31 @@ step "deploy-manifests" {
     }
 }
 
+step "capture-deployment-artifacts" {
+    name = "Capture deployment artifacts"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Platform}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesRunScript"
+        properties = {
+            Octopus.Action.KubernetesContainers.Namespace = "#{Namespace}"
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "Bash"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                set -euo pipefail
+                kubectl describe deployment #{AppName} > app-describe.txt
+                new_octopusartifact app-describe.txt "describe-#{Octopus.Environment.Name}-#{Octopus.Deployment.Tenant.Name}.txt"
+                kubectl get deployment,svc,ingress,configmap,pod -l app=#{AppName} -o yaml > app-resources.yaml
+                new_octopusartifact app-resources.yaml "resources-#{Octopus.Environment.Name}-#{Octopus.Deployment.Tenant.Name}.yaml"
+            EOT
+        }
+        worker_pool_variable = ""
+    }
+}
+
 step "update-argo-cd-application-image-tags" {
     name = "Update Argo CD Application Image Tags"
 
