@@ -9,7 +9,6 @@ demo_branches = [
   "demo/blue-green",
   "demo/bg-preview",
   "demo/canary",
-  "demo/octopus-native-bg",
   "demo/platform-hub-opa",
   "demo/process-template",
   "demo/servicenow-cr-gate",

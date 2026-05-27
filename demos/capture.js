@@ -291,12 +291,6 @@ const DEMOS = {
     await shot(page, 'bg-01-process', `${p}/deployments/process`);
     await shot(page, 'bg-02-release', `${p}/deployments/releases`);
   },
-  'octopus-native-bg': async (page) => {
-    await octoLogin(page);
-    const p = `${OCTO.base}/app#/Spaces-2/projects/octopus-native-bg-randomquotes`;
-    await shot(page, 'nbg-01-process', `${p}/deployments/process`);
-    await shot(page, 'nbg-02-release', `${p}/deployments/releases`);
-  },
   'canary': async (page) => {
     await octoLogin(page);
     const p = `${OCTO.base}/app#/Spaces-2/projects/canary-randomquotes`;
@@ -334,7 +328,6 @@ const DEMOS = {
       'ephemeral-pr-25':            'http://argo-preview-pr-25.localtest.me:8080/',
       'sealed-secrets-pr-26':       'http://argo-preview-pr-26.localtest.me:8080/',
       'blue-green-active':          'http://local-blue-green-acme-corp-dev.localtest.me:8080/',
-      'octopus-native-bg':          'http://local-octopus-native-bg-acme-corp-dev.localtest.me:8080/',
       'bg-preview-active':          'http://local-bg-preview-acme-corp-dev.localtest.me:8080/',
       'bg-preview-preview':         'http://bg-local-bg-preview-acme-corp-dev.localtest.me:8080/',
       'platform-hub-opa-acme':      'http://argo-local-acme-corp-dev.localtest.me:8080/',

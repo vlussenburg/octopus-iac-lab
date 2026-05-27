@@ -67,9 +67,9 @@ resource "octopusdeploy_tag" "tier_enterprise" {
   tag_set_id = octopusdeploy_tag_set.tier.id
 }
 
-# Three tenants modeling fictional customers, each on a different tier and
-# preferring a different mood. Tenant variables (Featured.Mood, Replicas,
-# Branding.Watermark) live in .octopus/variables.ocl scoped by tenant tag.
+# Fictional customer tenants, each on a different tier + mood. Tenant
+# variables (Featured.Mood, Replicas, Branding.Watermark) live in
+# .octopus/variables.ocl scoped by tenant tag.
 
 resource "octopusdeploy_tenant" "acme_corp" {
   name        = "acme-corp"

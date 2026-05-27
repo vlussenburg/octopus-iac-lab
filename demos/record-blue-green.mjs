@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Records a single-tab WebM of the blue-green demo (PR #28):
+// Records a single-tab WebM of the Octopus-native blue-green demo:
 //
 // Sequence:
 //   1. Octopus login (off-camera prelude)
-//   2. kubectl panel — "before" state (current image tag on the active ReplicaSet)
+//   2. kubectl panel — "before" state (current active ReplicaSet)
 //   3. Trigger deploy via Octopus API → switch to task page → wait Success
-//   4. kubectl panel — old ReplicaSet drains, new becomes live
+//   4. kubectl panel — "after" state, old RS drains to 0
 //   5. Live app URL — fully promoted
 //
 // Requires: ffmpeg, kubectl context for the lab cluster, .env with OCTOPUS_API_KEY.
@@ -23,28 +23,41 @@ const PROJECT_SLUG = "blue-green-randomquotes";
 const TENANT_NAME  = "acme-corp";
 const NS           = "randomquotes-local-blue-green-acme-corp-production";
 const APP_URL      = "http://local-blue-green-acme-corp-production.localtest.me:8080/";
-const TTYD_PORT    = 7682;
+const TTYD_PORT    = 7685;
 
 const log = (...a) => console.log("[record-bg]", ...a);
 
-// Include svc so the audience can read the active Service's SELECTOR
-// (rollouts-pod-template-hash=<hash>) and visually match it against the
-// ReplicaSet hashes — that's where the blue-green switchover happens.
-// Restrict pod list to Running only so stale Terminating pods from prior
-// runs don't make the "old draining" / "new live" banner misleading.
+// Narrow panel: latest 2 Deployments (active + swapping in), Service (so the
+// audience can read the selector hash), and Running pods. Unfiltered listings
+// surface stale Deployments from prior runs since Octopus's native-BG doesn't
+// reap them — visually misleading next to the "now serving X" banner.
 const ttyd = makeTtyd({
   port: TTYD_PORT,
   kubectlCmd:
-    `(kubectl get rollout,svc -n ${NS} -o wide 2>/dev/null; ` +
-    ` echo; kubectl get replicaset -n ${NS} -l app=randomquotes -o wide 2>/dev/null | awk 'NR==1 || $3>0'; ` +
-    ` echo; kubectl get pods -n ${NS} -l app=randomquotes --field-selector=status.phase=Running -o wide 2>/dev/null)`,
+    `(kubectl get deploy -n ${NS} --sort-by=.metadata.creationTimestamp -o wide 2>/dev/null | tail -3; ` +
+    ` echo; kubectl get svc -n ${NS} -o wide 2>/dev/null; ` +
+    ` echo; kubectl get pods -n ${NS} --field-selector=status.phase=Running -o wide 2>/dev/null)`,
 });
 
-// Poll the cluster until the only ReplicaSet with replicas > 0 is the one
-// running `expectedTag` — i.e. old ReplicaSets have fully drained post-promotion.
+// Trigger a release whose image tag differs from live — deploying the
+// already-live image silently no-ops the BG swap. CI owns release creation.
+async function redeployDifferent({ projectId, envId, tenantId }) {
+  const liveTag = readLiveImageTag(NS);
+  log(`live image tag: ${liveTag || "(unknown — first deploy)"}`);
+  const release = await pickDeployableRelease(env, projectId, liveTag);
+  log(`picked release ${release.Version} → image tag ${release.imageTag} (≠ live ${liveTag || "?"})`);
+  await refreshReleaseSnapshot(env, release.Id);
+  const deploy = await octoPost(env, "/api/Spaces-2/deployments", {
+    ReleaseId: release.Id, EnvironmentId: envId, TenantId: tenantId, ProjectId: projectId,
+  });
+  return { taskId: deploy.TaskId, version: release.imageTag };
+}
+
+// Poll the cluster until the only ReplicaSet with replicas > 0 is running
+// `expectedTag` — i.e. old ReplicaSets have fully drained post-promotion.
 async function waitForDrain(expectedTag, timeoutMs = 120_000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
     try {
       const raw = execSync(
         `kubectl get rs -n ${NS} ` +
@@ -64,7 +77,7 @@ async function waitForDrain(expectedTag, timeoutMs = 120_000) {
     } catch (e) {
       log(`waitForDrain transient: ${e.message}`);
     }
-    await sleep(2000);
+    await sleep(2_000);
   }
   log("waitForDrain timed out — moving on");
 }
@@ -84,23 +97,13 @@ async function waitForDrain(expectedTag, timeoutMs = 120_000) {
     log("scene 1: login");
     await octoLogin(page, env);
 
-    log("scene 2: kubectl (before — show current running version)");
+    log("scene 2: kubectl (before)");
     await page.goto(ttyd.url, { waitUntil: "domcontentloaded" });
     await banner(page, "Cluster state before deploy — note current image tag on the active ReplicaSet");
     await sleep(12_000);
 
     log("scene 3: trigger deploy + watch task");
-    const liveTag = readLiveImageTag(NS);
-    log(`live image tag: ${liveTag || "(unknown — first deploy)"}`);
-    const release = await pickDeployableRelease(env, projectId, liveTag);
-    log(`deploying release ${release.Version} → image ${release.imageTag} (≠ live ${liveTag || "?"})`);
-    await refreshReleaseSnapshot(env, release.Id);
-    const deploy = await octoPost(env, "/api/Spaces-2/deployments", {
-      ReleaseId: release.Id, EnvironmentId: envId, TenantId: tenantId, ProjectId: projectId,
-    });
-    const { TaskId: taskId } = deploy;
-    const version = release.imageTag;
-    log(`deployment ${deploy.Id} → task ${taskId}`);
+    const { taskId, version } = await redeployDifferent({ projectId, envId, tenantId });
     await cancelSiblingDeploys(env, taskId);
     await watchDeployment(env, page, taskId, {
       bannerText: `Deploy triggered — ${PROJECT_SLUG} release ${version} → Production / ${TENANT_NAME}`,
@@ -108,7 +111,7 @@ async function waitForDrain(expectedTag, timeoutMs = 120_000) {
     await banner(page, "Deploy complete — Octopus task green");
     await sleep(5_000);
 
-    log("scene 4: kubectl (after — new version + drain)");
+    log("scene 4: kubectl (after — drain)");
     await page.goto(ttyd.url, { waitUntil: "domcontentloaded" });
     await banner(page, `Now serving release ${version} — old ReplicaSet drains 3 → 0 after scaleDownDelaySeconds`);
     await waitForDrain(version);
@@ -127,7 +130,4 @@ async function waitForDrain(expectedTag, timeoutMs = 120_000) {
     await browser.close();
     ttyd.stop();
   }
-})().catch((err) => {
-  console.error("[record-bg] ERROR:", err.message);
-  process.exit(1);
-});
+})();
