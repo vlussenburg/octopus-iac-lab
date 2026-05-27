@@ -116,6 +116,31 @@ step "deploy-manifests" {
     }
 }
 
+step "capture-deployment-artifacts" {
+    name = "Capture deployment artifacts"
+    properties = {
+        Octopus.Action.TargetRoles = "k8s"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesRunScript"
+        worker_pool_variable = "Project.WorkerPool"
+        properties = {
+            Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "Bash"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                set -euo pipefail
+                kubectl describe deployment randomquotes > randomquotes-describe.txt
+                new_octopusartifact randomquotes-describe.txt "describe-#{Octopus.Environment.Name}-#{Octopus.Deployment.Tenant.Name}.txt"
+                kubectl get deployment,svc,ingress,configmap,pod -l app=randomquotes -o yaml > randomquotes-resources.yaml
+                new_octopusartifact randomquotes-resources.yaml "resources-#{Octopus.Environment.Name}-#{Octopus.Deployment.Tenant.Name}.yaml"
+            EOT
+        }
+    }
+}
+
 step "update-argo-cd-application-image-tags" {
     name = "Update Argo CD Application Image Tags"
 
