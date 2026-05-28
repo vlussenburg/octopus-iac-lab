@@ -115,7 +115,7 @@ step "deploy-manifests" {
         action_type = "Octopus.KubernetesDeployRawYaml"
         properties = {
             Octopus.Action.Kubernetes.DeploymentTimeout = "180"
-            Octopus.Action.Kubernetes.ResourceStatusCheck = "False"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
             Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
             Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
