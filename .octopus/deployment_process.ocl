@@ -170,3 +170,22 @@ step "update-argo-cd-application-image-tags" {
         }
     }
 }
+
+step "preview-marker" {
+    name = "Preview marker"
+
+    action {
+        action_type = "Octopus.Script"
+        channels    = ["ephemeral-previews"]
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "Bash"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                ENV="#{Octopus.Environment.Name}"
+                SLUG="${ENV##*-}"
+                echo "Preview $SLUG: app + namespace (randomquotes-preview-$SLUG) are provisioned by the Spin up preview runbook."
+            EOT
+        }
+    }
+}
