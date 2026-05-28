@@ -2,7 +2,7 @@
 
 Captured 2026-05-11 against `demo/platform-hub-opa` (PR #46) with PR #45 (Gatekeeper controller) + PR #47 (chart `tier` + k8s labels) merged to main.
 
-Two enforcement paths, one Rego bundle. Re-validated from a fully nuked compose stack — see [Part 3: fresh-from-scratch run](#part-3--fresh-from-scratch-make-nuke--make-apply) at the bottom.
+Two enforcement paths, one Rego bundle. Re-validated from a fully nuked compose stack — see [Part 3: fresh-from-scratch run](#part-3--fresh-from-scratch-make-nuke--make-apply).
 
 ## Tooling versions
 
@@ -15,7 +15,7 @@ gatekeeper helm chart: 3.22.2 (latest matching 3.* constraint)
 
 ## Part 1 — admission-side: Gatekeeper deploys (PR #45)
 
-Ran the same `helm upgrade --install` command that `tofu/k8s-agent/gatekeeper.tf` issues:
+Ran the `helm upgrade --install` command that `tofu/k8s-agent/gatekeeper.tf` issues:
 
 ```bash
 helm upgrade --install gatekeeper gatekeeper \
@@ -143,7 +143,7 @@ helm template gitops/charts/randomquotes \
 
 ## Part 3 — fresh-from-scratch (`make nuke` → `make apply`)
 
-To prove the bundle works against a completely freshly-bootstrapped Octopus (not just an already-running one), the local compose stack was nuked and re-applied end-to-end.
+To prove the bundle works against a freshly-bootstrapped Octopus (not just an already-running one), the local compose stack was nuked and re-applied end-to-end.
 
 ### Wipe
 
@@ -251,7 +251,7 @@ FAIL - - main - tier=free allows max 1 replicas, got 5
 
 ## Part 4 — fresh-from-scratch v2 (after PR #48 lands)
 
-Re-ran the full cycle on top of merged #48, which added `TOFU_APPLY_FLAGS=`, `FORCE=1` for nuke, and the `depends_on` fix on the channel data source. Goal: prove the workarounds from Part 3 are no longer needed.
+Re-ran the full cycle on top of merged #48, which added `TOFU_APPLY_FLAGS=`, `FORCE=1` for nuke, and the `depends_on` fix on the channel data source. Goal: prove the Part 3 workarounds are no longer needed.
 
 ```
 $ make nuke FORCE=1

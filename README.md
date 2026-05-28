@@ -1,14 +1,14 @@
 # octopus-iac-lab
 
-Personal lab: **Octopus Deploy** scaffolded entirely as code with **Config-as-Code** on. Same OCL + tofu drives a self-hosted Octopus and an Octopus Cloud SaaS instance from sibling worktrees, plus a tenant-aware K8s agent path AND a parallel Argo CD GitOps path so you can A/B the two delivery models from one project.
+Personal lab: **Octopus Deploy** scaffolded entirely as code with **Config-as-Code** on. Same OCL + tofu drives a self-hosted Octopus and an Octopus Cloud SaaS instance from sibling worktrees. A tenant-aware K8s agent path and a parallel Argo CD GitOps path let you A/B the two delivery models from one project.
 
 ## Layout
 
 ```
 compose/   # docker-compose Octopus Server (local worktree only)
-tofu/      # 7 OpenTofu stacks: space → cp → ph → app → agent → argocd → snow + a local module
+tofu/      # OpenTofu stacks: space → cp → ph → app → agent → argocd → snow + a local module
 .octopus/  # CaC-owned OCL: deployment process, runbooks, variables
-gitops/    # Argo's source of truth: App-of-Apps roots + 12 leaf Applications + helm chart
+gitops/    # Argo's source of truth: App-of-Apps roots + leaf Applications + helm chart
 app/       # Dockerfile + index.html (the deployed artefact)
 assets/    # tenant logos uploaded by control-plane
 ```
@@ -23,35 +23,35 @@ make up                    # local self-host only — boots compose stack on :80
 make apply                 # space → cp → ph → app → agent → argo
 ```
 
-`make apply`'s first step (`ensure-api-key`) probes `.env`'s `OCTOPUS_API_KEY` against `/api/users/me` and auto-mints a fresh one on local self-host if it's stale (e.g. after `make nuke`). On SaaS, mint manually via the UI — keys can't be created without a browser session.
+`make apply`'s first step (`ensure-api-key`) probes `.env`'s `OCTOPUS_API_KEY` against `/api/users/me` and auto-mints a fresh one on local self-host if it's stale (e.g. after `make nuke`). On SaaS, mint via the UI — keys can't be created without a browser session.
 
 For the licence: base64 your XML (`base64 -i license.xml | tr -d '\n'`) and set as `OCTOPUS_SERVER_BASE64_LICENSE` in `.env` before `make up`. Otherwise paste in the UI after first login.
 
 ## Two delivery paths
 
-`randomquotes` deploys to the same cluster two ways simultaneously, into different namespace prefixes:
+`randomquotes` deploys to the same cluster both ways at once, into different namespace prefixes:
 
 | | Source of truth | Triggered by | Namespaces |
 |---|---|---|---|
 | **K8s agent (push)** | inlined manifests in `.octopus/deployment_process.ocl` | Octopus release | `randomquotes-{worktree}-{tenant}-{env}` |
-| **Argo CD (pull)** | helm chart in `gitops/charts/randomquotes/`, instantiated 12× by leaves under `gitops/applications/` | Argo polls git, Octopus annotation-step bumps `image.tag` | `argo-randomquotes-{worktree}-{tenant}-{env}` |
+| **Argo CD (pull)** | helm chart in `gitops/charts/randomquotes/`, instantiated by each leaf under `gitops/applications/` | Argo polls git, Octopus annotation-step bumps `image.tag` | `argo-randomquotes-{worktree}-{tenant}-{env}` |
 
-`tofu/argocd/` is minimum-footprint: it only owns the control plane (ArgoCD install, JWT, Octopus Argo CD Gateway). Roots, leaves, ingress, and chart all live in `gitops/`.
+`tofu/argocd/` is minimum-footprint: it owns only the control plane (ArgoCD install, JWT, Octopus Argo CD Gateway). Roots, leaves, ingress, and chart live in `gitops/`.
 
 ## Blue/green is opt-in via demo branches
 
-Main is a plain `Deployment` shape on both delivery paths — that's the baseline. The `demo/*` branches below show different ways to layer blue/green on top:
+Main is a plain `Deployment` shape on both paths — the baseline. The `demo/*` branches below layer blue/green on top in different ways:
 
 | Branch | Engine | Mode | Surface |
 |---|---|---|---|
 | `demo/blue-green` | Octopus's `KubernetesDeployContainers` step (`DeploymentStyle=BlueGreen`) | Atomic | Active service only |
 | `demo/bg-preview` | Argo Rollouts CRD | Gated (manual promote) | Active + preview URL on `bg-{host}` |
 
-Each demo branch creates its own per-branch Octopus project (`<slug>-randomquotes`) via tofu's `for_each` over `demo/*`, so demos coexist with main on the same cluster. The Argo Rollouts controller lives cluster-wide on main (`tofu/k8s-agent/argo_rollouts.tf`) — branches opt in by rendering a `Rollout` instead of a `Deployment`.
+Each demo branch creates its own Octopus project (`<slug>-randomquotes`) via tofu's `for_each` over `demo/*`, so demos coexist with main on the same cluster. The Argo Rollouts controller lives cluster-wide on main (`tofu/k8s-agent/argo_rollouts.tf`). Branches opt in by rendering a `Rollout` instead of a `Deployment`.
 
 ## Local CLI dependencies
 
-Install via Homebrew (macOS) — the demo step recipes in PR descriptions assume these are on PATH:
+Install via Homebrew (macOS). The demo step recipes in PR descriptions assume these are on PATH:
 
 ```bash
 brew install opentofu                       # tofu — drives every stack
@@ -77,9 +77,9 @@ open http://argocd.localtest.me:8080                       # Argo UI
 ## CI
 
 - **`build.yml`** — push to `app/**` builds + pushes the image to GHCR, then calls `release.yml` as a workflow_call.
-- **`release.yml`** — reusable, fans out by matrix to SaaS + Local Octopus. Creates the release with both packages pinned to the just-built tag and deploys tenanted to Dev. Promotion to Prod is via the Octopus UI (or another `release.yml` run targeting Prod), which also fires the Argo image-tag step on prod's leaves.
+- **`release.yml`** — reusable, fans out by matrix to SaaS + Local Octopus. Creates the release with both packages pinned to the just-built tag and deploys tenanted to Dev. Promote to Prod via the Octopus UI (or another `release.yml` run targeting Prod), which also fires the Argo image-tag step on prod's leaves.
 
-GitHub Actions secrets needed: `OCTOPUS_{SAAS,LOCAL}_{URL,API_KEY}`. Local target is `continue-on-error: true` — pipeline still passes if your laptop is offline. Expose local Octopus to GHA via Tailscale Funnel: `tailscale funnel --bg --https=443 http://localhost:8090` and put the printed URL into `OCTOPUS_LOCAL_URL`.
+GitHub Actions secrets needed: `OCTOPUS_{SAAS,LOCAL}_{URL,API_KEY}`. Local target is `continue-on-error: true`, so the pipeline still passes if your laptop is offline. Expose local Octopus to GHA via Tailscale Funnel: `tailscale funnel --bg --https=443 http://localhost:8090` and put the printed URL into `OCTOPUS_LOCAL_URL`.
 
 ## Wiping the lab
 
@@ -93,4 +93,4 @@ Cluster-side helm releases are deliberately destroy-survivors (installed via `he
 
 ## Not in scope
 
-Production guidance. This is a sandbox — auth choices, lab semantics, and "how would I demo X" trump anything resembling hardening.
+Production guidance. This is a sandbox. Auth choices, lab semantics, and "how would I demo X" trump anything resembling hardening.

@@ -7,7 +7,7 @@ The Random Quotes K8s sample app — the artefact Octopus deploys.
 | [`Dockerfile`](Dockerfile) | nginx + static `index.html`, with a `VERSION` build-arg that gets baked into the page footer. Built + pushed to `ghcr.io/vlussenburg/octopus-iac-lab` by [`../.github/workflows/build.yml`](../.github/workflows/build.yml). |
 | [`index.html`](index.html) | The actual page. Reads `/config.json` at startup for tenant/mood/icon/colour/watermark/maintenance overrides — that file is materialised by Octopus at deploy time via a ConfigMap. Honours a `maintenance` overlay used by the `Maintenance Mode On` runbook. |
 
-> **Where are the K8s manifests?** Two places — Octopus's K8s agent path inlines them in [`../.octopus/deployment_process.ocl`](../.octopus/deployment_process.ocl), and the Argo CD path renders them from a helm chart at [`../gitops/charts/randomquotes/`](../gitops/charts/randomquotes/) instantiated 12 times by the leaf Applications under [`../gitops/applications/randomquotes/{local,saas}/`](../gitops/applications/) with per-tenant values.
+> **Where are the K8s manifests?** Two places — Octopus's K8s agent path inlines them in [`../.octopus/deployment_process.ocl`](../.octopus/deployment_process.ocl), and the Argo CD path renders them from a helm chart at [`../gitops/charts/randomquotes/`](../gitops/charts/randomquotes/) instantiated by the leaf Applications under [`../gitops/applications/randomquotes/{local,saas}/`](../gitops/applications/) with per-tenant values.
 
 ## Build locally (optional)
 
@@ -19,7 +19,7 @@ open http://localhost:8080
 
 ## How Octopus uses this
 
-[`../.octopus/deployment_process.ocl`](../.octopus/deployment_process.ocl) has three steps:
+[`../.octopus/deployment_process.ocl`](../.octopus/deployment_process.ocl) steps:
 
 1. **Deploy ConfigMap** — `Octopus.KubernetesDeployConfigMap` writes `config.json` (tenant/mood/icon/colour/watermark + empty maintenance) into a ConfigMap named `randomquotes-config`.
 2. **Deploy Manifests** — `Octopus.KubernetesDeployRawYaml` applies an inline Deployment (image pulled from the GHCR feed via the `randomquotes-image` package reference), Service, and Ingress for `#{Source}-#{tenant}-#{env}.localtest.me`. The ConfigMap is mounted into the pod at `/usr/share/nginx/html/config.json`.

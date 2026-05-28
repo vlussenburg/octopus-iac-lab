@@ -2,7 +2,7 @@
 
 Minimum-footprint stack — owns only the **control plane** of the
 Octopus ↔ Argo CD connection. Everything else (the App-of-Apps roots, the
-argocd-server Ingress, the 12 per-tenant Application leaves) lives in
+argocd-server Ingress, the per-tenant Application leaves) lives in
 [`/gitops/`](../../gitops/) and is reconciled by Argo from git, not from
 terraform state.
 
@@ -14,7 +14,7 @@ terraform state.
 | Bootstrap Application | tofu (`kubernetes_manifest` after the helm release — NOT helm `extraObjects`, which dies on the chicken-and-egg between the Application CRD shipping in the same chart and the resource referencing it) | local worktree |
 | Argo `Application` roots (App-of-Apps) | [`gitops/argocd/randomquotes-root-{local,saas}.yaml`](../../gitops/argocd/) | git |
 | argocd-server UI Ingress | [`gitops/argocd/argocd-server-ingress.yaml`](../../gitops/argocd/) | git |
-| 12 leaf Argo `Application`s (per tenant×env) | [`gitops/applications/randomquotes/{local,saas}/*.yaml`](../../gitops/applications/) | git |
+| Leaf Argo `Application`s (per tenant×env) | [`gitops/applications/randomquotes/{local,saas}/*.yaml`](../../gitops/applications/) | git |
 
 ## Comparison with the K8s agent path
 
@@ -23,7 +23,7 @@ terraform state.
 | **K8s agent** ([`../k8s-agent/`](../k8s-agent/)) | Inline manifests in `.octopus/deployment_process.ocl` | Octopus runtime (push) | `randomquotes-{source}-{tenant}-{env}` | Octopus release / runbook |
 | **ArgoCD** (this stack) | `gitops/charts/randomquotes/` (one helm chart, per-tenant values per leaf) | Argo CD (pull) | `argo-randomquotes-{source}-{tenant}-{env}` | git commit |
 
-Both surface to the same Octopus project. Adding/changing a leaf Application is a one-file commit under `gitops/`; the gateway pod forwards the change events to Octopus.
+Both surface to the same Octopus project. Adding or changing a leaf Application is a one-file commit under `gitops/`; the gateway pod forwards the change events to Octopus.
 
 ## File layout
 
@@ -47,7 +47,7 @@ Two distinct tokens:
 1. **Octopus API key** — the `OCTOPUS_API_KEY` from `.env`. Used by the Gateway's registration init Job to POST a new "Argo CD Instance" record into Octopus's HTTP API, and by the destroy-time `null_resource` to DELETE that record on `agent-destroy`.
 2. **ArgoCD JWT** — minted in-stack via `argocd_account_token` (oboukili/argocd v6 provider), 30-day TTL, auto-renewed when within 7d of expiry. Belongs to the `octopus` account configured in argocd-cm.
 
-The `argocd` provider authenticates as admin via `var.argocd_password` (default `Password01!`, matching the Octopus admin). The same password is bcrypt'd into the helm release's `configs.secret.argocdServerAdminPassword` so the chart installs with that password from the start — no more dependency on the auto-generated `argocd-initial-admin-secret`. Override via `TF_VAR_argocd_password` + `TF_VAR_argocd_password_bcrypt` if you need a different password on your worktree. The provider uses `port_forward_with_namespace` so no host-side `kubectl port-forward` is needed.
+The `argocd` provider authenticates as admin via `var.argocd_password` (default `Password01!`, matching the Octopus admin). The same password is bcrypt'd into the helm release's `configs.secret.argocdServerAdminPassword` so the chart installs with that password from the start — no dependency on the auto-generated `argocd-initial-admin-secret`. Override via `TF_VAR_argocd_password` + `TF_VAR_argocd_password_bcrypt` for a different password on your worktree. The provider uses `port_forward_with_namespace`, so no host-side `kubectl port-forward` is needed.
 
 ## Two-worktree symmetry
 
@@ -90,4 +90,4 @@ In Octopus: open Infrastructure → Argo CD Instances; you should see `argocd-{l
 make argo-destroy
 ```
 
-This `helm uninstall`s the Gateway and ArgoCD, deletes the registered Argo CD Instance via the destroy-time `null_resource`, and removes everything in `argocd` namespace by extension. The shared cluster infra (NFS CSI, nginx-ingress) stays.
+This `helm uninstall`s the Gateway and ArgoCD, deletes the registered Argo CD Instance via the destroy-time `null_resource`, and removes everything in `argocd` namespace. The shared cluster infra (NFS CSI, nginx-ingress) stays.
