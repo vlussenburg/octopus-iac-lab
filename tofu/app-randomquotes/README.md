@@ -6,8 +6,9 @@ The `randomquotes` Octopus project. Tenanted, CaC-enabled, reads everything else
 |------|--------------|
 | [`main.tf`](main.tf) | Provider config + `terraform_remote_state` data sources for the Space and control-plane |
 | [`variables.tf`](variables.tf) | Inputs (fed via `TF_VAR_*` from the root `Makefile`) |
-| [`project.tf`](project.tf) | The `randomquotes` project. `is_version_controlled = true`, `tenanted_deployment_participation = "Tenanted"`, `git_library_persistence_settings` pointing at this repo's `.octopus/`. Includes the `lab-source` library variable set. Linked to the tenants via `octopusdeploy_tenant_project`. |
+| [`project.tf`](project.tf) | The `randomquotes` project. `is_version_controlled = true`, `tenanted_deployment_participation = "Tenanted"`, `git_library_persistence_settings` pointing at this repo's `.octopus/`. Includes the `lab-source` library variable set. Linked to the tenants via `octopusdeploy_tenant_project`. Binds the preview runbooks as the native ephemeral-env provisioning/deprovisioning hooks. |
 | [`branch_demos.tf`](branch_demos.tf) + [`branch_demo_triggers.tf`](branch_demo_triggers.tf) | `for_each` over `var.demo_branches` (set in `defaults.auto.tfvars`) — provisions one `<slug>-randomquotes` project per kept-open demo branch, each CaC-tracking that branch with `base_path = .octopus-<slug>/`. Auto-release trigger on the new GHCR image is also created per branch (skipped for `demo/process-template` since `Octopus.ProcessTemplate` action types can't anchor triggers). |
+| [`ephemeral.tf`](ephemeral.tf) | Native Ephemeral Environments — a parent environment (`Previews`) + a `Type = EphemeralEnvironment` channel with the `preview-pr-#{PR.Number}` name template. Provider-native (octopusdeploy ~> 1.12). Populates the project's Ephemeral Environments page; the preview runbooks become its provisioning/deprovisioning hooks. |
 | [`outputs.tf`](outputs.tf) | Project URL + ID for convenience |
 
 ## What's NOT here
