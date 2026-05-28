@@ -71,7 +71,7 @@ spec:
               # Pin to the per-PR tag pushed by build.yml on pull_request.
               # Without this, previews would render :latest from main and
               # miss any HTML / app changes made in the branch.
-              tag: 'pr-{{ .number }}'
+              tag: 'pr{{ .number }}'
       destination:
         server: https://kubernetes.default.svc
         namespace: 'argo-randomquotes-preview-pr-{{ .number }}'

@@ -133,12 +133,14 @@ process {
                     ENV="#{Octopus.Environment.Name}"
                     TAG="${ENV#preview-}"
                     SLUG="${TAG##*-}"
+                    PRNUM="${SLUG#pr}"
                     echo "Preview $SLUG (image $TAG) ready."
                     echo "  URL:       http://octopus-randomquotes-preview-$SLUG.localtest.me:8080"
                     echo "  Namespace: randomquotes-preview-$SLUG"
                     echo "  Image:     ghcr.io/vlussenburg/octopus-iac-lab:$TAG"
                     echo ""
-                    echo "Argo's parallel preview lives at argo-randomquotes-preview-$SLUG."
+                    echo "Argo's parallel preview: http://argo-preview-pr-$PRNUM.localtest.me:8080"
+                    echo "Argo CD UI:               http://argocd.localtest.me:8080"
                 EOT
             }
         }
