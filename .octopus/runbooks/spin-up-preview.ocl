@@ -122,9 +122,6 @@ process {
 
     step "announce-url" {
         name = "Announce preview URL"
-        properties = {
-            Octopus.Action.TargetRoles = ""
-        }
 
         action {
             action_type = "Octopus.Script"
