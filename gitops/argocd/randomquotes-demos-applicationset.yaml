@@ -1,24 +1,25 @@
 # Argo CD Applications for the demo-branch flavours of randomquotes.
 #
-# Each Octopus demo project (blue-green-, bg-preview-,
-# servicenow-cr-gate-randomquotes) has its `Update Argo CD Application
-# Image Tags` step look up Applications by annotation match — this
-# ApplicationSet generates the matching Applications.
+# Each Octopus demo project (<slug>-randomquotes) whose deployment
+# process carries an `Update Argo CD Application Image Tags` step looks
+# up Applications by annotation match — this ApplicationSet generates the
+# matching Applications, one per (flavour × tenantEnv × source).
 #
-# Each flavour reads from its own demo branch so the GitOps shape is
-# reproducible from that branch alone — even when the cluster manifests
-# match main (blue-green via Octopus's KubernetesDeployContainers step
-# is special on the Octopus side, not the chart side; bg-preview adds
-# Argo Rollout gated + preview Service/Ingress).
-#
-# servicenow-cr-gate is the exception — it still points at HEAD because
-# its special semantics live entirely on the Octopus side and there's
-# no chart divergence worth pinning. Switch to its own branch if you
-# ever want to specialise.
+# branch choice per flavour:
+#   - Pin to refs/heads/demo/<slug> when the flavour's chart shape
+#     diverges from main and must render off its own branch
+#     (blue-green, bg-preview, canary — canary adds an Argo Rollout +
+#     traffic-split via templates/rollout.yaml gated on envType).
+#   - Point at HEAD when the flavour deploys main's plain chart and its
+#     special behaviour is entirely Octopus-side (servicenow-cr-gate,
+#     process-template, smoke-step-template). process-template's Argo
+#     step lives inside the k8s-tenanted-app Platform Hub template it
+#     instantiates; smoke-step-template carries the step directly.
 #
 # platform-hub-opa-randomquotes is intentionally absent — its OCL has
 # no Update Argo step (the demo's enforcement is K8s admission via
-# Gatekeeper, not GitOps drift).
+# Gatekeeper, not GitOps drift), so there's no Application for the
+# Gateway to correlate. Re-add only if its process gains an Argo step.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -47,7 +48,16 @@ spec:
                       - flavour: bg-preview
                         branch: refs/heads/demo/bg-preview
                         previewEnabled: "true"
+                      - flavour: canary
+                        branch: refs/heads/demo/canary
+                        previewEnabled: "false"
                       - flavour: servicenow-cr-gate
+                        branch: HEAD
+                        previewEnabled: "false"
+                      - flavour: process-template
+                        branch: HEAD
+                        previewEnabled: "false"
+                      - flavour: smoke-step-template
                         branch: HEAD
                         previewEnabled: "false"
                 - list:
