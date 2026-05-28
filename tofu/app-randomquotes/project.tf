@@ -17,6 +17,14 @@ resource "octopusdeploy_project" "randomquotes" {
   tenanted_deployment_participation = "Tenanted"
   is_version_controlled             = true
 
+  # Register the existing CaC preview runbooks as the project's native
+  # ephemeral-env provisioning/deprovisioning hooks. CaC runbook ids are their
+  # slugs (no octopusdeploy_runbook data source in 1.12 — same gap the
+  # scheduled triggers hit). Pairs with the parent env + ephemeral channel in
+  # ephemeral.tf to populate the project's Ephemeral Environments page.
+  provisioning_runbook_id   = "spin-up-preview"
+  deprovisioning_runbook_id = "teardown-preview"
+
   # Per-Octopus values that can't live in shared OCL — Source (local|saas)
   # is set there. Resolves naturally as #{Source} in deployment + runbook OCL.
   included_library_variable_sets = [local.cp.lab_source_set_id]
