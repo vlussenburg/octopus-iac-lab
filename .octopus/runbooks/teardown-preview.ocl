@@ -1,5 +1,5 @@
 name = "Teardown preview"
-description = "Deprovisioning hook for native ephemeral preview environments. Removes the `randomquotes-preview-#{Preview.Slug}` namespace created by `Spin up preview`. Untenanted — same scope as Spin up preview."
+description = "Deprovisioning hook for native ephemeral preview environments. Removes the randomquotes-preview-<slug> namespace (slug = the release version's pre-release tag, derived in-script) created by `Spin up preview`. Untenanted — same scope as Spin up preview."
 default_guided_failure_mode = "EnvironmentDefault"
 multi_tenancy_mode = "Untenanted"
 
@@ -26,10 +26,12 @@ process {
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT
                     set -eu
-                    NS="randomquotes-preview-#{Preview.Slug}"
+                    REL="#{Octopus.Release.Number}"
+                    SLUG="${REL##*-}"
+                    NS="randomquotes-preview-$SLUG"
                     echo "Deleting namespace $NS …"
                     kubectl delete namespace "$NS" --ignore-not-found --wait=true
-                    echo "Preview #{Preview.Slug} torn down."
+                    echo "Preview $SLUG torn down."
                 EOT
             }
         }

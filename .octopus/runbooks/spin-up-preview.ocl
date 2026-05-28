@@ -1,5 +1,5 @@
 name = "Spin up preview"
-description = "Provisioning hook for native ephemeral preview environments. Deploys randomquotes to namespace `randomquotes-preview-#{Preview.Slug}` using the PR image (`#{Octopus.Release.Number}`, e.g. 1.1.150-pr141) and exposes it at http://octopus-randomquotes-preview-#{Preview.Slug}.localtest.me. Slug = the release version's pre-release tag (`pr<N>`) via Preview.Slug. Untenanted — previews are PR-scoped, not customer-scoped."
+description = "Provisioning hook for native ephemeral preview environments. Deploys randomquotes to namespace randomquotes-preview-<slug> using the release image (e.g. 1.1.150-pr141) and exposes it at http://octopus-randomquotes-preview-<slug>.localtest.me. The script derives slug = the release version's pre-release tag (pr<N>) from Octopus.Release.Number. Untenanted — previews are PR-scoped, not customer-scoped."
 default_guided_failure_mode = "EnvironmentDefault"
 multi_tenancy_mode = "Untenanted"
 
@@ -26,7 +26,9 @@ process {
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT
                 set -eu
-                NS="randomquotes-preview-#{Preview.Slug}"
+                REL="#{Octopus.Release.Number}"
+                SLUG="${REL##*-}"
+                NS="randomquotes-preview-$SLUG"
                 echo "Applying preview manifests into namespace $NS …"
                 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
                 kubectl apply -n "$NS" -f - <<MANIFESTS
@@ -35,7 +37,7 @@ process {
                 metadata:
                   name: randomquotes-config
                   labels:
-                    lab.octopus.com/preview: "#{Preview.Slug}"
+                    lab.octopus.com/preview: "${SLUG}"
                 data:
                   config.json: |
                     {
@@ -43,7 +45,7 @@ process {
                       "mood": "comedy",
                       "icon": "🚧",
                       "color": "#FF6B35",
-                      "watermark": "PREVIEW · #{Preview.Slug}",
+                      "watermark": "PREVIEW · ${SLUG}",
                       "maintenance": ""
                     }
                 ---
@@ -53,7 +55,7 @@ process {
                   name: randomquotes
                   labels:
                     app: randomquotes
-                    lab.octopus.com/preview: "#{Preview.Slug}"
+                    lab.octopus.com/preview: "${SLUG}"
                 spec:
                   replicas: 1
                   selector:
@@ -98,7 +100,7 @@ process {
                 spec:
                   ingressClassName: nginx
                   rules:
-                    - host: octopus-randomquotes-preview-#{Preview.Slug}.localtest.me
+                    - host: octopus-randomquotes-preview-${SLUG}.localtest.me
                       http:
                         paths:
                           - path: /
@@ -129,12 +131,14 @@ process {
                 Octopus.Action.Script.ScriptSource = "Inline"
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT
-                    echo "Preview #{Preview.Slug} (release #{Octopus.Release.Number}) ready."
-                    echo "  URL:       http://octopus-randomquotes-preview-#{Preview.Slug}.localtest.me"
-                    echo "  Namespace: randomquotes-preview-#{Preview.Slug}"
-                    echo "  Image:     ghcr.io/vlussenburg/octopus-iac-lab:#{Octopus.Release.Number}"
+                    REL="#{Octopus.Release.Number}"
+                    SLUG="${REL##*-}"
+                    echo "Preview $SLUG (release $REL) ready."
+                    echo "  URL:       http://octopus-randomquotes-preview-$SLUG.localtest.me"
+                    echo "  Namespace: randomquotes-preview-$SLUG"
+                    echo "  Image:     ghcr.io/vlussenburg/octopus-iac-lab:$REL"
                     echo ""
-                    echo "Argo's parallel preview lives at argo-randomquotes-preview-#{Preview.Slug}."
+                    echo "Argo's parallel preview lives at argo-randomquotes-preview-$SLUG."
                 EOT
             }
         }
