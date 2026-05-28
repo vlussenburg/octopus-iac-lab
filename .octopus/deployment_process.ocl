@@ -7,12 +7,12 @@ step "deploy-configmap" {
     action {
         action_type          = "Octopus.KubernetesDeployConfigMap"
         worker_pool_variable = "Project.WorkerPool"
-        environments         = ["dev", "production"]
+        channels             = ["default", "ephemeral-previews"]
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
-            Octopus.Action.KubernetesContainers.ConfigMapValues = "{\"config.json\":\"{\\\"tenant\\\":\\\"#{Octopus.Deployment.Tenant.Name}\\\",\\\"mood\\\":\\\"#{Featured.Mood}\\\",\\\"icon\\\":\\\"#{Brand.Icon}\\\",\\\"color\\\":\\\"#{Brand.Color}\\\",\\\"watermark\\\":\\\"#{Branding.Watermark}\\\",\\\"maintenance\\\":\\\"\\\"}\"}"
-            Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+            Octopus.Action.KubernetesContainers.ConfigMapValues = "{\"config.json\":\"{\\\"tenant\\\":\\\"#{App.Tenant}\\\",\\\"mood\\\":\\\"#{Featured.Mood}\\\",\\\"icon\\\":\\\"#{Brand.Icon}\\\",\\\"color\\\":\\\"#{Brand.Color}\\\",\\\"watermark\\\":\\\"#{Branding.Watermark}\\\",\\\"maintenance\\\":\\\"\\\"}\"}"
+            Octopus.Action.KubernetesContainers.Namespace = "#{K8s.Namespace}"
         }
     }
 }
@@ -26,7 +26,7 @@ step "deploy-manifests" {
     action {
         action_type          = "Octopus.KubernetesDeployRawYaml"
         worker_pool_variable = "Project.WorkerPool"
-        environments         = ["dev", "production"]
+        channels             = ["default", "ephemeral-previews"]
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
@@ -89,7 +89,7 @@ step "deploy-manifests" {
                 spec:
                   ingressClassName: nginx
                   rules:
-                    - host: #{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.localtest.me
+                    - host: #{App.Host}
                       http:
                         paths:
                           - path: /
@@ -100,7 +100,7 @@ step "deploy-manifests" {
                                 port:
                                   number: 80
                                             EOT
-            Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+            Octopus.Action.KubernetesContainers.Namespace = "#{K8s.Namespace}"
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
         }
@@ -167,25 +167,6 @@ step "update-argo-cd-application-image-tags" {
                 Purpose = "DockerImageReference"
                 SelectionMode = "immediate"
             }
-        }
-    }
-}
-
-step "preview-marker" {
-    name = "Preview marker"
-
-    action {
-        action_type = "Octopus.Script"
-        channels    = ["ephemeral-previews"]
-        properties = {
-            Octopus.Action.RunOnServer = "true"
-            Octopus.Action.Script.ScriptSource = "Inline"
-            Octopus.Action.Script.Syntax = "Bash"
-            Octopus.Action.Script.ScriptBody = <<-EOT
-                ENV="#{Octopus.Environment.Name}"
-                SLUG="${ENV##*-}"
-                echo "Preview $SLUG: app + namespace (randomquotes-preview-$SLUG) are provisioned by the Spin up preview runbook."
-            EOT
         }
     }
 }
