@@ -7,6 +7,7 @@ step "deploy-configmap" {
     action {
         action_type          = "Octopus.KubernetesDeployConfigMap"
         worker_pool_variable = "Project.WorkerPool"
+        environments         = ["dev", "production"]
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
@@ -25,6 +26,7 @@ step "deploy-manifests" {
     action {
         action_type          = "Octopus.KubernetesDeployRawYaml"
         worker_pool_variable = "Project.WorkerPool"
+        environments         = ["dev", "production"]
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
@@ -125,6 +127,7 @@ step "capture-deployment-artifacts" {
     action {
         action_type = "Octopus.KubernetesRunScript"
         worker_pool_variable = "Project.WorkerPool"
+        environments = ["dev", "production"]
         properties = {
             Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
             Octopus.Action.RunOnServer = "false"
@@ -147,6 +150,7 @@ step "update-argo-cd-application-image-tags" {
     action {
         action_type          = "Octopus.ArgoCDUpdateImageTags"
         worker_pool_variable = "Project.WorkerPool"
+        environments         = ["dev", "production"]
         properties = {
             Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
             Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
