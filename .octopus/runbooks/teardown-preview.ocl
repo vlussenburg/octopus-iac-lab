@@ -1,5 +1,5 @@
 name = "Teardown preview"
-description = "Delete the preview env created by `Spin up preview` for a GitHub PR. Removes the `randomquotes-preview-pr-#{PR.Number}` namespace. Fired by .github/workflows/preview-env.yml on PR closed. Untenanted — same scope as Spin up preview."
+description = "Deprovisioning hook for native ephemeral preview environments. Removes the `randomquotes-preview-#{Preview.Slug}` namespace created by `Spin up preview`. Untenanted — same scope as Spin up preview."
 default_guided_failure_mode = "EnvironmentDefault"
 multi_tenancy_mode = "Untenanted"
 
@@ -26,10 +26,10 @@ process {
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT
                     set -eu
-                    NS="randomquotes-preview-pr-#{PR.Number}"
+                    NS="randomquotes-preview-#{Preview.Slug}"
                     echo "Deleting namespace $NS …"
                     kubectl delete namespace "$NS" --ignore-not-found --wait=true
-                    echo "Preview for PR ##{PR.Number} (branch #{PR.Branch}) torn down."
+                    echo "Preview #{Preview.Slug} torn down."
                 EOT
             }
         }

@@ -100,31 +100,6 @@ variable "Maintenance.Message" {
     }
 }
 
-variable "PR.Number" {
-    value "0" {
-        prompt {
-            description = "GitHub PR number — drives the preview namespace and ingress host (randomquotes-preview-pr-#{PR.Number}). Set by .github/workflows/preview-env.yml when firing the Spin up/Teardown preview runbooks."
-            label = "PR Number"
-            required = true
-        }
-    }
-}
-
-variable "PR.Branch" {
-    value "feat/example" {
-        prompt {
-            description = "Source branch (e.g. feat/ephemeral-demo). Informational — used in labels and log messages."
-            label = "PR Branch"
-            required = true
-        }
-    }
-}
-
-variable "PR.HeadSha" {
-    value "main" {
-        prompt {
-            description = "PR head SHA. Mainly for the announce-url log line — image lookup uses pr-#{PR.Number} as the tag."
-            label = "PR Head SHA"
-        }
-    }
+variable "Preview.Slug" {
+    value "#{Octopus.Release.Number | Replace \"^.*-\" \"\"}" {}
 }
