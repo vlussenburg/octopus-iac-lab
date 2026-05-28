@@ -42,13 +42,14 @@ jobs:
         # Pin a 1.1.x base so we don't collide with 1.0.x tags from earlier
         # workflow incarnations sitting in GHCR. Bump the major prefix
         # whenever this workflow file gets recreated.
-        # On PRs, also publish a `pr-N` tag so Argo's preview ApplicationSet
-        # can pin to the branch's image (otherwise previews show stale
-        # `:latest` from main).
+        # PRs publish a semver pre-release tag `1.1.<run>-pr<N>`. The `-pr<N>`
+        # pre-release is what Octopus's ephemeral-channel version rule matches
+        # (tag `pr`) to route the image to a preview env, while stable
+        # `1.1.<run>` builds route to the Default channel (no pre-release).
         run: |
           echo "version=1.1.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "pr_tag=pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"
+            echo "pr_tag=1.1.${{ github.run_number }}-pr${{ github.event.number }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Log in to GitHub Container Registry
