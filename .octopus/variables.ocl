@@ -44,7 +44,7 @@ variable "Tier" {
         tenant_tag = ["tier/enterprise"]
     }
 
-    value "preview" {
+    value "free" {
         channel = ["ephemeral-previews"]
     }
 }
