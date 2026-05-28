@@ -19,6 +19,24 @@ locals {
   # and namespace. Derive the suffix from the URL.
   target_kind       = strcontains(var.octopus_url, "octopus.app") ? "saas" : "local"
   agent_target_name = "octopus-tentacle-${local.target_kind}"
+
+  # KLOS monitor gRPC endpoint. SaaS hits the public host on :8443 (public
+  # cert). Self-host compose maps host :18443 → container :8443 (Docker
+  # Desktop reserves *:8443 on macOS) — mirrors the Argo Gateway's resolution.
+  octopus_host     = replace(replace(var.octopus_url, "https://", ""), "http://", "")
+  monitor_grpc_url = local.target_kind == "local" ? "grpc://host.docker.internal:18443" : "grpc://${local.octopus_host}:8443"
+  # Self-host gRPC cert is self-signed and regenerates on every DB rebuild, so
+  # the thumbprint is fetched live (below). SaaS uses a public cert — empty.
+  monitor_thumbprint = local.target_kind == "local" ? one(data.external.octopus_grpc_thumbprint[*].result.thumbprint) : ""
+}
+
+# Fetch the live gRPC cert thumbprint at apply time so KLOS survives a
+# `make nuke` (the self-signed cert is reissued, a hardcoded value would go
+# stale). tofu runs on the host, where the container's :8443 is published on
+# :18443. Self-host only — SaaS trusts the public cert via system CAs.
+data "external" "octopus_grpc_thumbprint" {
+  count   = local.target_kind == "local" ? 1 : 0
+  program = ["bash", "-c", "TP=$(echo | openssl s_client -connect localhost:18443 2>/dev/null | openssl x509 -noout -fingerprint -sha1 | sed 's/.*=//; s/://g'); printf '{\"thumbprint\":\"%s\"}' \"$TP\""]
 }
 
 resource "kubernetes_namespace_v1" "agent" {
@@ -105,12 +123,50 @@ resource "helm_release" "octopus_agent" {
     value = "TenantedOrUntenanted"
   }
 
-  # KLOS (live status / kubernetes monitor) deliberately disabled — it needs
-  # an additional gRPC port (8443) exposed from the Octopus container, which
-  # our compose stack doesn't open. Toggle on once that's wired.
+  # KLOS (Kubernetes Live Object Status). The in-cluster monitor binds to the
+  # agent's existing deployment target (a pre-upgrade hook looks the agent
+  # machine up by name and links the monitor to it), then dials the gRPC
+  # endpoint validated by the self-signed cert thumbprint fetched above and
+  # streams live object health for whatever that target deploys.
   set {
     name  = "kubernetesMonitor.enabled"
-    value = "false"
+    value = "true"
+  }
+
+  set {
+    name  = "kubernetesMonitor.registration.serverApiUrl"
+    value = var.octopus_url_from_cluster
+  }
+
+  set_sensitive {
+    name  = "kubernetesMonitor.registration.serverAccessToken"
+    value = var.octopus_api_key
+  }
+
+  set {
+    name  = "kubernetesMonitor.registration.spaceId"
+    value = data.terraform_remote_state.space.outputs.space_id
+  }
+
+  # The monitor attaches to the EXISTING agent's deployment target and streams
+  # that target's live object status — it does NOT register a machine of its
+  # own. `machineName` is therefore the agent's machine name (the monitor's
+  # `register` looks this machine up by name to bind to it); pointing it at a
+  # non-existent name makes the pre-upgrade hook poll forever and time out,
+  # which is what `atomic` then rolls back.
+  set {
+    name  = "kubernetesMonitor.registration.machineName"
+    value = local.agent_target_name
+  }
+
+  set {
+    name  = "kubernetesMonitor.monitor.serverGrpcUrl"
+    value = local.monitor_grpc_url
+  }
+
+  set {
+    name  = "kubernetesMonitor.monitor.serverThumbprint"
+    value = local.monitor_thumbprint
   }
 
   # PVC binding needs the NFS CSI driver to be live before the tentacle pod
