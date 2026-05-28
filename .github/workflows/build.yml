@@ -1,11 +1,17 @@
 name: CI / Build Image
 
-# Builds + pushes the randomquotes image to GHCR. That's it — Octopus's
-# external-feed trigger (`Auto-release on new randomquotes-image`, applied
-# to every project in `tofu/app-randomquotes/`) sees the new tag, mints a
-# release with the image tag as the release version, and the lifecycle's
-# Dev auto-deploy target fires it. No `octopus release create` /
-# `octopus release deploy` from CI.
+# Builds + pushes the randomquotes image to GHCR. For STABLE images (main),
+# that's it — Octopus's external-feed trigger sees the new tag, mints a release
+# on the project's default branch, and Dev auto-deploys. No release-create
+# from CI for the stable path.
+#
+# For PREVIEW images (PRs off feat/*), CI does create the release — see the
+# create-ephemeral-release job. A feed trigger can't provision a native
+# ephemeral env: it only creates releases from the default branch (main), so it
+# never carries the PR branch ref the provisioning runbook needs. Only CI holds
+# BOTH the PR branch ref AND the pr<N> image tag, so CI creates the release from
+# the PR branch into the Ephemeral Previews channel; Octopus then provisions the
+# preview env (spin-up-preview runbook) and deploys.
 #
 # (Note: Octopus's `Octopus.ArgoCDUpdateImageTags` step writes image tags
 # into the helm chart values under `gitops/`, which sits outside this
@@ -127,4 +133,44 @@ jobs:
           # of the same workflow already wrote info for this version (re-run
           # of the same run_number), prefer overwrite over failing the job.
           overwrite_mode: OverwriteExisting
+
+  create-ephemeral-release:
+    # PR-only: create the randomquotes release in the Ephemeral Previews channel
+    # FROM THE PR BRANCH. The git_ref is what gives Octopus the branch context to
+    # provision a preview env and read the (branch's) spin-up-preview runbook;
+    # release_number/package_version = the pr<N> image tag so the runbook's
+    # #{Octopus.Release.Number} resolves to a real image and the env slug.
+    # Gated on feat/* to match the channel's GitReferenceRules.
+    name: Create Ephemeral Release → Octopus
+    needs: [build, push-build-info]
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feat/')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: local
+            url_secret: OCTOPUS_LOCAL_URL
+            key_secret: OCTOPUS_LOCAL_API_KEY
+          - name: saas
+            url_secret: OCTOPUS_SAAS_URL
+            key_secret: OCTOPUS_SAAS_API_KEY
+    steps:
+      # Local leg is best-effort — same as push-build-info: if the local
+      # instance isn't reachable from GHA the job continues; SaaS is the
+      # source of truth. The preview only gets pods wherever a k8s target is
+      # registered for the Previews environment.
+      - name: Create ephemeral release (${{ matrix.target.name }})
+        continue-on-error: ${{ matrix.target.name == 'local' }}
+        uses: OctopusDeploy/create-release-action@v3
+        env:
+          OCTOPUS_URL: ${{ secrets[matrix.target.url_secret] }}
+          OCTOPUS_API_KEY: ${{ secrets[matrix.target.key_secret] }}
+          OCTOPUS_SPACE: IaC Sandbox
+        with:
+          project: randomquotes
+          channel: Ephemeral Previews
+          release_number: ${{ needs.build.outputs.pr_tag }}
+          package_version: ${{ needs.build.outputs.pr_tag }}
+          git_ref: ${{ github.head_ref }}
 
