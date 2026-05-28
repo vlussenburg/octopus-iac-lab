@@ -48,6 +48,15 @@ services:
       # boot. Empty = skip (paste in UI). Sourced from .env via --env-file;
       # encode once with `base64 -i license.xml | tr -d '\n'`.
       OCTOPUS_SERVER_BASE64_LICENSE: "${OCTOPUS_SERVER_BASE64_LICENSE:-}"
+    # /api answers 2xx only after migrations finish and the server is
+    # listening — so `docker compose up --wait` blocks until it's usable
+    # and bootstrap doesn't need its own curl-poll loop.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -o /dev/null http://localhost:8080/api || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
     ports:
       - "8090:8080"      # HTTP API + UI
       - "10943:10943"    # Halibut — Polling Tentacle / K8s Agent comms (TLS)

@@ -37,7 +37,7 @@ endef
 
 .PHONY: help \
         up down logs ps nuke \
-        master-key mint-api-key ensure-api-key \
+        bootstrap master-key mint-api-key ensure-api-key \
         space-init space-plan space-apply space-destroy space-fmt space-validate \
         cp-init cp-plan cp-apply cp-destroy cp-fmt cp-validate \
         ph-init ph-plan ph-apply ph-destroy ph-fmt ph-validate \
@@ -49,7 +49,7 @@ endef
 
 help:
 	@echo "compose/              : up | down | logs | ps | nuke      (local self-host only)"
-	@echo "bootstrap             : master-key (first-time) | mint-api-key (local-only)"
+	@echo "bootstrap             : bootstrap (fresh clone → running lab) | master-key | mint-api-key (local-only)"
 	@echo "deploys come from CI: push to main on github → .github/workflows/build.yml → release.yml"
 	@echo "tofu/space/           : space-init | space-plan | space-apply | space-destroy | space-fmt | space-validate"
 	@echo "tofu/control-plane/   : cp-init | cp-plan | cp-apply | cp-destroy | cp-fmt | cp-validate"
@@ -271,6 +271,32 @@ rebuild: ensure-api-key
 	done
 
 # --- bootstrap helpers ----------------------------------------------------
+
+# First-time bring-up from a fresh clone. Idempotent — safe to re-run.
+# Local self-host only (mint-api-key needs the admin/Password01! login).
+bootstrap:
+	@[ -f .env ] || { cp .env.example .env && echo ".env created from .env.example"; }
+	@CURRENT=$$(grep '^MASTER_KEY=' .env | cut -d= -f2-); \
+	  if [ -z "$$CURRENT" ] || [ "$$CURRENT" = "CHANGE_ME" ]; then $(MAKE) master-key; fi
+	@PAT=$$(grep '^GITHUB_PAT=' .env | cut -d= -f2-); \
+	  case "$$PAT" in ""|ghp_XXX*) \
+	    echo "GITHUB_PAT not set in .env — needed for CaC commits + the GHCR feed."; \
+	    echo "Make a classic PAT (repo + read:packages), put it in .env, re-run 'make bootstrap'."; \
+	    echo "Note: CaC pushes to cac_repo_url (tofu/app-randomquotes/defaults.auto.tfvars)."; \
+	    echo "If you cloned this lab, you can't push to the original repo — point cac_repo_url"; \
+	    echo "at a GitHub repo you own and give the PAT write access to it."; \
+	    exit 1 ;; \
+	  esac
+	@echo "Booting compose stack; waiting for Octopus to be healthy ..."
+	$(COMPOSE) up -d --wait octopus
+	$(COMPOSE) up -d
+	$(MAKE) mint-api-key
+	@kubectl cluster-info --request-timeout=5s >/dev/null 2>&1 || \
+	  echo "WARNING: no reachable Kubernetes cluster — agent + argo stacks will fail. Enable Kubernetes in Docker Desktop for the full lab."
+	$(MAKE) space-init cp-init ph-init app-init agent-init argo-init
+	$(MAKE) apply TOFU_APPLY_FLAGS=-auto-approve
+	@echo ""
+	@echo "Done. Octopus UI: http://localhost:8090  (admin / Password01!)"
 
 # Generate a fresh 32-byte MASTER_KEY into .env. First-time setup only —
 # refuses to overwrite an existing key (would orphan any data encrypted with
