@@ -90,7 +90,7 @@ OCL pool references use slugs (e.g. `Project.WorkerPool = "prod-pool"`); naming 
 
 - **Octopus → GitHub (CaC commits + Platform Hub)**: GitHub PAT with `repo` scope, stored as Octopus Git credentials in `control-plane` and `platform-hub`.
 - **K8s agent → Octopus**: admin API key passed as `agent.bearerToken` in the Helm chart. Octopus accepts API keys as `Authorization: Bearer`. Replace with a scoped service-account key for anything non-sandbox.
-- **KLOS / kubernetes monitor**: deliberately disabled — would require exposing gRPC `8443` from the compose stack.
+- **KLOS / kubernetes monitor**: enabled. Compose publishes the container's gRPC `:8443` on host `:18443`; the monitor subchart dials `grpc://host.docker.internal:18443` pinned by the server's live self-signed cert thumbprint (fetched at apply time via `data.external`, so it survives a DB nuke). `registration.machineName` is the **agent's** machine name — the monitor binds to the existing agent deployment target rather than registering a machine of its own, so live object status surfaces on that target. Registration auths with the admin API key as a bearer token, same as the agent.
 
 ### Compose quirks worth knowing
 

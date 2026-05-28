@@ -123,10 +123,11 @@ resource "helm_release" "octopus_agent" {
     value = "TenantedOrUntenanted"
   }
 
-  # KLOS (Kubernetes Live Object Status). The in-cluster monitor streams
-  # object health to Octopus over gRPC (host :18443 → container :8443, now
-  # wired in compose). Registers its own machine, then dials the gRPC
-  # endpoint validated by the self-signed cert thumbprint fetched above.
+  # KLOS (Kubernetes Live Object Status). The in-cluster monitor binds to the
+  # agent's existing deployment target (a pre-upgrade hook looks the agent
+  # machine up by name and links the monitor to it), then dials the gRPC
+  # endpoint validated by the self-signed cert thumbprint fetched above and
+  # streams live object health for whatever that target deploys.
   set {
     name  = "kubernetesMonitor.enabled"
     value = "true"
@@ -147,9 +148,15 @@ resource "helm_release" "octopus_agent" {
     value = data.terraform_remote_state.space.outputs.space_id
   }
 
+  # The monitor attaches to the EXISTING agent's deployment target and streams
+  # that target's live object status — it does NOT register a machine of its
+  # own. `machineName` is therefore the agent's machine name (the monitor's
+  # `register` looks this machine up by name to bind to it); pointing it at a
+  # non-existent name makes the pre-upgrade hook poll forever and time out,
+  # which is what `atomic` then rolls back.
   set {
     name  = "kubernetesMonitor.registration.machineName"
-    value = "kubernetes-monitor-${local.target_kind}"
+    value = local.agent_target_name
   }
 
   set {
