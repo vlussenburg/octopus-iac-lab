@@ -1,6 +1,6 @@
 # tofu/space/
 
-Creates the non-default Space everything else in the lab lives inside. The Space is the kill switch — `tofu destroy` here cascades through Octopus and removes every project, env, lifecycle, credential, and target inside it.
+Creates the non-default Space everything else in the lab lives inside. The Space is the kill switch: `tofu destroy` here cascades through Octopus and removes every project, env, lifecycle, credential, and target inside it.
 
 | File | What it owns |
 |------|--------------|

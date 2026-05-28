@@ -1,6 +1,6 @@
 # tofu/k8s-agent/
 
-Installs the **Octopus Kubernetes Agent** + shared cluster infra (NFS CSI driver, nginx-ingress controller) into a local K8s cluster (Docker Desktop by default) via Helm. The agent self-registers as a deployment target tagged `k8s` in environments `Dev` + `Production`, with tenant participation set so all three tenants can deploy through it. The role is what [`../../.octopus/deployment_process.ocl`](../../.octopus/deployment_process.ocl) and the runbooks target.
+Installs the **Octopus Kubernetes Agent** + shared cluster infra (NFS CSI driver, nginx-ingress controller) into a local K8s cluster (Docker Desktop by default) via Helm. The agent self-registers as a deployment target tagged `k8s` in environments `Dev` + `Production`, with tenant participation set so every tenant can deploy through it. The role is what [`../../.octopus/deployment_process.ocl`](../../.octopus/deployment_process.ocl) and the runbooks target.
 
 | File | What it owns |
 |------|--------------|
@@ -16,7 +16,7 @@ Installs the **Octopus Kubernetes Agent** + shared cluster infra (NFS CSI driver
 
 ## Auth: admin API key as bearer
 
-Octopus accepts API keys as `Authorization: Bearer ...` — so we feed the existing `OCTOPUS_API_KEY` directly to `agent.bearerToken`. No service-account dance, no minting, no extra resources. **This is fine for a localhost lab; it'd be wrong for anything real**, where you'd want a scoped service-account API key (or a one-time registration token from the UI flow that this provider doesn't yet model).
+Octopus accepts API keys as `Authorization: Bearer ...`, so we feed the existing `OCTOPUS_API_KEY` directly to `agent.bearerToken`. No service-account dance, no minting, no extra resources. **Fine for a localhost lab; wrong for anything real**, where you'd want a scoped service-account API key (or a one-time registration token from the UI flow that this provider doesn't yet model).
 
 ## Prerequisites
 
@@ -47,4 +47,4 @@ kubectl get pods -n octopus-agent-docker-desktop
 make agent-destroy
 ```
 
-This `helm uninstalls` the agent + cleans up the registered deployment target via the destroy-time `null_resource`. The shared NFS CSI driver and nginx-ingress controller are intentionally **not** destroyed — they live in `kube-system` / `ingress-nginx` and can serve other agents on the same cluster. Remove them explicitly when tearing the cluster down (see the root README's "Wiping the lab" section).
+This `helm uninstalls` the agent + cleans up the registered deployment target via the destroy-time `null_resource`. The shared NFS CSI driver and nginx-ingress controller are deliberately **not** destroyed — they live in `kube-system` / `ingress-nginx` and can serve other agents on the cluster. Remove them explicitly when tearing the cluster down (see the root README's "Wiping the lab" section).

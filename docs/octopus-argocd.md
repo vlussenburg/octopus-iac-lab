@@ -12,7 +12,7 @@ Two takes on the same setup. One is the marketing-friendly version, one is what 
 
 ### What Octopus brings to Argo
 
-- **Tenants as a first-class concept.** Argo has no native tenancy — you fake it with naming conventions or AppProjects. Octopus's tenant tags + per-tenant variables drive a 12-Application matrix from one project, no template explosion.
+- **Tenants as a first-class concept.** Argo has no native tenancy — you fake it with naming conventions or AppProjects. Octopus's tenant tags + per-tenant variables drive the whole Application matrix from one project, no template explosion.
 - **Lifecycles + env graphs.** Argo treats every Application as independent; "promote dev → prod" is a manual file move or a custom ApplicationSet. Octopus's progression is a graph the platform reasons about.
 - **Approvals + manual intervention steps.** First-class. Argo equivalents are bolted on (Argo Workflows, OPA gates).
 - **Runbooks** — the "maintenance mode on/off" pattern has no Argo equivalent. It's an out-of-band operation that fits Octopus's process model and would be painful to express in Argo.
@@ -27,7 +27,7 @@ Two takes on the same setup. One is the marketing-friendly version, one is what 
 
 ### The integration story is clean
 
-- One Octopus deployment-process step (`Octopus.ArgoCDUpdateImageTags`) translates an Octopus release into a git commit Argo can reconcile. The boundary lives in two places: an annotation on each Argo App, and a single step in the project. Easy to reason about.
+- One Octopus deployment-process step (`Octopus.ArgoCDUpdateImageTags`) translates an Octopus release into a git commit Argo can reconcile. The boundary lives in two places: an annotation on each Argo App, and one step in the project. Easy to reason about.
 - The Gateway brings Argo state *back* into Octopus's UI. Operators who think in Octopus terms see Argo Apps under Infrastructure → Argo CD Instances. No context-switching cost for the people who already know Octopus.
 - Two independent audit trails — Octopus deployment log AND git history — means post-incident reconstruction has redundancy. If Octopus's task log is unclear, the git diff isn't.
 
@@ -49,7 +49,7 @@ For one Argo-managed deploy you get:
 - **Git log:** "Octopus bot committed `image.tag: 1.1.18` to `gitops/.../values.yaml` at 10:42:03."
 - **Argo sync history:** "Application synced from sha abc to sha def at 10:42:30, 12 resources affected."
 
-One event, three sources, none complete. Reconciling them after an incident is a multi-tab exercise. "Single source of truth" only works inside one of the three boxes; spanning the system you're back to event correlation.
+One event, three sources, none complete. Reconciling them after an incident is a multi-tab exercise. "Single source of truth" only works inside one box; spanning the system you're back to event correlation.
 
 ### Promotion semantics are doubled
 
@@ -70,7 +70,7 @@ When both are wired up: what does "promote to prod" *mean*? Whichever fires firs
 
 - Octopus deploy succeeds → Argo sync fails. Octopus reports green; the fleet is red.
 - `StepVerification.Method = ArgoCDApplicationHealthy` waits for Argo health, but if the health check passes prematurely (rolling update mid-flight, cached status), Octopus claims success while half the pods are still on the old image.
-- Gateway connectivity has *three* layers of auth that can break independently: Octopus access token, ArgoCD JWT, gRPC TLS to Octopus. We hit each of them in this lab over a single afternoon.
+- Gateway connectivity has *three* layers of auth that can break independently: Octopus access token, ArgoCD JWT, gRPC TLS to Octopus. We hit each of them in this lab over one afternoon.
 - "Did it actually deploy?" now requires checking Octopus task log + Argo App status + `kubectl get pods`. Three tabs. Every time.
 
 ### Cognitive overhead
@@ -96,12 +96,12 @@ A new team member learns *both* stacks. Two failure-mode catalogues to memorise.
 
 ### Sandbox cost is real
 
-Octopus Server + SQL Server want ~6 GB of RAM together to be happy. Add Argo + 12 reconciliation loops + a Gateway pod streaming events back to Octopus, and Docker Desktop on a laptop tilts into thrashing under modest activity. We had to bump Docker Desktop to 16 GB and cap SQL Server explicitly to keep the cluster responsive. Production won't have this constraint, but the local-dev experience is heavier than either tool alone.
+Octopus Server + SQL Server want ~6 GB of RAM together. Add Argo + the per-leaf reconciliation loops + a Gateway pod streaming events back to Octopus, and Docker Desktop on a laptop tilts into thrashing under modest activity. We had to bump Docker Desktop to 16 GB and cap SQL Server explicitly to keep the cluster responsive. Production won't have this constraint, but the local-dev experience is heavier than either tool alone.
 
 ---
 
 ## TL;DR
 
-The combo is genuinely better than either alone *for the right shape of team* — one that wants Octopus's release semantics AND Argo's convergence guarantees, has the operational maturity to run both, and the team-size to absorb two mental models. It's not a win on every dimension though: audit trails span three systems, promotion has two definitions, and you're now coupled to an Octopus-proprietary integration layer.
+The combo beats either alone *for the right shape of team* — one that wants Octopus's release semantics AND Argo's convergence guarantees, has the operational maturity to run both, and the team-size to absorb two mental models. It's not a win on every dimension: audit trails span three systems, promotion has two definitions, and you're coupled to an Octopus-proprietary integration layer.
 
-This lab demonstrates both patterns running side-by-side on purpose. The K8s agent path (push) and the Argo path (pull) deploy the same tenant matrix to the same cluster. Compare them yourself before betting on either.
+This lab runs both patterns side-by-side on purpose. The K8s agent path (push) and the Argo path (pull) deploy the same tenant matrix to the same cluster. Compare them yourself before betting on either.

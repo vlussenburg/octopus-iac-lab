@@ -1,6 +1,6 @@
 # tofu/
 
-Seven OpenTofu stacks, each with its own state. Non-sensitive lab config (space name, CaC repo, etc.) lives in committed `defaults.auto.tfvars` per stack. Sensitive values (API key, GitHub PAT, Octopus URL) come in via `TF_VAR_*` from the root `.env`.
+OpenTofu stacks, each with its own state. Non-sensitive lab config (space name, CaC repo, etc.) lives in committed `defaults.auto.tfvars` per stack. Sensitive values (API key, GitHub PAT, Octopus URL) come in via `TF_VAR_*` from the root `.env`.
 
 | Stack | Owns | Why separate |
 |-------|------|--------------|
@@ -47,7 +47,7 @@ data "terraform_remote_state" "space" {
 ## Why split into stacks?
 
 - **space** is the kill switch. One `tofu destroy` here nukes everything in the Space — useful for SaaS where there's no `make nuke` equivalent.
-- **control-plane** is boring + stable. Apply once, then ignore.
+- **control-plane** is stable. Apply once, then ignore.
 - **platform-hub** is optional + Octopus-version-sensitive. Splitting it lets the lab work on SaaS instances that don't have Platform Hub.
 - **app-randomquotes** is what the team iterates on (channels, variables, runbooks via OCL). Splitting it from infra means a noisy `tofu plan` on the app side never threatens the shared layer.
-- **k8s-agent** is cluster-side, independent of Octopus project work, and needs different providers (helm + kubernetes). Keeping it separate also makes it easy to nuke + reinstall the agent without disturbing project state.
+- **k8s-agent** is cluster-side, independent of Octopus project work, and needs different providers (helm + kubernetes). Separate, so you can nuke + reinstall the agent without disturbing project state.

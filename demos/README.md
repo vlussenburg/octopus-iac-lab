@@ -33,7 +33,7 @@ node demos/capture.js --record              # all
 node demos/capture.js canary --record       # just one
 ```
 
-`--record` wraps each demo's context with `recordVideo` — same scenario, just produces a WebM alongside the PNGs. Convert to MP4 if needed: `ffmpeg -i demos/out/<slug>.webm -c:v libx264 -preset slow -crf 22 demos/out/<slug>.mp4`.
+`--record` wraps each demo's context with `recordVideo`: same scenario, produces a WebM alongside the PNGs. Convert to MP4 if needed: `ffmpeg -i demos/out/<slug>.webm -c:v libx264 -preset slow -crf 22 demos/out/<slug>.mp4`.
 
 ## Narrated recordings (`record-*.mjs`)
 
@@ -48,11 +48,11 @@ node demos/record-platform-hub-opa.mjs  # PR #46
 node demos/record-snow.mjs              # PR #53
 ```
 
-Shared helpers — env loading, Octopus REST client, banner-overlay injector, kubectl-panel HTTP server, `watchDeployment` (task page + auto-scroll), `saveRecording` (page → `<slug>.mp4`) — live in [`recorder-lib.mjs`](recorder-lib.mjs). Each per-demo file is constants + scene script + minor demo-specific helpers. All recorders output `demos/out/<slug>.mp4` (uniform format — QuickTime/browser/GitHub-embed friendly).
+Shared helpers — env loading, Octopus REST client, banner-overlay injector, kubectl-panel HTTP server, `watchDeployment` (task page + auto-scroll), `saveRecording` (page → `<slug>.mp4`) — live in [`recorder-lib.mjs`](recorder-lib.mjs). Each per-demo file is constants + scene script + minor demo-specific helpers. All recorders output `demos/out/<slug>.mp4` (uniform format, QuickTime/browser/GitHub-embed friendly).
 
-**Prereq:** recorders never create Octopus releases — `.github/workflows/build.yml` is the only producer of releases (one per push to main). The recorders redeploy the latest existing release. If a project has fewer than 2 releases, `requireReleases` fails fast with a pointer to push or run the workflow. To make a demo feel live, change a file under [`app/`](../app/) or [`gitops/charts/randomquotes/`](../gitops/charts/randomquotes/), commit, push to main, and wait ~3 min for build.yml to produce a new release.
+**Prereq:** recorders never create Octopus releases — `.github/workflows/build.yml` is the only producer of releases (one per push to main). The recorders redeploy the latest existing release. If a project has fewer than two releases, `requireReleases` fails fast with a pointer to push or run the workflow. To make a demo feel live, change a file under [`app/`](../app/) or [`gitops/charts/randomquotes/`](../gitops/charts/randomquotes/), commit, push to main, and wait ~3 min for build.yml to produce a new release.
 
-The `demo/servicenow-cr-gate` flow has full orchestration in [`capture-snow.mjs`](capture-snow.mjs) (deploy → CR creation → mid-flow PDI approval → resume) — light shots are in `capture.js`'s case above.
+The `demo/servicenow-cr-gate` flow has full orchestration in [`capture-snow.mjs`](capture-snow.mjs) (deploy → CR creation → mid-flow PDI approval → resume); light shots are in `capture.js`'s case above.
 
 ## Env
 

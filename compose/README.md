@@ -1,20 +1,20 @@
 # compose/
 
-Local Octopus Server stack — the runtime that [`../tofu/`](../tofu/) then configures. Four services: SQL Server, Octopus Server, and two polling-tentacle workers that register into Octopus as `default-pool-worker` (built-in Default Worker Pool) and `prod-pool-worker` (`prod-pool`).
+Local Octopus Server stack — the runtime that [`../tofu/`](../tofu/) then configures. Services: SQL Server, Octopus Server, and polling-tentacle workers that register into Octopus as `default-pool-worker` (built-in Default Worker Pool) and `prod-pool-worker` (`prod-pool`).
 
 | File | Purpose |
 |------|---------|
 | [`docker-compose.yml`](docker-compose.yml) | `db` (SQL Server 2022) + `octopus` (Server) + `default-pool-worker` + `prod-pool-worker` (polling tentacles). Host port `8090`. Apple-Silicon ready (all images `linux/amd64`; turn on Docker Desktop → "Use Rosetta"). |
 | Licence | Set `OCTOPUS_SERVER_BASE64_LICENSE` in the repo-root `.env` (base64 of your licence XML) — `install.sh` applies it on first boot. If unset, paste via the UI under Configuration → License after first login. |
 
-Reads `MASTER_KEY` and `OCTOPUS_API_KEY` from the repo-root `.env`. The workers need `OCTOPUS_API_KEY` so they can self-register; they retry until `make cp-apply` has created `prod-pool`.
+Reads `MASTER_KEY` and `OCTOPUS_API_KEY` from the repo-root `.env`. The workers need `OCTOPUS_API_KEY` to self-register; they retry until `make cp-apply` has created `prod-pool`.
 
 ## Run
 
 From the **repo root** (so `--env-file .env` resolves):
 
 ```bash
-make up        # docker compose up -d  (db → octopus → 2 workers)
+make up        # docker compose up -d  (db → octopus → workers)
 make down      # stop + remove containers (data persists in named volumes)
 make logs      # tail logs across all services
 make nuke      # ⚠️ remove volumes too — wipes the DB, master key, worker identities
@@ -49,4 +49,4 @@ Limits set in `docker-compose.yml`. Budget targets a 16 GB Docker Desktop alloca
 
 Total compose footprint: ~9 GB, leaving ~7 GB for Docker Desktop K8s (which hosts the K8s agent + ArgoCD + nginx-ingress + the deployed apps) + system.
 
-**Recommendation: Docker Desktop → Settings → Resources → 16 GB.** Less than that and you'll feel it.
+**Set Docker Desktop → Settings → Resources → 16 GB.** Less than that and you'll feel it.
