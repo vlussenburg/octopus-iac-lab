@@ -141,31 +141,21 @@ jobs:
     # release_number/package_version = the pr<N> image tag so the runbook's
     # #{Octopus.Release.Number} resolves to a real image and the env slug.
     # Gated on feat/* to match the channel's GitReferenceRules.
+    #
+    # LOCAL-ONLY, unlike push-build-info's local+SaaS matrix: the ephemeral
+    # feature (Previews parent env, Ephemeral Previews channel, preview k8s
+    # target) lives only on the local instance, so local is the source of truth
+    # here — SaaS has no such channel and would just error.
     name: Create Ephemeral Release → Octopus
     needs: [build, push-build-info]
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feat/')
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - name: local
-            url_secret: OCTOPUS_LOCAL_URL
-            key_secret: OCTOPUS_LOCAL_API_KEY
-          - name: saas
-            url_secret: OCTOPUS_SAAS_URL
-            key_secret: OCTOPUS_SAAS_API_KEY
     steps:
-      # Local leg is best-effort — same as push-build-info: if the local
-      # instance isn't reachable from GHA the job continues; SaaS is the
-      # source of truth. The preview only gets pods wherever a k8s target is
-      # registered for the Previews environment.
-      - name: Create ephemeral release (${{ matrix.target.name }})
-        continue-on-error: ${{ matrix.target.name == 'local' }}
+      - name: Create ephemeral release
         uses: OctopusDeploy/create-release-action@v3
         env:
-          OCTOPUS_URL: ${{ secrets[matrix.target.url_secret] }}
-          OCTOPUS_API_KEY: ${{ secrets[matrix.target.key_secret] }}
+          OCTOPUS_URL: ${{ secrets.OCTOPUS_LOCAL_URL }}
+          OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_LOCAL_API_KEY }}
           OCTOPUS_SPACE: IaC Sandbox
         with:
           project: randomquotes
