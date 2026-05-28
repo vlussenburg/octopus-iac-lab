@@ -34,6 +34,7 @@ jobs:
       packages: write
     outputs:
       version: ${{ steps.version.outputs.version }}
+      pr_tag: ${{ steps.version.outputs.pr_tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -81,14 +82,14 @@ jobs:
           build-args: VERSION=${{ steps.version.outputs.pr_tag }}
 
   push-build-info:
-    # Push GitHub-sourced build information (commits, build URL, VCS root) to
-    # both Octopus targets after the image lands. The external-feed trigger
-    # mints the release from the image tag; this step attaches commit history
-    # so the resulting release page shows "what changed" without us minting
-    # the release from CI. Skipped on PRs — only `main` builds become releases.
+    # Push GitHub-sourced build information (commits, build URL, VCS root,
+    # branch) to both Octopus targets after the image lands. The external-feed
+    # trigger mints the release from the image tag; this attaches the source
+    # branch + commit history. PR builds push it too (keyed on the pr<N> tag)
+    # so the preview's release carries its source branch.
     name: Push Build Info → Octopus
     needs: build
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -121,7 +122,7 @@ jobs:
           # Octopus, but the release-snapshot lookup at release-create time
           # wouldn't match and the release page would render empty.
           packages: ${{ github.repository_owner }}/octopus-iac-lab
-          version: ${{ needs.build.outputs.version }}
+          version: ${{ github.event_name == 'pull_request' && needs.build.outputs.pr_tag || needs.build.outputs.version }}
           # Build info push happens just after image push; if a previous run
           # of the same workflow already wrote info for this version (re-run
           # of the same run_number), prefer overwrite over failing the job.
