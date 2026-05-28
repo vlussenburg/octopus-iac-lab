@@ -99,7 +99,3 @@ variable "Maintenance.Message" {
         }
     }
 }
-
-variable "Preview.Slug" {
-    value "#{Octopus.Release.Number | Replace \"^.*-\" \"\"}" {}
-}
