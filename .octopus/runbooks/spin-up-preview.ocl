@@ -1,5 +1,5 @@
 name = "Spin up preview"
-description = "Provisioning hook for native ephemeral preview environments. Deploys randomquotes to namespace randomquotes-preview-<slug> and exposes it at http://octopus-randomquotes-preview-<slug>.localtest.me. A provisioning runbook has no release context, so #{Octopus.Release.Number} is empty here; instead the env name carries the full version (template preview-#{Octopus.Release.Number}) and the script parses Octopus.Environment.Name → image tag + slug. Untenanted — previews are PR-scoped, not customer-scoped."
+description = "Provisioning hook for native ephemeral preview environments. Deploys randomquotes to namespace randomquotes-preview-<slug> and exposes it at http://octopus-randomquotes-preview-<slug>.localtest.me:8080. A provisioning runbook has no release context, so #{Octopus.Release.Number} is empty here; instead the env name carries the full version (template preview-#{Octopus.Release.Number}) and the script parses Octopus.Environment.Name → image tag + slug. Untenanted — previews are PR-scoped, not customer-scoped."
 default_guided_failure_mode = "EnvironmentDefault"
 multi_tenancy_mode = "Untenanted"
 
@@ -134,7 +134,7 @@ process {
                     TAG="${ENV#preview-}"
                     SLUG="${TAG##*-}"
                     echo "Preview $SLUG (image $TAG) ready."
-                    echo "  URL:       http://octopus-randomquotes-preview-$SLUG.localtest.me"
+                    echo "  URL:       http://octopus-randomquotes-preview-$SLUG.localtest.me:8080"
                     echo "  Namespace: randomquotes-preview-$SLUG"
                     echo "  Image:     ghcr.io/vlussenburg/octopus-iac-lab:$TAG"
                     echo ""
