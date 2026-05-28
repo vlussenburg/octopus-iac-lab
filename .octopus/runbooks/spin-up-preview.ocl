@@ -1,5 +1,5 @@
 name = "Spin up preview"
-description = "Create an ephemeral preview env for a GitHub PR against a `feat/*` branch. Deploys randomquotes to namespace `randomquotes-preview-pr-#{PR.Number}` using the per-PR image tag (`pr-#{PR.Number}` from .github/workflows/build.yml's pull_request leg) and exposes it at http://octopus-randomquotes-preview-pr-#{PR.Number}.localtest.me. Fired by .github/workflows/preview-env.yml on PR opened/reopened/synchronize. Untenanted — previews are PR-scoped, not customer-scoped."
+description = "Provisioning hook for native ephemeral preview environments. Deploys randomquotes to namespace `randomquotes-preview-#{Preview.Slug}` using the PR image (`#{Octopus.Release.Number}`, e.g. 1.1.150-pr141) and exposes it at http://octopus-randomquotes-preview-#{Preview.Slug}.localtest.me. Slug = the release version's pre-release tag (`pr<N>`) via Preview.Slug. Untenanted — previews are PR-scoped, not customer-scoped."
 default_guided_failure_mode = "EnvironmentDefault"
 multi_tenancy_mode = "Untenanted"
 
@@ -26,7 +26,7 @@ process {
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT
                 set -eu
-                NS="randomquotes-preview-pr-#{PR.Number}"
+                NS="randomquotes-preview-#{Preview.Slug}"
                 echo "Applying preview manifests into namespace $NS …"
                 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
                 kubectl apply -n "$NS" -f - <<MANIFESTS
@@ -35,8 +35,7 @@ process {
                 metadata:
                   name: randomquotes-config
                   labels:
-                    lab.octopus.com/preview-pr: "#{PR.Number}"
-                    lab.octopus.com/preview-branch: "#{PR.Branch | Replace \"/\" \"-\"}"
+                    lab.octopus.com/preview: "#{Preview.Slug}"
                 data:
                   config.json: |
                     {
@@ -44,7 +43,7 @@ process {
                       "mood": "comedy",
                       "icon": "🚧",
                       "color": "#FF6B35",
-                      "watermark": "PREVIEW · PR ##{PR.Number}",
+                      "watermark": "PREVIEW · #{Preview.Slug}",
                       "maintenance": ""
                     }
                 ---
@@ -54,8 +53,7 @@ process {
                   name: randomquotes
                   labels:
                     app: randomquotes
-                    lab.octopus.com/preview-pr: "#{PR.Number}"
-                    lab.octopus.com/preview-branch: "#{PR.Branch | Replace \"/\" \"-\"}"
+                    lab.octopus.com/preview: "#{Preview.Slug}"
                 spec:
                   replicas: 1
                   selector:
@@ -68,7 +66,7 @@ process {
                     spec:
                       containers:
                         - name: randomquotes
-                          image: ghcr.io/vlussenburg/octopus-iac-lab:pr-#{PR.Number}
+                          image: ghcr.io/vlussenburg/octopus-iac-lab:#{Octopus.Release.Number}
                           ports:
                             - containerPort: 80
                           volumeMounts:
@@ -100,7 +98,7 @@ process {
                 spec:
                   ingressClassName: nginx
                   rules:
-                    - host: octopus-randomquotes-preview-pr-#{PR.Number}.localtest.me
+                    - host: octopus-randomquotes-preview-#{Preview.Slug}.localtest.me
                       http:
                         paths:
                           - path: /
@@ -112,7 +110,7 @@ process {
                                   number: 80
                 MANIFESTS
                 echo "Applied. Waiting for Deployment to roll out …"
-                kubectl -n "$NS" rollout status deploy/randomquotes --timeout=120s || echo "(rollout status timed out — check pod events for ImagePullBackOff on pr-#{PR.Number})"
+                kubectl -n "$NS" rollout status deploy/randomquotes --timeout=120s || echo "(rollout status timed out — check pod events for ImagePullBackOff on #{Octopus.Release.Number})"
                 EOT
             }
         }
@@ -131,12 +129,12 @@ process {
                 Octopus.Action.Script.ScriptSource = "Inline"
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT
-                    echo "Preview for PR ##{PR.Number} (branch #{PR.Branch}, head #{PR.HeadSha}) ready."
-                    echo "  URL:       http://octopus-randomquotes-preview-pr-#{PR.Number}.localtest.me"
-                    echo "  Namespace: randomquotes-preview-pr-#{PR.Number}"
-                    echo "  Image:     ghcr.io/vlussenburg/octopus-iac-lab:pr-#{PR.Number}"
+                    echo "Preview #{Preview.Slug} (release #{Octopus.Release.Number}) ready."
+                    echo "  URL:       http://octopus-randomquotes-preview-#{Preview.Slug}.localtest.me"
+                    echo "  Namespace: randomquotes-preview-#{Preview.Slug}"
+                    echo "  Image:     ghcr.io/vlussenburg/octopus-iac-lab:#{Octopus.Release.Number}"
                     echo ""
-                    echo "Argo's parallel preview lives at argo-randomquotes-preview-pr-#{PR.Number}."
+                    echo "Argo's parallel preview lives at argo-randomquotes-preview-#{Preview.Slug}."
                 EOT
             }
         }
