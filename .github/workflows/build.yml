@@ -83,8 +83,14 @@ jobs:
         with:
           context: app
           push: true
+          # Immutable `1.1.<run>-pr<N>` for the release/build-info audit trail,
+          # plus a moving `pr<N>` that always points at this PR's latest build.
+          # The preview env is named `preview-pr<N>` (one per PR, not per build),
+          # and its provisioning runbook pulls the moving `pr<N>` tag — so a new
+          # push to the PR refreshes the same env's image.
           tags: |
             ${{ env.IMAGE }}:${{ steps.version.outputs.pr_tag }}
+            ${{ env.IMAGE }}:pr${{ github.event.number }}
           build-args: VERSION=${{ steps.version.outputs.pr_tag }}
 
   push-build-info:

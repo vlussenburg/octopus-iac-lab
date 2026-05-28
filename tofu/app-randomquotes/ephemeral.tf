@@ -21,23 +21,40 @@ resource "octopusdeploy_parent_environment" "previews" {
 }
 
 # Ephemeral channel: every provisioned preview env is created under this
-# channel and named from the template. #{PR.Number} matches the namespace
-# naming the spin-up-preview runbook already uses
-# (randomquotes-preview-pr-#{PR.Number}), so the existing runbooks slot in as
-# the provisioning/deprovisioning hooks without edits.
+# channel and named from the template. The release number is the pr image tag
+# (`1.1.<run>-pr<N>`); stripping everything up to the last `-` yields `pr<N>`,
+# so the env name is `preview-pr<N>` — stable per PR, not per build. The
+# spin-up-preview runbook parses that name into the namespace + image tag.
+#
+# The `^pr\d+$` version rule is the inverse of the Default channel's `^$`: it
+# claims the pre-release `-pr<N>` images so previews route here, not to Default.
 resource "octopusdeploy_channel" "ephemeral_previews" {
   project_id                          = octopusdeploy_project.randomquotes.id
   name                                = "Ephemeral Previews"
   description                         = "Ephemeral preview environments, one per GitHub PR."
   type                                = "EphemeralEnvironment"
   parent_environment_id               = octopusdeploy_parent_environment.previews.id
-  ephemeral_environment_name_template = "preview-pr-#{PR.Number}"
+  ephemeral_environment_name_template = "preview-#{Octopus.Release.Number | Replace \"^.*-\" \"\"}"
+
+  rule {
+    tag = "^pr\\d+$"
+    action_package {
+      deployment_action = "Deploy Manifests"
+      package_reference = "randomquotes-image"
+    }
+    action_package {
+      deployment_action = "Update Argo CD Application Image Tags"
+      package_reference = "octopus-iac-lab"
+    }
+  }
 }
 
 locals {
-  # Branch globs Octopus watches to auto-provision a preview per PR. Matches
-  # build.yml's pr-<N> image build, which fires on feat/* PRs.
-  ephemeral_git_reference_rules = ["refs/heads/feat/*"]
+  # Empty: previews are provisioned by build.yml's create-ephemeral-release job
+  # (which holds both the PR branch ref and the pr<N> tag), not by Octopus
+  # native branch monitoring. Octopus still runs the provisioning runbook when
+  # the CI-created release lands on the ephemeral channel.
+  ephemeral_git_reference_rules = []
 }
 
 # Branch monitoring is what makes Octopus — not a CI workflow — provision a
