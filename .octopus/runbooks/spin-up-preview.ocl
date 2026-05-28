@@ -1,5 +1,5 @@
 name = "Spin up preview"
-description = "Provisioning hook for native ephemeral preview environments. Deploys randomquotes to namespace randomquotes-preview-<slug> using the release image (e.g. 1.1.150-pr141) and exposes it at http://octopus-randomquotes-preview-<slug>.localtest.me. The script derives slug = the release version's pre-release tag (pr<N>) from Octopus.Release.Number. Untenanted — previews are PR-scoped, not customer-scoped."
+description = "Provisioning hook for native ephemeral preview environments. Deploys randomquotes to namespace randomquotes-preview-<slug> and exposes it at http://octopus-randomquotes-preview-<slug>.localtest.me. A provisioning runbook has no release context, so #{Octopus.Release.Number} is empty here; instead the env name carries the full version (template preview-#{Octopus.Release.Number}) and the script parses Octopus.Environment.Name → image tag + slug. Untenanted — previews are PR-scoped, not customer-scoped."
 default_guided_failure_mode = "EnvironmentDefault"
 multi_tenancy_mode = "Untenanted"
 
@@ -26,9 +26,11 @@ process {
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT
                 set -eu
-                REL="#{Octopus.Release.Number}"
-                SLUG="${REL##*-}"
+                ENV="#{Octopus.Environment.Name}"
+                TAG="${ENV#preview-}"
+                SLUG="${TAG##*-}"
                 NS="randomquotes-preview-$SLUG"
+                echo "Env=$ENV  Tag=$TAG  Slug=$SLUG  Namespace=$NS"
                 echo "Applying preview manifests into namespace $NS …"
                 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
                 kubectl apply -n "$NS" -f - <<MANIFESTS
@@ -68,7 +70,7 @@ process {
                     spec:
                       containers:
                         - name: randomquotes
-                          image: ghcr.io/vlussenburg/octopus-iac-lab:#{Octopus.Release.Number}
+                          image: ghcr.io/vlussenburg/octopus-iac-lab:${TAG}
                           ports:
                             - containerPort: 80
                           volumeMounts:
@@ -112,7 +114,7 @@ process {
                                   number: 80
                 MANIFESTS
                 echo "Applied. Waiting for Deployment to roll out …"
-                kubectl -n "$NS" rollout status deploy/randomquotes --timeout=120s || echo "(rollout status timed out — check pod events for ImagePullBackOff on #{Octopus.Release.Number})"
+                kubectl -n "$NS" rollout status deploy/randomquotes --timeout=120s || echo "(rollout status timed out — check pod events for ImagePullBackOff on ${TAG})"
                 EOT
             }
         }
@@ -131,12 +133,13 @@ process {
                 Octopus.Action.Script.ScriptSource = "Inline"
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT
-                    REL="#{Octopus.Release.Number}"
-                    SLUG="${REL##*-}"
-                    echo "Preview $SLUG (release $REL) ready."
+                    ENV="#{Octopus.Environment.Name}"
+                    TAG="${ENV#preview-}"
+                    SLUG="${TAG##*-}"
+                    echo "Preview $SLUG (image $TAG) ready."
                     echo "  URL:       http://octopus-randomquotes-preview-$SLUG.localtest.me"
                     echo "  Namespace: randomquotes-preview-$SLUG"
-                    echo "  Image:     ghcr.io/vlussenburg/octopus-iac-lab:$REL"
+                    echo "  Image:     ghcr.io/vlussenburg/octopus-iac-lab:$TAG"
                     echo ""
                     echo "Argo's parallel preview lives at argo-randomquotes-preview-$SLUG."
                 EOT
