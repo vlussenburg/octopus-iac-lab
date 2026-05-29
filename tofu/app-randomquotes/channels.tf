@@ -22,6 +22,10 @@ resource "octopusdeploy_channel" "randomquotes_stable" {
       deployment_action = "Deploy Manifests"
       package_reference = "randomquotes-image"
     }
+    action_package {
+      deployment_action = "Update Argo CD Application Image Tags"
+      package_reference = "octopus-iac-lab"
+    }
   }
 }
 
@@ -49,6 +53,7 @@ locals {
     ]
     "demo/process-template" = [
       { deployment_action = "Deploy randomquotes workload-Deploy Manifests", package_reference = "AppImage" },
+      { deployment_action = "Deploy randomquotes workload-Update Argo CD Application Image Tags", package_reference = "AppImage" },
     ]
   }
 }
