@@ -26,16 +26,27 @@ resource "octopusdeploy_channel" "randomquotes_stable" {
 }
 
 locals {
-  # The version rule targets the deploy step's package. Most branches share the
-  # main OCL shape (Deploy Manifests / randomquotes-image); process-template
-  # wraps the deploy in a step template, so its action name + package differ.
+  # The version rule binds to a named deploy step's package — if that step name
+  # doesn't exist in the branch's process, Octopus silently ignores the rule and
+  # the feed trigger lets `-pr<N>` preview images leak onto the demo's stable
+  # channel. Branches that rename/wrap the deploy step must therefore name a step
+  # that actually exists; the rule rejects the whole release when that step's
+  # package fails `^$`, so one real image step per branch is enough.
   branch_demo_channel_rule_default = {
     deployment_action = "Deploy Manifests"
     package_reference = "randomquotes-image"
   }
   branch_demo_channel_rule_override = {
+    "demo/canary" = {
+      deployment_action = "Deploy Manifests (Dev Plain)"
+      package_reference = "randomquotes-image"
+    }
+    "demo/blue-green" = {
+      deployment_action = "Deploy (Rolling)"
+      package_reference = "randomquotes-image"
+    }
     "demo/process-template" = {
-      deployment_action = "Deploy randomquotes workload"
+      deployment_action = "Deploy randomquotes workload-Deploy Manifests"
       package_reference = "AppImage"
     }
   }
