@@ -1,3 +1,11 @@
+variable "Project.WorkerPool" {
+    type = "WorkerPool"
+
+    value "prod-pool" {
+        environment = ["production"]
+    }
+}
+
 variable "Replicas" {
     value "3" {
         environment = ["production"]
@@ -137,16 +145,5 @@ variable "Maintenance.Message" {
             description = "Customer-facing message shown on the maintenance overlay. Set by the maintenance-on runbook; deploys leave it empty."
             label = "Maintenance Message"
         }
-    }
-}
-
-variable "Project.WorkerPool" {
-    type = "WorkerPool"
-
-    value "hosted-ubuntu" {}
-
-    value "prod-pool" {
-        description = ""
-        environment = ["production"]
     }
 }
