@@ -20,3 +20,9 @@ variable "space_description" {
   description = "Description set on the Space."
   default     = "Created by tofu/space — destroy nukes everything in it."
 }
+
+variable "space_is_default" {
+  type        = bool
+  description = "Make this the post-login landing Space. SaaS Octopus Cloud ships a managed Default Space this resource cannot demote, so SaaS sets this false via OCTOPUS_SPACE_IS_DEFAULT."
+  default     = true
+}

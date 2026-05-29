@@ -15,8 +15,9 @@ resource "octopusdeploy_space" "this" {
   description           = var.space_description
   # Make IaC Sandbox the post-login landing space — otherwise non-admin
   # users (dev / prod-deployer) land in the empty Default space and see
-  # the "Deploy your first application" welcome screen.
-  is_default            = true
+  # the "Deploy your first application" welcome screen. SaaS overrides to
+  # false: Octopus Cloud's managed Default Space can't be demoted from here.
+  is_default            = var.space_is_default
   is_task_queue_stopped = false
   space_managers_teams  = ["teams-administrators", "teams-managers"]
 }
