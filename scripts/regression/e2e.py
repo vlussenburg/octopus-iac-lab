@@ -94,15 +94,31 @@ def build_stable():
     if n != 1:
         raise SystemExit("Could not find the <title> marker in " + APP_INDEX)
     open(APP_INDEX, "w").write(new_text)
+
+    def latest_run():
+        out = sh(["gh", "run", "list", "--workflow", "build.yml", "--branch", "main",
+                  "--limit", "1", "--json", "databaseId,number", "-q",
+                  ".[0].databaseId,.[0].number"], capture=True)
+        ids = out.splitlines()
+        return (ids[0], ids[1]) if len(ids) == 2 else (None, None)
+
+    before_id, _ = latest_run()
     sh(["git", "add", "app/index.html"])
     sh(["git", "commit", "-m", "Regression: trigger stable build ({})".format(marker)])
     sh(["git", "push", "origin", "main"])
 
-    sh(["gh", "run", "watch", "--exit-status",
-        sh(["gh", "run", "list", "--workflow", "build.yml", "--branch", "main",
-            "--limit", "1", "--json", "databaseId", "-q", ".[0].databaseId"], capture=True)])
-    run_number = sh(["gh", "run", "list", "--workflow", "build.yml", "--branch", "main",
-                     "--limit", "1", "--json", "number", "-q", ".[0].number"], capture=True)
+    # Wait for the push's run to register before watching, so we don't latch
+    # onto the previous (already-finished) build.
+    run_id, run_number = None, None
+    for _ in range(30):
+        rid, rnum = latest_run()
+        if rid and rid != before_id:
+            run_id, run_number = rid, rnum
+            break
+        time.sleep(5)
+    if not run_id:
+        raise SystemExit("New build.yml run did not appear after push.")
+    sh(["gh", "run", "watch", "--exit-status", run_id])
     version = "1.1.{}".format(run_number)
     print("Stable build produced {}".format(version))
 
