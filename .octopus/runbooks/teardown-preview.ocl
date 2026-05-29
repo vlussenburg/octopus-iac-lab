@@ -28,7 +28,7 @@ process {
                     set -eu
                     ENV="#{Octopus.Environment.Name}"
                     SLUG="${ENV##*-}"
-                    NS="randomquotes-preview-$SLUG"
+                    NS="randomquotes-#{Source}-preview-$SLUG"
                     echo "Deleting namespace $NS …"
                     kubectl delete namespace "$NS" --ignore-not-found --wait=true
                     echo "Preview $SLUG torn down."

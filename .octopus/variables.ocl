@@ -118,7 +118,7 @@ variable "Branding.Watermark" {
 variable "K8s.Namespace" {
     value "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}" {}
 
-    value "randomquotes-#{Octopus.Environment.Name}" {
+    value "randomquotes-#{Source}-#{Octopus.Environment.Name}" {
         channel = ["ephemeral-previews"]
     }
 }
@@ -126,7 +126,7 @@ variable "K8s.Namespace" {
 variable "App.Host" {
     value "#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.localtest.me" {}
 
-    value "octopus-randomquotes-#{Octopus.Environment.Name}.localtest.me" {
+    value "octopus-randomquotes-#{Source}-#{Octopus.Environment.Name}.localtest.me" {
         channel = ["ephemeral-previews"]
     }
 }
