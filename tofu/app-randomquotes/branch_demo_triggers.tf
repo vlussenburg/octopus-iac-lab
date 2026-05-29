@@ -3,7 +3,7 @@
 # on VCS projects, so we use a project trigger with FeedFilter + CreateRelease
 # instead — same end state, supported on CaC projects.
 #
-# Each project's Default channel (channels.tf) carries the stable-only version
+# Each project's Stable channel (channels.tf) carries the stable-only version
 # rule, so these triggers ignore `-pr<N>` preview images.
 
 # Per-branch overrides for the trigger's action slug + package reference.
@@ -32,7 +32,7 @@ resource "octopusdeploy_external_feed_create_release_trigger" "branch_demo" {
   name       = "Auto-release on new randomquotes-image"
   space_id   = data.terraform_remote_state.space.outputs.space_id
   project_id = octopusdeploy_project.branch_demo[each.key].id
-  channel_id = octopusdeploy_channel.branch_demo_default[each.key].id
+  channel_id = octopusdeploy_channel.branch_demo_stable[each.key].id
 
   package {
     deployment_action_slug = lookup(local.branch_demo_trigger_override, each.key, local.branch_demo_trigger_default).deployment_action_slug

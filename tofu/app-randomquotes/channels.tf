@@ -1,15 +1,18 @@
-# Explicit Default channels, imported from the ones Octopus auto-creates per
-# project, so the stable-only version rule is declarative rather than a runtime
-# PATCH.
+# Our own stable channel, created (not adopted) so the config bootstraps any
+# instance with a plain `apply` — no per-instance channel IDs, no import step.
+# Octopus auto-creates a "Default" channel per project and that channel owns the
+# slug "default" from birth; a second channel can't reuse the name or slug, so
+# instead we create "Stable" (slug "stable"), mark it default, and leave the
+# auto-created "Default" orphaned (non-default, unused). The deployment OCL
+# scopes its steps to channel "stable" to match.
 #
-# The rule (pre-release tag `^$`) is what keeps `-pr<N>` preview images off the
-# Default channel: the GHCR feed trigger only mints a Default release for
-# versions with an empty pre-release tag (stable `1.1.<run>`). PR images carry a
-# `-pr<N>` tag, fail the rule, and so route solely to each project's own
-# Ephemeral Previews channel instead of fanning out to every project's Dev.
+# The rule (pre-release tag `^$`) keeps `-pr<N>` preview images off the stable
+# channel: the GHCR feed trigger only mints a stable release for versions with
+# an empty pre-release tag (`1.1.<run>`). PR images carry a `-pr<N>` tag, fail
+# the rule, and route solely to each project's own Ephemeral Previews channel.
 
-resource "octopusdeploy_channel" "randomquotes_default" {
-  name       = "Default"
+resource "octopusdeploy_channel" "randomquotes_stable" {
+  name       = "Stable"
   project_id = octopusdeploy_project.randomquotes.id
   is_default = true
 
@@ -38,10 +41,10 @@ locals {
   }
 }
 
-resource "octopusdeploy_channel" "branch_demo_default" {
+resource "octopusdeploy_channel" "branch_demo_stable" {
   for_each = var.demo_branches
 
-  name       = "Default"
+  name       = "Stable"
   project_id = octopusdeploy_project.branch_demo[each.key].id
   is_default = true
 
@@ -53,11 +56,3 @@ resource "octopusdeploy_channel" "branch_demo_default" {
     }
   }
 }
-
-# These adopt the Default channel Octopus auto-creates per project. The channel
-# ID is assigned per-instance, so adoption is a one-time `tofu import` step at
-# instance bootstrap (the auto-created channel can't be plan-time resolved into
-# an import block — the octopusdeploy provider only reads the channels data
-# source at apply). No IDs are committed: once imported, this config is a no-op.
-#   tofu import 'octopusdeploy_channel.randomquotes_default' <defaultChannelId>
-#   tofu import 'octopusdeploy_channel.branch_demo_default["demo/<slug>"]' <id>
