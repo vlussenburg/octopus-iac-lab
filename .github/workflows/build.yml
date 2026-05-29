@@ -9,9 +9,9 @@ name: CI / Build Image
 # create-ephemeral-release job. A feed trigger can't provision a native
 # ephemeral env: it only creates releases from the default branch (main), so it
 # never carries the PR branch ref the provisioning runbook needs. Only CI holds
-# BOTH the PR branch ref AND the pr<N> image tag, so CI creates the release from
+# BOTH the PR branch ref AND the per-PR image tag, so CI creates the release from
 # the PR branch into the Ephemeral Previews channel; Octopus then provisions the
-# preview env (spin-up-preview runbook) and deploys.
+# preview env (spin-up-preview runbook) and deploys it (deployment process).
 #
 # (Note: Octopus's `Octopus.ArgoCDUpdateImageTags` step writes image tags
 # into the helm chart values under `gitops/`, which sits outside this
@@ -83,11 +83,10 @@ jobs:
         with:
           context: app
           push: true
-          # Immutable `1.1.<run>-pr<N>` for the release/build-info audit trail,
-          # plus a moving `pr<N>` that always points at this PR's latest build.
-          # The preview env is named `preview-pr<N>` (one per PR, not per build),
-          # and its provisioning runbook pulls the moving `pr<N>` tag — so a new
-          # push to the PR refreshes the same env's image.
+          # Immutable `1.1.<run>-pr<N>` is the version the Octopus ephemeral
+          # release pins, so its deployment process deploys this exact build
+          # (a moving tag wouldn't re-pull under IfNotPresent). The moving
+          # `pr<N>` is what the Argo ApplicationSet preview tracks instead.
           tags: |
             ${{ env.IMAGE }}:${{ steps.version.outputs.pr_tag }}
             ${{ env.IMAGE }}:pr${{ github.event.number }}
@@ -142,10 +141,11 @@ jobs:
 
   create-ephemeral-release:
     # PR-only: create the randomquotes release in the Ephemeral Previews channel
-    # FROM THE PR BRANCH. The git_ref is what gives Octopus the branch context to
-    # provision a preview env and read the (branch's) spin-up-preview runbook;
-    # release_number/package_version = the pr<N> image tag so the runbook's
-    # #{Octopus.Release.Number} resolves to a real image and the env slug.
+    # FROM THE PR BRANCH. git_ref gives Octopus the branch context to provision
+    # the preview env and read the branch's deployment process + runbook.
+    # release_number/package_version pin the immutable `1.1.<run>-pr<N>` tag: the
+    # env-name template derives the `preview-pr<N>` slug from it, and the
+    # deployment process deploys that exact image.
     # Gated on feat/* to match the channel's GitReferenceRules.
     #
     # LOCAL-ONLY, unlike push-build-info's local+SaaS matrix: the ephemeral

@@ -24,7 +24,8 @@ resource "octopusdeploy_parent_environment" "previews" {
 # channel and named from the template. The release number is the pr image tag
 # (`1.1.<run>-pr<N>`); stripping everything up to the last `-` yields `pr<N>`,
 # so the env name is `preview-pr<N>` — stable per PR, not per build. The
-# spin-up-preview runbook parses that name into the namespace + image tag.
+# spin-up-preview runbook derives the preview namespace from that name; the
+# release's deployment process deploys the pinned `1.1.<run>-pr<N>` image into it.
 #
 # The `^pr\d+$` version rule is the inverse of the Default channel's `^$`: it
 # claims the pre-release `-pr<N>` images so previews route here, not to Default.
