@@ -36,11 +36,13 @@ process {
 
     step "announce-url" {
         name = "Announce preview URL"
+        properties = {
+            Octopus.Action.TargetRoles = "k8s"
+        }
 
         action {
-            action_type = "Octopus.Script"
+            action_type = "Octopus.KubernetesRunScript"
             properties = {
-                Octopus.Action.RunOnServer = "true"
                 Octopus.Action.Script.ScriptSource = "Inline"
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT

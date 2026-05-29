@@ -6,3 +6,10 @@ output "project_url" {
 output "project_id" {
   value = octopusdeploy_project.randomquotes.id
 }
+
+# Consumed by tofu/k8s-agent/ to scope the deployment target to the Previews
+# parent env — auto-provisioned ephemeral children only inherit targets scoped
+# to their parent, and parent envs aren't resolvable by name via the API.
+output "previews_parent_environment_id" {
+  value = octopusdeploy_parent_environment.previews.id
+}
