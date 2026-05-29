@@ -5,4 +5,4 @@
 # overwrite. Leaf Apps reference this via spec.source.helm.valueFiles.
 image:
   repository: vlussenburg/octopus-iac-lab
-  tag: "1.1.168-pr145"
+  tag: "1.1.169"
