@@ -54,37 +54,10 @@ resource "octopusdeploy_channel" "branch_demo_default" {
   }
 }
 
-# Adopt the auto-created Default channels rather than creating new ones.
-import {
-  to = octopusdeploy_channel.randomquotes_default
-  id = "Channels-4"
-}
-
-import {
-  to = octopusdeploy_channel.branch_demo_default["demo/blue-green"]
-  id = "Channels-81"
-}
-import {
-  to = octopusdeploy_channel.branch_demo_default["demo/bg-preview"]
-  id = "Channels-20"
-}
-import {
-  to = octopusdeploy_channel.branch_demo_default["demo/canary"]
-  id = "Channels-45"
-}
-import {
-  to = octopusdeploy_channel.branch_demo_default["demo/platform-hub-opa"]
-  id = "Channels-44"
-}
-import {
-  to = octopusdeploy_channel.branch_demo_default["demo/process-template"]
-  id = "Channels-21"
-}
-import {
-  to = octopusdeploy_channel.branch_demo_default["demo/servicenow-cr-gate"]
-  id = "Channels-41"
-}
-import {
-  to = octopusdeploy_channel.branch_demo_default["demo/smoke-step-template"]
-  id = "Channels-42"
-}
+# These adopt the Default channel Octopus auto-creates per project. The channel
+# ID is assigned per-instance, so adoption is a one-time `tofu import` step at
+# instance bootstrap (the auto-created channel can't be plan-time resolved into
+# an import block — the octopusdeploy provider only reads the channels data
+# source at apply). No IDs are committed: once imported, this config is a no-op.
+#   tofu import 'octopusdeploy_channel.randomquotes_default' <defaultChannelId>
+#   tofu import 'octopusdeploy_channel.branch_demo_default["demo/<slug>"]' <id>
