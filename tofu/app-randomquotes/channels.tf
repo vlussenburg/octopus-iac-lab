@@ -26,29 +26,30 @@ resource "octopusdeploy_channel" "randomquotes_stable" {
 }
 
 locals {
-  # The version rule binds to a named deploy step's package — if that step name
-  # doesn't exist in the branch's process, Octopus silently ignores the rule and
-  # the feed trigger lets `-pr<N>` preview images leak onto the demo's stable
-  # channel. Branches that rename/wrap the deploy step must therefore name a step
-  # that actually exists; the rule rejects the whole release when that step's
-  # package fails `^$`, so one real image step per branch is enough.
-  branch_demo_channel_rule_default = {
-    deployment_action = "Deploy Manifests"
-    package_reference = "randomquotes-image"
-  }
+  # The `^$` rule constrains only the action+package references it names. ANY
+  # image-bearing action it omits stays unconstrained, so the feed trigger fills
+  # that one from the newest tag (a `-pr<N>` preview) and the release lands on the
+  # stable channel anyway. So every action that consumes the image must be listed
+  # — branches with a single deploy action need one entry; branches that deploy
+  # the image from several actions (e.g. two delivery strategies plus an Argo tag
+  # update) need all of them, or the uncovered action leaks the preview.
+  branch_demo_channel_rule_default = [
+    { deployment_action = "Deploy Manifests", package_reference = "randomquotes-image" },
+  ]
   branch_demo_channel_rule_override = {
-    "demo/canary" = {
-      deployment_action = "Deploy Manifests (Dev Plain)"
-      package_reference = "randomquotes-image"
-    }
-    "demo/blue-green" = {
-      deployment_action = "Deploy (Rolling)"
-      package_reference = "randomquotes-image"
-    }
-    "demo/process-template" = {
-      deployment_action = "Deploy randomquotes workload-Deploy Manifests"
-      package_reference = "AppImage"
-    }
+    "demo/canary" = [
+      { deployment_action = "Deploy Manifests (Dev Plain)", package_reference = "randomquotes-image" },
+      { deployment_action = "Deploy Manifests (Production Canary)", package_reference = "randomquotes-image" },
+      { deployment_action = "Update Argo CD Application Image Tags", package_reference = "octopus-iac-lab" },
+    ]
+    "demo/blue-green" = [
+      { deployment_action = "Deploy (Rolling)", package_reference = "randomquotes-image" },
+      { deployment_action = "Deploy (Blue/Green)", package_reference = "randomquotes-image" },
+      { deployment_action = "Update Argo CD Application Image Tags", package_reference = "octopus-iac-lab" },
+    ]
+    "demo/process-template" = [
+      { deployment_action = "Deploy randomquotes workload-Deploy Manifests", package_reference = "AppImage" },
+    ]
   }
 }
 
@@ -61,9 +62,12 @@ resource "octopusdeploy_channel" "branch_demo_stable" {
 
   rule {
     tag = "^$"
-    action_package {
-      deployment_action = lookup(local.branch_demo_channel_rule_override, each.key, local.branch_demo_channel_rule_default).deployment_action
-      package_reference = lookup(local.branch_demo_channel_rule_override, each.key, local.branch_demo_channel_rule_default).package_reference
+    dynamic "action_package" {
+      for_each = lookup(local.branch_demo_channel_rule_override, each.key, local.branch_demo_channel_rule_default)
+      content {
+        deployment_action = action_package.value.deployment_action
+        package_reference = action_package.value.package_reference
+      }
     }
   }
 }
