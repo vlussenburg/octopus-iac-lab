@@ -55,3 +55,13 @@ data "terraform_remote_state" "control_plane" {
     path = "../control-plane/terraform.tfstate"
   }
 }
+
+# app-randomquotes/ owns the Previews parent environment. The agent target must
+# be scoped to it (see agent_previews_scope.tf). app applies before agent in
+# `make apply`, so this state exists on a fresh nuke by the time agent runs.
+data "terraform_remote_state" "app" {
+  backend = "local"
+  config = {
+    path = "../app-randomquotes/terraform.tfstate"
+  }
+}
