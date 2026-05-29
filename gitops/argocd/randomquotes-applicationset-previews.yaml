@@ -49,7 +49,7 @@ spec:
         lab.octopus.com/pr: '{{ .number }}'
         lab.octopus.com/branch: '{{ .branch_slug }}'
     spec:
-      project: default
+      project: local
       source:
         repoURL: https://github.com/vlussenburg/octopus-iac-lab
         # Deploy what's IN the PR's branch, not main. Edits propagate

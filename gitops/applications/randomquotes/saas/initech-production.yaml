@@ -22,7 +22,7 @@ metadata:
     lab.octopus.com/source: saas
     lab.octopus.com/tenant: initech
 spec:
-  project: default
+  project: saas
   source:
     repoURL: https://github.com/vlussenburg/octopus-iac-lab
     path: gitops/charts/randomquotes

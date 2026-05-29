@@ -22,7 +22,7 @@ metadata:
     lab.octopus.com/source: local
     lab.octopus.com/tenant: globex
 spec:
-  project: default
+  project: local
   source:
     repoURL: https://github.com/vlussenburg/octopus-iac-lab
     path: gitops/charts/randomquotes
