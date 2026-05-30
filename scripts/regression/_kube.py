@@ -59,3 +59,20 @@ def pr_number_in(name):
     """The PR number a preview resource encodes (pr-145 / pr145), or None."""
     m = PR_IN_NAME.search(name)
     return int(m.group(1)) if m else None
+
+
+def namespace_exists(name):
+    """True/False if namespace `name` exists, or None if kubectl is unreachable."""
+    out = _run(["kubectl", "get", "ns", name, "--no-headers",
+                "--ignore-not-found", "-o", "name"])
+    if out is None:
+        return None
+    return bool(out.strip())
+
+
+def argo_app_names():
+    """Set of Argo Application names, or None if unreachable."""
+    apps = argo_applications()
+    if apps is None:
+        return None
+    return {a["name"] for a in apps}

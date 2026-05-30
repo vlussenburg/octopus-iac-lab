@@ -12,6 +12,9 @@ Subcommands:
   deploy-prod VERSION   Deploy stable VERSION to Production/acme-corp for every
                         demo project on both instances; wait; assert Success.
                         (This is the Production coverage the Dev-only loop lacked.)
+  decommission          Open an ephemeral preview PR, confirm Argo provisions
+                        the app + namespace, close the PR, assert Argo prunes
+                        BOTH (the managed-namespace fix). Needs a live cluster.
   check                 Run the read-only checker.
   all                   build-stable -> deploy-prod <that version> -> check.
 
@@ -21,6 +24,7 @@ import subprocess
 import sys
 import time
 
+import _kube as kube
 import _octo as octo
 
 MAIN_WORKTREE = octo.repo_root()
@@ -28,6 +32,9 @@ APP_INDEX = MAIN_WORKTREE + "/app/index.html"
 POLL_SECONDS = 20
 DEV_TIMEOUT = 900
 TASK_TIMEOUT = 600
+# Argo polls GitHub for PR open/close on a 60 s requeue; give creation and
+# pruning generous headroom over that.
+PREVIEW_TIMEOUT = 600
 
 
 def sh(cmd, cwd=MAIN_WORKTREE, check=True, capture=False):
@@ -170,6 +177,101 @@ def deploy_prod(version):
     return 0
 
 
+def _argo_app(pr):
+    return "randomquotes-preview-pr-{}".format(pr)
+
+
+def _argo_ns(pr):
+    return "argo-randomquotes-preview-pr-{}".format(pr)
+
+
+def _wait_argo_preview(pr, want_present, timeout):
+    """Poll until the PR's Argo app + namespace are both present/absent.
+
+    want_present=True for provisioning, False for deprovisioning. Returns True
+    on convergence, False on timeout.
+    """
+    app, ns = _argo_app(pr), _argo_ns(pr)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        names = kube.argo_app_names()
+        ns_here = kube.namespace_exists(ns)
+        if names is None or ns_here is None:
+            raise SystemExit("cluster/kubectl became unreachable mid-test")
+        app_here = app in names
+        verb = "present" if want_present else "gone"
+        print("--- waiting for preview PR #{} {} --- app={} ns={}".format(
+            pr, verb, app_here, ns_here))
+        if app_here == want_present and ns_here == want_present:
+            return True
+        time.sleep(POLL_SECONDS)
+    return False
+
+
+def decommission():
+    """Open an ephemeral preview PR, confirm Argo provisions it, close the PR,
+    and assert Argo prunes BOTH the Application and its namespace.
+
+    This is the regression for the managed-namespace fix: CreateNamespace=true
+    used to leave the namespace as an untracked orphan after prune. With the
+    namespace rendered as a tracked chart resource it goes in the finalizer
+    cascade, so PR close removes it too.
+
+    Octopus's own on-close teardown is intentionally not asserted here: the
+    ephemeral channel has no GitReferenceRules, so Octopus reaps previews on the
+    24 h parent-environment timer, not on PR close. The Octopus namespace-
+    derivation fix is guarded passively by check.py invariant 5.
+    """
+    if kube.argo_app_names() is None:
+        raise SystemExit("decommission needs a reachable cluster (kubectl) — none found")
+
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    branch = "feat/regression-decomm-{}".format(ts)
+    wt = "/tmp/decomm-{}".format(ts)
+    pr = None
+    try:
+        sh(["git", "fetch", "origin", "main"])
+        sh(["git", "worktree", "add", "-b", branch, wt, "origin/main"])
+        index = wt + "/app/index.html"
+        text = open(index).read()
+        marker = "decomm {}".format(ts)
+        import re
+        new_text, n = re.subn(r"<title>Random Quotes[^<]*</title>",
+                              "<title>Random Quotes — {}</title>".format(marker), text, count=1)
+        if n != 1:
+            raise SystemExit("Could not find the <title> marker in " + index)
+        open(index, "w").write(new_text)
+        sh(["git", "add", "app/index.html"], cwd=wt)
+        sh(["git", "commit", "-m", "Regression: ephemeral preview decommission ({})".format(ts)], cwd=wt)
+        sh(["git", "push", "-u", "origin", branch], cwd=wt)
+        pr = sh(["gh", "pr", "create", "--head", branch, "--base", "main",
+                 "--title", "Regression: preview decommission {}".format(ts),
+                 "--body", "Automated decommission regression. Safe to close."],
+                cwd=wt, capture=True)
+        pr_num = sh(["gh", "pr", "view", branch, "--json", "number", "-q", ".number"],
+                    cwd=wt, capture=True)
+        print("Opened PR #{} ({})".format(pr_num, pr))
+
+        if not _wait_argo_preview(pr_num, want_present=True, timeout=PREVIEW_TIMEOUT):
+            raise SystemExit("preview PR #{} never provisioned in Argo".format(pr_num))
+        print("Preview PR #{} provisioned (app + namespace present).".format(pr_num))
+
+        sh(["gh", "pr", "close", branch], cwd=wt)
+        print("Closed PR #{}; waiting for Argo to prune…".format(pr_num))
+        if not _wait_argo_preview(pr_num, want_present=False, timeout=PREVIEW_TIMEOUT):
+            print("\nDECOMMISSION FAILED: app or namespace survived PR close.")
+            return 1
+        print("\nPreview PR #{} fully decommissioned (app AND namespace pruned).".format(pr_num))
+        return 0
+    finally:
+        if pr is not None:
+            subprocess.run(["gh", "pr", "close", branch], cwd=wt)
+        subprocess.run(["git", "worktree", "remove", "--force", wt])
+        subprocess.run(["git", "push", "origin", "--delete", branch],
+                       cwd=MAIN_WORKTREE)
+        subprocess.run(["git", "branch", "-D", branch], cwd=MAIN_WORKTREE)
+
+
 def run_check():
     return subprocess.call([sys.executable, MAIN_WORKTREE + "/scripts/regression/check.py"])
 
@@ -187,6 +289,8 @@ def main():
         if len(args) < 2:
             raise SystemExit("deploy-prod needs a VERSION, e.g. deploy-prod 1.1.179")
         return deploy_prod(args[1])
+    if cmd == "decommission":
+        return decommission()
     if cmd == "check":
         return run_check()
     if cmd == "all":

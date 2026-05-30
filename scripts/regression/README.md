@@ -51,6 +51,7 @@ Exits non-zero (and prints a punch list) on any violation.
 ```bash
 python3 scripts/regression/e2e.py build-stable        # push main, wait for Dev convergence -> prints 1.1.<run>
 python3 scripts/regression/e2e.py deploy-prod 1.1.179 # deploy a stable version to Production/acme-corp everywhere
+python3 scripts/regression/e2e.py decommission        # open a preview PR, then close it and assert Argo prunes app + namespace
 python3 scripts/regression/e2e.py check               # == check.py
 python3 scripts/regression/e2e.py all                 # build-stable -> deploy-prod -> check
 ```
@@ -65,3 +66,15 @@ if any deploy doesn't reach `Success`.
 Preview-leak verification is left to `check.py` invariant 1: trigger a PR build
 out of band (push to a `feat/*` branch), then run the checker — Dev must remain
 on stable.
+
+`decommission` is the active counterpart to check.py invariant 5. It opens a
+throwaway `feat/regression-decomm-*` PR, waits until Argo's PullRequest
+generator materialises the preview (`randomquotes-preview-pr-<N>` Application +
+`argo-randomquotes-preview-pr-<N>` namespace), closes the PR, and asserts Argo
+prunes **both** within the timeout. The namespace half is the regression that
+matters: `CreateNamespace=true` used to leave the namespace as an untracked
+orphan after prune; rendering it as a tracked chart resource puts it in the
+finalizer cascade. Needs a reachable cluster; cleans up the branch/PR/worktree
+in a `finally`. Octopus's own teardown is not asserted here — its ephemeral
+channel has no `GitReferenceRules`, so Octopus reaps previews on the parent
+environment's 24 h timer, not on PR close.
