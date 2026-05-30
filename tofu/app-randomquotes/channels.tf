@@ -76,3 +76,38 @@ resource "octopusdeploy_channel" "branch_demo_stable" {
     }
   }
 }
+
+# Demo branch OCL references channel "ephemeral-previews" exactly like the main
+# randomquotes OCL, but only the main project got an ephemeral channel
+# (ephemeral.tf) — leaving the slug unresolvable on every per-branch demo
+# project. Mirror it per branch, reusing the same image-bearing action map as
+# the stable channel so the `^pr<N>` rule covers the same actions.
+#
+# This channel exists ONLY so the slug resolves — it must never provision a
+# preview env (the feat/* preview demo runs on the main randomquotes project
+# alone). The provider defaults EphemeralEnvironment channels to
+# AutomaticEphemeralEnvironmentDeployments=true, which we deliberately leave on:
+# it's an inert footgun here because demo projects have no feed/auto-release
+# trigger pointing at this channel and build.yml's create-ephemeral-release is
+# pinned to project randomquotes — so no release ever reaches it to act on.
+resource "octopusdeploy_channel" "branch_demo_ephemeral_previews" {
+  for_each = var.demo_branches
+
+  project_id                          = octopusdeploy_project.branch_demo[each.key].id
+  name                                = "Ephemeral Previews"
+  description                         = "Ephemeral preview environments, one per GitHub PR."
+  type                                = "EphemeralEnvironment"
+  parent_environment_id               = octopusdeploy_parent_environment.previews.id
+  ephemeral_environment_name_template = "preview-#{Octopus.Release.Number | Replace \"^.*-\" \"\"}"
+
+  rule {
+    tag = "^pr\\d+$"
+    dynamic "action_package" {
+      for_each = lookup(local.branch_demo_channel_rule_override, each.key, local.branch_demo_channel_rule_default)
+      content {
+        deployment_action = action_package.value.deployment_action
+        package_reference = action_package.value.package_reference
+      }
+    }
+  }
+}

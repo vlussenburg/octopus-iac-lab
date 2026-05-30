@@ -17,6 +17,10 @@ Invariants:
                 that linger in the per-branch values files.
   5. DECOMM   - no preview namespace survives for a PR that is closed on GitHub
                 (decommission leftover).
+  6. SLUG     - every demo project has the 'Ephemeral Previews' channel, so the
+                OCL `ephemeral-previews` slug resolves. Guards against the
+                surgical-rebuild propagating main's slug onto a branch whose
+                project lacks the channel (the unknown-slug warning at apply).
 
 Invariants 4 & 5 need a reachable cluster (kubectl) and, for 5, gh; when those
 are unavailable they SKIP rather than fail, so the checker still runs in CI.
@@ -64,6 +68,15 @@ def check_instance(inst):
             print("  [rules] {}: project not found, skipping".format(pname))
             continue
         channels = inst.api("/projects/" + proj["Id"] + "/channels")["Items"]
+
+        # Invariant 6: the ephemeral channel must exist so the OCL slug resolves.
+        if not any(c["Name"] == octo.EPHEMERAL_CHANNEL for c in channels):
+            failures.append("{}/{}: no '{}' channel — OCL slug 'ephemeral-previews' unresolvable".format(
+                inst.label, pname, octo.EPHEMERAL_CHANNEL))
+            print("  [slug] {}: '{}' channel MISSING".format(pname, octo.EPHEMERAL_CHANNEL))
+        else:
+            print("  [slug] {}: '{}' channel present".format(pname, octo.EPHEMERAL_CHANNEL))
+
         chan = next((c for c in channels if c["Name"] == octo.STABLE_CHANNEL), None)
         if not chan:
             failures.append("{}/{}: no '{}' channel".format(inst.label, pname, octo.STABLE_CHANNEL))

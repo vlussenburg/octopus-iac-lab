@@ -21,6 +21,7 @@ DEMO_PROJECTS = [
 
 STABLE_CHANNEL = "Stable"
 STABLE_TAG = "^$"  # empty pre-release == stable-only; a package covered by this can't take a -pr image
+EPHEMERAL_CHANNEL = "Ephemeral Previews"  # OCL references slug "ephemeral-previews"; must exist on every demo project
 TENANT = "acme-corp"
 DEMO_SPACE_NAME = "IaC Sandbox"  # same name on both instances; ID differs, so resolve by name
 
