@@ -11,12 +11,22 @@ Invariants:
   3. RULES    - every image-bearing action in each demo project's release is
                 covered by a Stable-channel rule that pins to stable (tag ^$),
                 so the feed trigger can't backfill it with a -pr image.
+  4. ARGO     - no non-preview demo Argo Application is actually serving a -pr
+                image. Invariant 1 reads Octopus's dashboard; this reads what
+                Argo deployed from the gitops repo, catching stale -pr tags
+                that linger in the per-branch values files.
+  5. DECOMM   - no preview namespace survives for a PR that is closed on GitHub
+                (decommission leftover).
+
+Invariants 4 & 5 need a reachable cluster (kubectl) and, for 5, gh; when those
+are unavailable they SKIP rather than fail, so the checker still runs in CI.
 
 Usage:
   python3 check.py [--env /path/to/.env]
 """
 import sys
 
+import _kube as kube
 import _octo as octo
 
 
@@ -81,6 +91,52 @@ def check_instance(inst):
     return failures
 
 
+def check_argo():
+    """Invariants 4 & 5: what Argo actually deployed, and orphaned previews.
+
+    Cluster-wide (both instances share one cluster). SKIPs cleanly when the
+    cluster / gh is unreachable so the checker stays CI-safe.
+    """
+    failures = []
+    print("\n=== ArgoCD (cluster-wide) ===")
+
+    apps = kube.argo_applications()
+    if apps is None:
+        print("  [argo] kubectl unavailable or cluster unreachable — SKIPPED")
+        return failures
+
+    # Invariant 4: non-preview demo apps must not serve a -pr image.
+    demo_apps = [a for a in apps
+                 if "randomquotes" in a["name"] and "preview" not in a["name"]]
+    leaked = 0
+    for app in sorted(demo_apps, key=lambda a: a["name"]):
+        pr_imgs = [img for img in app["images"] if "-pr" in img]
+        if pr_imgs:
+            leaked += 1
+            failures.append("argo/{} deploys preview image {} (LEAK)".format(
+                app["name"], ", ".join(pr_imgs)))
+            print("  [argo] {:52} {}  <-- LEAK".format(app["name"], ", ".join(pr_imgs)))
+    print("  [argo] {} demo app(s) checked, {} serving a -pr image".format(
+        len(demo_apps), leaked))
+
+    # Invariant 5: preview namespaces for closed PRs are decommission leftovers.
+    ns = kube.preview_namespaces()
+    open_prs = kube.open_pr_numbers()
+    if ns is None or open_prs is None:
+        print("  [decomm] kubectl or gh unavailable — preview-orphan check SKIPPED")
+        return failures
+    orphans = 0
+    for name in sorted(ns):
+        pr = kube.pr_number_in(name)
+        if pr is not None and pr not in open_prs:
+            orphans += 1
+            failures.append("namespace {} belongs to closed PR #{} (decommission leftover)".format(
+                name, pr))
+            print("  [decomm] {:52} PR #{} CLOSED  <-- ORPHAN".format(name, pr))
+    print("  [decomm] {} preview namespace(s) for closed PRs".format(orphans))
+    return failures
+
+
 def main():
     env_path = None
     args = sys.argv[1:]
@@ -91,6 +147,7 @@ def main():
     all_failures = []
     for inst in octo.instances(env):
         all_failures.extend(check_instance(inst))
+    all_failures.extend(check_argo())
 
     print("\n" + "=" * 60)
     if all_failures:

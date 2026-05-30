@@ -22,7 +22,7 @@ python3 scripts/regression/check.py            # uses ./.env
 python3 scripts/regression/check.py --env /path/to/.env
 ```
 
-Invariants, per demo project, on both instances:
+Invariants 1–3, per demo project, on both instances:
 
 1. **No leak** — no Dev runs a `-pr` version.
 2. **Prod OK** — no Production deployment is in a `Failed` state.
@@ -30,6 +30,19 @@ Invariants, per demo project, on both instances:
    pinned to stable (`tag ^$`), so the feed trigger can't backfill it with a
    `-pr` image. This catches latent leaks (e.g. an `Update Argo CD` action that
    the deploy action's pin doesn't cover) before they ship.
+
+Invariants 4–5 are cluster-wide (both instances share one cluster):
+
+4. **Argo** — no non-preview demo Argo Application is actually serving a `-pr`
+   image. Invariants 1–3 read Octopus; this reads what Argo deployed from the
+   gitops repo, catching a stale `-pr` tag left in a per-branch `values-*.yaml`
+   that Octopus's dashboard no longer shows but Argo keeps reconciling.
+5. **Decomm** — no preview namespace survives for a PR that is closed on GitHub
+   (decommission leftover). Open-PR previews are left alone.
+
+Invariants 4 & 5 need a reachable cluster (`kubectl`) and, for 5, `gh`. When
+those are unavailable they **SKIP** (not fail), so the checker still runs in CI
+without a cluster.
 
 Exits non-zero (and prints a punch list) on any violation.
 
