@@ -12,3 +12,19 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 80
+---
+# Preview Service — what reviewers hit before promotion. The Rollouts
+# controller rewrites the selector to point at the staged ReplicaSet
+# while the Rollout is paused (autoPromotionEnabled=false).
+apiVersion: v1
+kind: Service
+metadata:
+  name: randomquotes-preview
+spec:
+  type: ClusterIP
+  selector:
+    app: randomquotes
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80

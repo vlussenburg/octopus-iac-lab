@@ -27,6 +27,11 @@ manageNamespace: false
 
 replicaCount: 1
 
+# Used by the bg-preview demo's rollout.yaml to gate the Rollout vs a
+# plain Deployment. Overridden per-env in values-{local,saas}-{dev,
+# production}.yaml. Default "dev" means non-prod, safe fallback.
+envType: dev
+
 # Subscription tier — drives per-tier policy in Platform Hub's Rego bundle
 # (replica caps, watermark, …). Mirrors the existing Octopus `tier/*` tenant
 # tag so the chart and Octopus agree on which tenant is which.

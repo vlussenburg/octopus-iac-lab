@@ -1,0 +1,360 @@
+step "deploy-configmap" {
+    name = "Deploy ConfigMap"
+    properties = {
+        Octopus.Action.TargetRoles = "k8s"
+    }
+
+    action {
+        action_type          = "Octopus.KubernetesDeployConfigMap"
+        worker_pool_variable = "Project.WorkerPool"
+        channels             = ["stable", "ephemeral-previews"]
+        properties = {
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
+            Octopus.Action.KubernetesContainers.ConfigMapValues = "{\"config.json\":\"{\\\"tenant\\\":\\\"#{App.Tenant}\\\",\\\"mood\\\":\\\"#{Featured.Mood}\\\",\\\"icon\\\":\\\"#{Brand.Icon}\\\",\\\"color\\\":\\\"#{Brand.Color}\\\",\\\"watermark\\\":\\\"#{Branding.Watermark}\\\",\\\"maintenance\\\":\\\"\\\"}\"}"
+            Octopus.Action.KubernetesContainers.Namespace = "#{K8s.Namespace}"
+        }
+    }
+}
+
+step "deploy-manifests" {
+    name = "Deploy Manifests"
+    properties = {
+        Octopus.Action.TargetRoles = "k8s"
+    }
+
+    action {
+        action_type          = "Octopus.KubernetesDeployRawYaml"
+        environments         = ["production"]
+        worker_pool_variable = "Project.WorkerPool"
+        properties = {
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                apiVersion: argoproj.io/v1alpha1
+                kind: Rollout
+                metadata:
+                  name: randomquotes
+                  labels:
+                    app: randomquotes
+                spec:
+                  replicas: #{Replicas}
+                  selector:
+                    matchLabels:
+                      app: randomquotes
+                  strategy:
+                    blueGreen:
+                      activeService: randomquotes
+                      previewService: randomquotes-preview
+                      autoPromotionEnabled: false
+                      scaleDownDelaySeconds: 30
+                  template:
+                    metadata:
+                      labels:
+                        app: randomquotes
+                    spec:
+                      containers:
+                        - name: randomquotes
+                          image: #{Octopus.Action.Package[randomquotes-image].Image}
+                          ports:
+                            - containerPort: 80
+                          resources:
+                            requests:
+                              cpu: "100m"
+                              memory: "64Mi"
+                            limits:
+                              cpu: "250m"
+                              memory: "128Mi"
+                          volumeMounts:
+                            - name: config
+                              mountPath: /usr/share/nginx/html/config.json
+                              subPath: config.json
+                      volumes:
+                        - name: config
+                          configMap:
+                            name: randomquotes-config
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: randomquotes
+                spec:
+                  type: ClusterIP
+                  selector:
+                    app: randomquotes
+                  ports:
+                    - protocol: TCP
+                      port: 80
+                      targetPort: 80
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: randomquotes-preview
+                spec:
+                  type: ClusterIP
+                  selector:
+                    app: randomquotes
+                  ports:
+                    - protocol: TCP
+                      port: 80
+                      targetPort: 80
+                ---
+                apiVersion: networking.k8s.io/v1
+                kind: Ingress
+                metadata:
+                  name: randomquotes
+                spec:
+                  ingressClassName: nginx
+                  rules:
+                    - host: #{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.localtest.me
+                      http:
+                        paths:
+                          - path: /
+                            pathType: Prefix
+                            backend:
+                              service:
+                                name: randomquotes
+                                port:
+                                  number: 80
+                ---
+                apiVersion: networking.k8s.io/v1
+                kind: Ingress
+                metadata:
+                  name: randomquotes-preview
+                spec:
+                  ingressClassName: nginx
+                  rules:
+                    - host: bg-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.localtest.me
+                      http:
+                        paths:
+                          - path: /
+                            pathType: Prefix
+                            backend:
+                              service:
+                                name: randomquotes-preview
+                                port:
+                                  number: 80
+                                    EOT
+            Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptSource = "Inline"
+        }
+
+        packages "randomquotes-image" {
+            acquisition_location = "NotAcquired"
+            feed = "ghcr"
+            package_id = "vlussenburg/octopus-iac-lab"
+            properties = {
+                Extract = "False"
+                Purpose = "DockerImageReference"
+                SelectionMode = "immediate"
+            }
+        }
+    }
+}
+
+step "deploy-manifests-dev" {
+    name = "Deploy Manifests (Dev plain Deployment)"
+    properties = {
+        Octopus.Action.TargetRoles = "k8s"
+    }
+
+    action {
+        action_type          = "Octopus.KubernetesDeployRawYaml"
+        environments         = ["dev"]
+        worker_pool_variable = "Project.WorkerPool"
+        channels             = ["stable"]
+        properties = {
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: randomquotes
+                  labels:
+                    app: randomquotes
+                spec:
+                  replicas: #{Replicas}
+                  selector:
+                    matchLabels:
+                      app: randomquotes
+                  template:
+                    metadata:
+                      labels:
+                        app: randomquotes
+                    spec:
+                      containers:
+                        - name: randomquotes
+                          image: #{Octopus.Action.Package[randomquotes-image].Image}
+                          ports:
+                            - containerPort: 80
+                          resources:
+                            requests:
+                              cpu: "100m"
+                              memory: "64Mi"
+                            limits:
+                              cpu: "250m"
+                              memory: "128Mi"
+                          volumeMounts:
+                            - name: config
+                              mountPath: /usr/share/nginx/html/config.json
+                              subPath: config.json
+                      volumes:
+                        - name: config
+                          configMap:
+                            name: randomquotes-config
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: randomquotes
+                spec:
+                  type: ClusterIP
+                  selector:
+                    app: randomquotes
+                  ports:
+                    - protocol: TCP
+                      port: 80
+                      targetPort: 80
+                ---
+                apiVersion: networking.k8s.io/v1
+                kind: Ingress
+                metadata:
+                  name: randomquotes
+                spec:
+                  ingressClassName: nginx
+                  rules:
+                    - host: #{App.Host}
+                      http:
+                        paths:
+                          - path: /
+                            pathType: Prefix
+                            backend:
+                              service:
+                                name: randomquotes
+                                port:
+                                  number: 80
+                                            EOT
+            Octopus.Action.KubernetesContainers.Namespace = "#{K8s.Namespace}"
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptSource = "Inline"
+        }
+
+        packages "randomquotes-image" {
+            acquisition_location = "NotAcquired"
+            feed = "ghcr"
+            package_id = "vlussenburg/octopus-iac-lab"
+            properties = {
+                Extract = "False"
+                Purpose = "DockerImageReference"
+                SelectionMode = "immediate"
+            }
+        }
+    }
+}
+
+step "promote-gate" {
+    name = "Promote to active?"
+
+    action {
+        action_type  = "Octopus.Manual"
+        environments = ["production"]
+        properties = {
+            Octopus.Action.Manual.BlockConcurrentDeployments = "True"
+            Octopus.Action.Manual.Instructions = "The new ReplicaSet is healthy and serving on the preview hostname (bg-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.localtest.me). The active hostname is still on the previous version. Verify the preview, then Proceed to flip the active Service to the new ReplicaSet."
+            Octopus.Action.Manual.ResponsibleTeamIds = "space-managers"
+        }
+    }
+}
+
+step "promote-rollout" {
+    name = "Promote Rollout"
+    properties = {
+        Octopus.Action.TargetRoles = "k8s"
+    }
+
+    action {
+        action_type  = "Octopus.KubernetesRunScript"
+        environments = ["production"]
+        properties = {
+            Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                    set -euo pipefail
+                    # Argo Rollouts has no first-class `kubectl rollout promote`
+                    # equivalent — we fetch the kubectl-argo-rollouts plugin
+                    # once and call its promote subcommand. Cached in /tmp so
+                    # repeated runs in the same pod don't re-download.
+                    if ! command -v kubectl-argo-rollouts >/dev/null 2>&1; then
+                      echo "downloading kubectl-argo-rollouts plugin"
+                      curl -fsSL "https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64" -o /tmp/kubectl-argo-rollouts
+                      chmod +x /tmp/kubectl-argo-rollouts
+                      export PATH="/tmp:$PATH"
+                    fi
+                    kubectl argo rollouts promote randomquotes
+                    # Block step completion until the active Service has
+                    # flipped and the old ReplicaSet has scaled to 0,
+                    # otherwise the next step (Argo image-tag update) races
+                    # the cluster.
+                    kubectl argo rollouts status randomquotes --timeout 5m
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "Bash"
+        }
+    }
+}
+
+step "capture-deployment-artifacts" {
+    name = "Capture deployment artifacts"
+    properties = {
+        Octopus.Action.TargetRoles = "k8s"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesRunScript"
+        worker_pool_variable = "Project.WorkerPool"
+        environments = ["dev", "production"]
+        properties = {
+            Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "Bash"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                set -euo pipefail
+                kubectl describe deployment randomquotes > randomquotes-describe.txt
+                new_octopusartifact randomquotes-describe.txt "describe-#{Octopus.Environment.Name}-#{Octopus.Deployment.Tenant.Name}.txt"
+                kubectl get deployment,svc,ingress,configmap,pod -l app=randomquotes -o yaml > randomquotes-resources.yaml
+                new_octopusartifact randomquotes-resources.yaml "resources-#{Octopus.Environment.Name}-#{Octopus.Deployment.Tenant.Name}.yaml"
+            EOT
+        }
+    }
+}
+
+step "update-argo-cd-application-image-tags" {
+    name = "Update Argo CD Application Image Tags"
+
+    action {
+        action_type          = "Octopus.ArgoCDUpdateImageTags"
+        worker_pool_variable = "Project.WorkerPool"
+        environments         = ["dev", "production"]
+        properties = {
+            Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
+            Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
+            Octopus.Action.ArgoCD.StepVerification.Method = "ArgoCDApplicationHealthy"
+            Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
+        }
+
+        packages "octopus-iac-lab" {
+            acquisition_location = "NotAcquired"
+            feed = "ghcr"
+            package_id = "vlussenburg/octopus-iac-lab"
+            properties = {
+                Extract = "False"
+                Purpose = "DockerImageReference"
+                SelectionMode = "immediate"
+            }
+        }
+    }
+}
