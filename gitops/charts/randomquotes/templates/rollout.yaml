@@ -1,11 +1,20 @@
-{{- if and .Values.image.tag (ne .Values.envType "production") }}
-# Plain Deployment for non-production environments (Dev). The
-# Rollout/canary pattern in templates/rollout.yaml is production-only
-# because at Dev tier acme-corp runs 1 replica, where weight-based
-# canary steps render nothing visible. Dev gets the no-ceremony
-# fast-feedback shape; Production gets the Argo Rollouts canary.
-apiVersion: apps/v1
-kind: Deployment
+{{- if and .Values.image.tag (eq .Values.envType "production") }}
+# Argo Rollouts canary with NGINX trafficRouting. The chart's plain
+# Deployment is replaced by this Rollout for the canary demo; Argo
+# Rollouts manages the stableService / canaryService selectors and
+# auto-creates the canary Ingress (mirrored off stableIngress) carrying
+# the nginx.ingress.kubernetes.io/canary + canary-weight annotations
+# that actually shift traffic between ReplicaSets.
+#
+# Production-only: at Dev tier acme-corp runs 1 replica, where canary
+# weight steps are meaningless (a ReplicaSet can have 0 or 1 pods, not
+# 20%). Dev gets the plain Deployment from templates/deployment.yaml.
+#
+# Mirrors the agent-path Rollout in
+# .octopus-canary/deployment_process.ocl — same steps, same weights, so
+# both delivery paths render the same canary shape on the cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: randomquotes
   labels:
@@ -19,6 +28,23 @@ spec:
   selector:
     matchLabels:
       app: randomquotes
+  strategy:
+    canary:
+      canaryService: randomquotes-canary
+      stableService: randomquotes
+      trafficRouting:
+        nginx:
+          stableIngress: randomquotes
+      scaleDownDelaySeconds: 30
+      steps:
+        - setWeight: 20
+        - pause: { duration: 20 }
+        - setWeight: 40
+        - pause: { duration: 20 }
+        - setWeight: 60
+        - pause: { duration: 20 }
+        - setWeight: 80
+        - pause: { duration: 20 }
   template:
     metadata:
       labels:
