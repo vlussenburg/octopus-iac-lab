@@ -230,9 +230,20 @@ def _octo_preview_namespaces(pr):
                   if (m := OCTO_PREVIEW_NS.match(n)) and m.group(1) == str(pr))
 
 
-def _octo_find_ephemeral_env(inst, env_name):
-    items = inst.api("/environments?partialName={}&take=100".format(env_name))["Items"]
-    return next((e for e in items if e["Name"] == env_name), None)
+def _octo_find_ephemeral_env(inst, pr):
+    """Octopus hides ephemeral preview environments from the Environments API —
+    they're absent from the list and 404 even on GET-by-id. Resolve the env via
+    the preview release instead: the `…-pr<N>` release's deployment carries the
+    EnvironmentId. Returns {Id, Name} (Name synthesised, matching the namespace
+    `…-preview-pr<N>` shape) or None if the release/deployment isn't there yet."""
+    pid = octo.find_project(inst, OCTO_PREVIEW_PROJECT)["Id"]
+    rels = inst.api("/projects/{}/releases?take=60".format(pid))["Items"]
+    rel = next((r for r in rels if re.search(r"-pr{}\b".format(pr), r["Version"])), None)
+    if rel is None:
+        return None
+    deps = inst.api("/releases/{}/deployments?take=10".format(rel["Id"]))["Items"]
+    env_id = next((d["EnvironmentId"] for d in deps), None)
+    return {"Id": env_id, "Name": "preview-pr{}".format(pr)} if env_id else None
 
 
 def _octo_deprovision(inst, proj_id, env):
@@ -248,13 +259,12 @@ def _wait_octo_envs_present(pr, instances, timeout):
     """Block until every instance has a `preview-pr<N>` ephemeral env and the
     cluster shows at least one matching namespace. Returns {label: env}, or None
     on timeout."""
-    env_name = "preview-pr{}".format(pr)
     deadline = time.time() + timeout
     while time.time() < deadline:
         ns = _octo_preview_namespaces(pr)
         if ns is None:
             raise SystemExit("cluster/kubectl became unreachable mid-test")
-        found = {i.label: _octo_find_ephemeral_env(i, env_name) for i in instances}
+        found = {i.label: _octo_find_ephemeral_env(i, pr) for i in instances}
         print("--- waiting for octopus preview pr#{} present --- envs={} ns={}".format(
             pr, {k: bool(v) for k, v in found.items()}, ns))
         if all(found.values()) and ns:
@@ -360,7 +370,7 @@ def decommission():
             subprocess.run(["gh", "pr", "close", branch], cwd=wt)
         if pr_num:
             for inst in instances:
-                env = _octo_find_ephemeral_env(inst, "preview-pr{}".format(pr_num))
+                env = _octo_find_ephemeral_env(inst, pr_num)
                 if env:
                     proj = octo.find_project(inst, OCTO_PREVIEW_PROJECT)
                     if proj:
