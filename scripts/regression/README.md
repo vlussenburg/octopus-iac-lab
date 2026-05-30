@@ -68,13 +68,27 @@ out of band (push to a `feat/*` branch), then run the checker — Dev must remai
 on stable.
 
 `decommission` is the active counterpart to check.py invariant 5. It opens a
-throwaway `feat/regression-decomm-*` PR, waits until Argo's PullRequest
-generator materialises the preview (`randomquotes-preview-pr-<N>` Application +
-`argo-randomquotes-preview-pr-<N>` namespace), closes the PR, and asserts Argo
-prunes **both** within the timeout. The namespace half is the regression that
-matters: `CreateNamespace=true` used to leave the namespace as an untracked
-orphan after prune; rendering it as a tracked chart resource puts it in the
-finalizer cascade. Needs a reachable cluster; cleans up the branch/PR/worktree
-in a `finally`. Octopus's own teardown is not asserted here — its ephemeral
-channel has no `GitReferenceRules`, so Octopus reaps previews on the parent
-environment's 24 h timer, not on PR close.
+throwaway `feat/regression-decomm-*` PR and waits until **both** preview systems
+materialise it:
+
+- Argo's PullRequest generator → `randomquotes-preview-pr-<N>` Application +
+  `argo-randomquotes-preview-pr-<N>` namespace;
+- Octopus's ephemeral channel (the `feat/*` PR build pushes the `pr<N>` image,
+  `create-ephemeral-release` lands it on the channel, spin-up-preview runs) →
+  a `preview-pr<N>` env per instance + a `randomquotes-<source>-preview-pr<N>`
+  namespace.
+
+It then closes the PR and asserts both fully tear down. **Argo** prunes on close
+natively — the namespace half is the regression that matters:
+`CreateNamespace=true` used to leave the namespace as an untracked orphan after
+prune; rendering it as a tracked chart resource puts it in the finalizer
+cascade. **Octopus** has no native on-close teardown (verified against the
+server binary: deprovision fires only off the parent env's inactivity timer,
+there is no PR-close handler, and `GitReferenceRules` gate provisioning only).
+The official on-close path is a GitHub Action, which this lab avoids — so the
+test drives Octopus's teardown the one non-GHA way the API allows: it POSTs the
+deprovision command per instance (which runs the teardown-preview runbook) and
+asserts the Octopus namespace is pruned too. Needs a reachable cluster + both
+instances' creds; cleans up the branch/PR/worktree and any leftover Octopus env
+in a `finally`. The 24 h parent-env timer remains the backstop for previews
+whose close event is missed entirely.

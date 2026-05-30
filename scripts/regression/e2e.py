@@ -12,14 +12,17 @@ Subcommands:
   deploy-prod VERSION   Deploy stable VERSION to Production/acme-corp for every
                         demo project on both instances; wait; assert Success.
                         (This is the Production coverage the Dev-only loop lacked.)
-  decommission          Open an ephemeral preview PR, confirm Argo provisions
-                        the app + namespace, close the PR, assert Argo prunes
-                        BOTH (the managed-namespace fix). Needs a live cluster.
+  decommission          Open an ephemeral preview PR, confirm BOTH Argo and
+                        Octopus provision it, close the PR, assert Argo prunes
+                        natively and (no native on-close path) the Octopus
+                        deprovision API tears its namespace down too. Needs a
+                        live cluster + both instances' creds.
   check                 Run the read-only checker.
   all                   build-stable -> deploy-prod <that version> -> check.
 
 Requires: git, gh (authenticated), and .env with both instances' creds.
 """
+import re
 import subprocess
 import sys
 import time
@@ -35,6 +38,15 @@ TASK_TIMEOUT = 600
 # Argo polls GitHub for PR open/close on a 60 s requeue; give creation and
 # pruning generous headroom over that.
 PREVIEW_TIMEOUT = 600
+# Octopus's preview is gated on the full build pipeline (image push ->
+# create-ephemeral-release -> spin-up runbook), so give provisioning a longer
+# window than Argo's branch-only generator.
+OCTO_PROVISION_TIMEOUT = 1200
+# The project whose ephemeral channel materialises native Octopus previews.
+OCTO_PREVIEW_PROJECT = "randomquotes"
+# spin-up-preview names the namespace randomquotes-<source>-preview-pr<N>;
+# <source> (local|saas) differs per instance, so match the stable head + tail.
+OCTO_PREVIEW_NS = re.compile(r"^randomquotes-.+-preview-pr(\d+)$")
 
 
 def sh(cmd, cwd=MAIN_WORKTREE, check=True, capture=False):
@@ -95,7 +107,6 @@ def wait_tasks(inst, task_ids):
 def build_stable():
     marker = "regression {}".format(time.strftime("%Y%m%d-%H%M%S"))
     text = open(APP_INDEX).read()
-    import re
     new_text, n = re.subn(r"<title>Random Quotes[^<]*</title>",
                           "<title>Random Quotes — {}</title>".format(marker), text, count=1)
     if n != 1:
@@ -208,34 +219,96 @@ def _wait_argo_preview(pr, want_present, timeout):
     return False
 
 
+def _octo_preview_namespaces(pr):
+    """Cluster namespaces Octopus's spin-up runbook created for this PR (one per
+    instance), or None if kubectl is unreachable. Excludes Argo's preview ns,
+    which has a different shape (argo-…-pr-<N>)."""
+    names = kube.preview_namespaces()
+    if names is None:
+        return None
+    return sorted(n for n in names
+                  if (m := OCTO_PREVIEW_NS.match(n)) and m.group(1) == str(pr))
+
+
+def _octo_find_ephemeral_env(inst, env_name):
+    items = inst.api("/environments?partialName={}&take=100".format(env_name))["Items"]
+    return next((e for e in items if e["Name"] == env_name), None)
+
+
+def _octo_deprovision(inst, proj_id, env):
+    """Octopus has no native on-PR-close teardown (verified against the server
+    binary: deprovision fires only off the parent env's inactivity timer). Drive
+    it the one non-GHA way the API allows — POST the deprovision command, which
+    runs the teardown-preview runbook that deletes the namespace."""
+    inst.api("/projects/{}/environments/ephemeral/{}/deprovision".format(proj_id, env["Id"]),
+             method="POST", body={})
+
+
+def _wait_octo_envs_present(pr, instances, timeout):
+    """Block until every instance has a `preview-pr<N>` ephemeral env and the
+    cluster shows at least one matching namespace. Returns {label: env}, or None
+    on timeout."""
+    env_name = "preview-pr{}".format(pr)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        ns = _octo_preview_namespaces(pr)
+        if ns is None:
+            raise SystemExit("cluster/kubectl became unreachable mid-test")
+        found = {i.label: _octo_find_ephemeral_env(i, env_name) for i in instances}
+        print("--- waiting for octopus preview pr#{} present --- envs={} ns={}".format(
+            pr, {k: bool(v) for k, v in found.items()}, ns))
+        if all(found.values()) and ns:
+            return found
+        time.sleep(POLL_SECONDS)
+    return None
+
+
+def _wait_octo_ns_gone(pr, timeout):
+    """Block until no Octopus preview namespace survives for this PR."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        ns = _octo_preview_namespaces(pr)
+        if ns is None:
+            raise SystemExit("cluster/kubectl became unreachable mid-test")
+        print("--- waiting for octopus preview pr#{} ns gone --- ns={}".format(pr, ns))
+        if not ns:
+            return True
+        time.sleep(POLL_SECONDS)
+    return False
+
+
 def decommission():
-    """Open an ephemeral preview PR, confirm Argo provisions it, close the PR,
-    and assert Argo prunes BOTH the Application and its namespace.
+    """Open an ephemeral preview PR, confirm BOTH preview systems provision it,
+    close the PR, and assert both fully tear down.
 
-    This is the regression for the managed-namespace fix: CreateNamespace=true
-    used to leave the namespace as an untracked orphan after prune. With the
-    namespace rendered as a tracked chart resource it goes in the finalizer
-    cascade, so PR close removes it too.
+    Argo prunes on close natively — that half is the regression for the
+    managed-namespace fix: CreateNamespace=true left the namespace as an
+    untracked orphan after prune; rendering it as a tracked chart resource puts
+    it in the finalizer cascade so PR close removes it too.
 
-    Octopus's own on-close teardown is intentionally not asserted here: the
-    ephemeral channel has no GitReferenceRules, so Octopus reaps previews on the
-    24 h parent-environment timer, not on PR close. The Octopus namespace-
-    derivation fix is guarded passively by check.py invariant 5.
+    Octopus does NOT prune on close — verified against the server binary: the
+    only automatic deprovision trigger is the parent env's inactivity timer
+    (now 24 h), there is no PR-close handler, and the channel's GitReference
+    rules gate provisioning only. The official on-close path is a GitHub Action,
+    which this lab deliberately avoids. So we drive Octopus's teardown the one
+    non-GHA way the API allows: POST the deprovision command (runs the
+    teardown-preview runbook) and assert its namespace is pruned too.
     """
     if kube.argo_app_names() is None:
         raise SystemExit("decommission needs a reachable cluster (kubectl) — none found")
+    instances = octo.instances(octo.load_env())
 
     ts = time.strftime("%Y%m%d-%H%M%S")
     branch = "feat/regression-decomm-{}".format(ts)
     wt = "/tmp/decomm-{}".format(ts)
     pr = None
+    pr_num = None
     try:
         sh(["git", "fetch", "origin", "main"])
         sh(["git", "worktree", "add", "-b", branch, wt, "origin/main"])
         index = wt + "/app/index.html"
         text = open(index).read()
         marker = "decomm {}".format(ts)
-        import re
         new_text, n = re.subn(r"<title>Random Quotes[^<]*</title>",
                               "<title>Random Quotes — {}</title>".format(marker), text, count=1)
         if n != 1:
@@ -254,18 +327,47 @@ def decommission():
 
         if not _wait_argo_preview(pr_num, want_present=True, timeout=PREVIEW_TIMEOUT):
             raise SystemExit("preview PR #{} never provisioned in Argo".format(pr_num))
-        print("Preview PR #{} provisioned (app + namespace present).".format(pr_num))
+        print("Preview PR #{} provisioned in Argo (app + namespace present).".format(pr_num))
+
+        octo_envs = _wait_octo_envs_present(pr_num, instances, OCTO_PROVISION_TIMEOUT)
+        if octo_envs is None:
+            raise SystemExit("preview PR #{} never provisioned in Octopus".format(pr_num))
+        print("Preview PR #{} provisioned in Octopus on {}.".format(
+            pr_num, ", ".join(octo_envs)))
 
         sh(["gh", "pr", "close", branch], cwd=wt)
         print("Closed PR #{}; waiting for Argo to prune…".format(pr_num))
         if not _wait_argo_preview(pr_num, want_present=False, timeout=PREVIEW_TIMEOUT):
-            print("\nDECOMMISSION FAILED: app or namespace survived PR close.")
+            print("\nDECOMMISSION FAILED: Argo app or namespace survived PR close.")
             return 1
-        print("\nPreview PR #{} fully decommissioned (app AND namespace pruned).".format(pr_num))
+        print("Argo preview pruned (app + namespace gone).")
+
+        print("Deprovisioning Octopus previews (no native on-close path)…")
+        for inst in instances:
+            pid = octo.find_project(inst, OCTO_PREVIEW_PROJECT)["Id"]
+            env = octo_envs[inst.label]
+            _octo_deprovision(inst, pid, env)
+            print("  {} deprovision requested for {} (env {})".format(
+                inst.label, env["Name"], env["Id"]))
+        if not _wait_octo_ns_gone(pr_num, timeout=PREVIEW_TIMEOUT):
+            print("\nDECOMMISSION FAILED: Octopus preview namespace survived deprovision.")
+            return 1
+
+        print("\nPreview PR #{} fully decommissioned — Argo AND Octopus namespaces pruned.".format(pr_num))
         return 0
     finally:
         if pr is not None:
             subprocess.run(["gh", "pr", "close", branch], cwd=wt)
+        if pr_num:
+            for inst in instances:
+                env = _octo_find_ephemeral_env(inst, "preview-pr{}".format(pr_num))
+                if env:
+                    proj = octo.find_project(inst, OCTO_PREVIEW_PROJECT)
+                    if proj:
+                        try:
+                            _octo_deprovision(inst, proj["Id"], env)
+                        except Exception as exc:
+                            print("  cleanup: {} deprovision failed: {}".format(inst.label, exc))
         subprocess.run(["git", "worktree", "remove", "--force", wt])
         subprocess.run(["git", "push", "origin", "--delete", branch],
                        cwd=MAIN_WORKTREE)
