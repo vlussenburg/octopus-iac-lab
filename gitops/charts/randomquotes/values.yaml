@@ -20,6 +20,11 @@
 # Every file the step touches must independently carry the WHOLE image
 # ref. See PR that introduced this (decompiled the Calamari source).
 
+# When true the chart renders its own Namespace so it's a tracked resource
+# inside Argo's finalizer cascade. Only the PR-preview ApplicationSet sets
+# this; the stable per-env Applications deploy into namespaces they don't own.
+manageNamespace: false
+
 replicaCount: 1
 
 # Subscription tier — drives per-tier policy in Platform Hub's Rego bundle

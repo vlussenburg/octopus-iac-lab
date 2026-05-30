@@ -59,6 +59,10 @@ spec:
         helm:
           releaseName: randomquotes
           valuesObject:
+            # Render the namespace as a tracked chart resource so PR-close
+            # prune (resources-finalizer cascade) deletes it. CreateNamespace
+            # left an untracked orphan that survived the prune.
+            manageNamespace: true
             replicaCount: 1
             tenant: preview-inc
             mood: comedy
@@ -79,5 +83,3 @@ spec:
         automated:
           prune: true
           selfHeal: true
-        syncOptions:
-          - CreateNamespace=true

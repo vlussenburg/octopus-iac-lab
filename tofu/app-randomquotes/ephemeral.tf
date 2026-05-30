@@ -18,6 +18,14 @@
 resource "octopusdeploy_parent_environment" "previews" {
   space_id = data.terraform_remote_state.space.outputs.space_id
   name     = "Previews"
+
+  # Backstop teardown. The on-PR-close deprovision (teardown-preview runbook) is
+  # the primary path; this timer reaps any preview whose close event was missed.
+  # 24h, not the 7d default, so an orphaned preview can't squat for a week.
+  automatic_deprovisioning_rule = {
+    days  = 1
+    hours = 0
+  }
 }
 
 # Ephemeral channel: every provisioned preview env is created under this
