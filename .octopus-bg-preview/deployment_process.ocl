@@ -323,7 +323,7 @@ step "capture-deployment-artifacts" {
             Octopus.Action.Script.Syntax = "Bash"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 set -euo pipefail
-                kubectl describe deployment randomquotes > randomquotes-describe.txt
+                kubectl describe deployment,svc,pod -l app=randomquotes > randomquotes-describe.txt
                 new_octopusartifact randomquotes-describe.txt "describe-#{Octopus.Environment.Name}-#{Octopus.Deployment.Tenant.Name}.txt"
                 kubectl get deployment,svc,ingress,configmap,pod -l app=randomquotes -o yaml > randomquotes-resources.yaml
                 new_octopusartifact randomquotes-resources.yaml "resources-#{Octopus.Environment.Name}-#{Octopus.Deployment.Tenant.Name}.yaml"
