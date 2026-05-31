@@ -93,10 +93,44 @@ def wait_dev(version, instances):
     return False
 
 
+def _is_proceed_gate(it):
+    """A real manual-intervention gate offers a Proceed submit button. Transient
+    "wait" interruptions (e.g. Argo CD health) carry an empty form and resolve
+    themselves — distinguishing on the form is more reliable than on
+    CanTakeResponsibility, which reads false until we're on the responsible
+    team."""
+    for el in ((it.get("Form") or {}).get("Elements") or []):
+        ctrl = el.get("Control") or {}
+        if ctrl.get("Type") == "SubmitButtonGroup":
+            if any(b.get("Value") == "Proceed" for b in ctrl.get("Buttons", [])):
+                return True
+    return False
+
+
+def approve_gates(inst, task_ids):
+    """Auto-approve any manual-intervention gate blocking one of task_ids.
+
+    A demo branch (bg-preview) parks a "Promote to active?" manual intervention
+    in front of its Production rollout. We submit Proceed so the unattended
+    regression can clear it. The server ignores ?regardingDocumentId, so match on
+    TaskId; identify the gate by its Proceed button, not CanTakeResponsibility.
+    """
+    want = set(task_ids)
+    for it in inst.api("/interruptions?pendingOnly=true&take=100")["Items"]:
+        if it.get("TaskId") in want and it.get("IsPending") and _is_proceed_gate(it):
+            if not it.get("HasResponsibility"):
+                inst.api("/interruptions/{}/responsible".format(it["Id"]), method="PUT")
+            inst.api("/interruptions/{}/submit".format(it["Id"]), method="POST",
+                     body={"Instructions": None, "Notes": "regression auto-approve",
+                           "Result": "Proceed"})
+            print("  [gate] approved interruption {} on {}".format(it["Id"], it["TaskId"]))
+
+
 def wait_tasks(inst, task_ids):
     deadline = time.time() + TASK_TIMEOUT
     states = {}
     while time.time() < deadline:
+        approve_gates(inst, task_ids)
         states = {t: inst.api("/tasks/" + t)["State"] for t in task_ids}
         if all(s in ("Success", "Failed", "Canceled") for s in states.values()):
             break

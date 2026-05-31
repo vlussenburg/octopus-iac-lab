@@ -59,6 +59,11 @@ locals {
       { deployment_action = "Deploy Manifests", package_reference = "randomquotes-image" },
       { deployment_action = "Update Argo CD Application Image Tags", package_reference = "octopus-iac-lab" },
     ]
+    "demo/bg-preview" = [
+      { deployment_action = "Deploy Manifests", package_reference = "randomquotes-image" },
+      { deployment_action = "Deploy Manifests (Dev plain Deployment)", package_reference = "randomquotes-image" },
+      { deployment_action = "Update Argo CD Application Image Tags", package_reference = "octopus-iac-lab" },
+    ]
   }
 }
 

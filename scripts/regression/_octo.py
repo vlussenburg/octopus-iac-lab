@@ -12,17 +12,18 @@ import urllib.request
 
 # Demo projects whose Dev must stay on stable (no -pr leak) and whose channel
 # rules must constrain every image-bearing action.
-# The regression auto-deploys these to Production unattended, so a demo whose
-# prod path needs a human/external approval is excluded until that approval is
-# scripted: bg-preview has a manual "Promote to active?" intervention, and
-# servicenow-cr-gate waits on a ServiceNow change-request (automatable later via
-# the Playwright + SNOW-REST approval path — deferred).
+# The regression auto-deploys these to Production unattended. bg-preview parks a
+# manual "Promote to active?" intervention before its prod rollout; e2e.py's
+# wait_tasks auto-approves it (approve_gates). servicenow-cr-gate is still
+# excluded: its prod path waits on a ServiceNow change-request (automatable later
+# via the Playwright + SNOW-REST approval path — deferred).
 DEMO_PROJECTS = [
     "blue-green-randomquotes",
     "canary-randomquotes",
     "process-template-randomquotes",
     "platform-hub-opa-randomquotes",
     "smoke-step-template-randomquotes",
+    "bg-preview-randomquotes",
     "randomquotes",
 ]
 
