@@ -55,6 +55,10 @@ locals {
       { deployment_action = "Deploy randomquotes workload-Deploy Manifests", package_reference = "AppImage" },
       { deployment_action = "Deploy randomquotes workload-Update Argo CD Application Image Tags", package_reference = "AppImage" },
     ]
+    "demo/smoke-step-template" = [
+      { deployment_action = "Deploy Manifests", package_reference = "randomquotes-image" },
+      { deployment_action = "Update Argo CD Application Image Tags", package_reference = "octopus-iac-lab" },
+    ]
   }
 }
 
