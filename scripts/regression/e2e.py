@@ -284,9 +284,13 @@ def _octo_deprovision(inst, proj_id, env):
     """Octopus has no native on-PR-close teardown (verified against the server
     binary: deprovision fires only off the parent env's inactivity timer). Drive
     it the one non-GHA way the API allows — POST the deprovision command, which
-    runs the teardown-preview runbook that deletes the namespace."""
-    inst.api("/projects/{}/environments/ephemeral/{}/deprovision".format(proj_id, env["Id"]),
-             method="POST", body={})
+    runs the teardown-preview runbook that deletes the namespace. force=true is
+    required: a freshly provisioned preview still carries its provisioning
+    deployment as "active", and the server refuses an unforced deprovision while
+    one exists. We've already closed the PR and Argo has pruned, so forcing the
+    orphaned Octopus preview down is exactly what we want."""
+    inst.api("/projects/{}/environments/ephemeral/{}/deprovision?force=true".format(
+        proj_id, env["Id"]), method="POST", body={})
 
 
 def _wait_octo_envs_present(pr, instances, timeout):
@@ -411,7 +415,14 @@ def decommission():
                         try:
                             _octo_deprovision(inst, proj["Id"], env)
                         except Exception as exc:
-                            print("  cleanup: {} deprovision failed: {}".format(inst.label, exc))
+                            # The main flow already deprovisions on success; this
+                            # net only fires when it bailed early. A 400 naming a
+                            # Deprovisioned / not-provisioned state means the env
+                            # is already torn down — the goal, not a failure.
+                            if "provisioned state" in str(exc) or "Deprovisioned state" in str(exc):
+                                print("  cleanup: {} already torn down".format(inst.label))
+                            else:
+                                print("  cleanup: {} deprovision failed: {}".format(inst.label, exc))
         subprocess.run(["git", "worktree", "remove", "--force", wt])
         subprocess.run(["git", "push", "origin", "--delete", branch],
                        cwd=MAIN_WORKTREE)
