@@ -7,11 +7,12 @@ step "deploy-configmap" {
     action {
         action_type          = "Octopus.KubernetesDeployConfigMap"
         worker_pool_variable = "Project.WorkerPool"
+        channels             = ["stable", "ephemeral-previews"]
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
-            Octopus.Action.KubernetesContainers.ConfigMapValues = "{\"config.json\":\"{\\\"tenant\\\":\\\"#{Octopus.Deployment.Tenant.Name}\\\",\\\"mood\\\":\\\"#{Featured.Mood}\\\",\\\"icon\\\":\\\"#{Brand.Icon}\\\",\\\"color\\\":\\\"#{Brand.Color}\\\",\\\"watermark\\\":\\\"#{Branding.Watermark}\\\",\\\"maintenance\\\":\\\"\\\"}\"}"
-            Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+            Octopus.Action.KubernetesContainers.ConfigMapValues = "{\"config.json\":\"{\\\"tenant\\\":\\\"#{App.Tenant}\\\",\\\"mood\\\":\\\"#{Featured.Mood}\\\",\\\"icon\\\":\\\"#{Brand.Icon}\\\",\\\"color\\\":\\\"#{Brand.Color}\\\",\\\"watermark\\\":\\\"#{Branding.Watermark}\\\",\\\"maintenance\\\":\\\"\\\"}\"}"
+            Octopus.Action.KubernetesContainers.Namespace = "#{K8s.Namespace}"
         }
     }
 }
@@ -25,6 +26,7 @@ step "deploy-manifests" {
     action {
         action_type          = "Octopus.KubernetesDeployRawYaml"
         worker_pool_variable = "Project.WorkerPool"
+        channels             = ["stable", "ephemeral-previews"]
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.AutoCreateNamespace = "True"
@@ -87,7 +89,7 @@ step "deploy-manifests" {
                 spec:
                   ingressClassName: nginx
                   rules:
-                    - host: #{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.localtest.me
+                    - host: #{App.Host}
                       http:
                         paths:
                           - path: /
@@ -98,7 +100,7 @@ step "deploy-manifests" {
                                 port:
                                   number: 80
                                             EOT
-            Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
+            Octopus.Action.KubernetesContainers.Namespace = "#{K8s.Namespace}"
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptSource = "Inline"
         }
@@ -125,6 +127,7 @@ step "capture-deployment-artifacts" {
     action {
         action_type = "Octopus.KubernetesRunScript"
         worker_pool_variable = "Project.WorkerPool"
+        environments = ["dev", "production"]
         properties = {
             Octopus.Action.KubernetesContainers.Namespace = "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}"
             Octopus.Action.RunOnServer = "false"
@@ -147,6 +150,7 @@ step "update-argo-cd-application-image-tags" {
     action {
         action_type          = "Octopus.ArgoCDUpdateImageTags"
         worker_pool_variable = "Project.WorkerPool"
+        environments         = ["dev", "production"]
         properties = {
             Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus Deploy updated image versions"
             Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"

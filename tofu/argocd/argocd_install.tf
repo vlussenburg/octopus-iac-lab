@@ -45,28 +45,44 @@ resource "helm_release" "argocd" {
           argocdServerAdminPasswordMtime = "2026-05-21T00:00:00Z"
         }
         cm = {
-          # `octopus` is the account each Gateway authenticates as. apiKey
-          # capability is sufficient — the Gateway only consumes JWTs, it
-          # doesn't ever log in interactively.
-          "accounts.octopus" = "apiKey"
+          # One account per Gateway so each is RBAC-scoped to its own
+          # AppProject — the local Gateway must not surface saas Applications
+          # into local Octopus, and vice versa. apiKey capability is enough;
+          # the Gateway only consumes JWTs, never logs in interactively.
+          "accounts.octopus-local" = "apiKey"
+          "accounts.octopus-saas"  = "apiKey"
         }
         rbac = {
-          # Minimum permissions the Octopus Gateway needs (per
-          # https://octopus.com/docs/argo-cd/instances/terraform-bootstrap).
-          # `g, octopus, role:octopus` binds the user to the role.
+          # Per https://octopus.com/docs/argo-cd/instances/terraform-bootstrap,
+          # but application verbs are scoped to the matching project (`local/*`
+          # / `saas/*`) so each Gateway only sees its own leaves. clusters,
+          # repositories and projects gets stay unscoped — scoping those makes
+          # the Gateway fail to list anything.
           "policy.csv" = trimspace(<<-EOT
-            p, role:octopus, applications, get, */*, allow
-            p, role:octopus, applications, sync, */*, allow
-            p, role:octopus, applications, action/*, */*, allow
-            p, role:octopus, applications, override, */*, allow
-            p, role:octopus, applications, update, */*, allow
-            p, role:octopus, applications, create, */*, allow
-            p, role:octopus, applications, delete, */*, allow
-            p, role:octopus, clusters, get, *, allow
-            p, role:octopus, repositories, get, *, allow
-            p, role:octopus, projects, get, *, allow
-            p, role:octopus, logs, get, */*, allow
-            g, octopus, role:octopus
+            p, role:octopus-local, applications, get, local/*, allow
+            p, role:octopus-local, applications, sync, local/*, allow
+            p, role:octopus-local, applications, action/*, local/*, allow
+            p, role:octopus-local, applications, override, local/*, allow
+            p, role:octopus-local, applications, update, local/*, allow
+            p, role:octopus-local, applications, create, local/*, allow
+            p, role:octopus-local, applications, delete, local/*, allow
+            p, role:octopus-local, clusters, get, *, allow
+            p, role:octopus-local, repositories, get, *, allow
+            p, role:octopus-local, projects, get, *, allow
+            p, role:octopus-local, logs, get, local/*, allow
+            g, octopus-local, role:octopus-local
+            p, role:octopus-saas, applications, get, saas/*, allow
+            p, role:octopus-saas, applications, sync, saas/*, allow
+            p, role:octopus-saas, applications, action/*, saas/*, allow
+            p, role:octopus-saas, applications, override, saas/*, allow
+            p, role:octopus-saas, applications, update, saas/*, allow
+            p, role:octopus-saas, applications, create, saas/*, allow
+            p, role:octopus-saas, applications, delete, saas/*, allow
+            p, role:octopus-saas, clusters, get, *, allow
+            p, role:octopus-saas, repositories, get, *, allow
+            p, role:octopus-saas, projects, get, *, allow
+            p, role:octopus-saas, logs, get, saas/*, allow
+            g, octopus-saas, role:octopus-saas
           EOT
           )
         }
@@ -131,6 +147,32 @@ resource "kubernetes_manifest" "argocd_bootstrap" {
           "ApplyOutOfSyncOnly=true",
         ]
       }
+    }
+  }
+
+  depends_on = [helm_release.argocd]
+}
+
+# AppProjects exist purely as the RBAC boundary the scoped Gateway accounts
+# key off — they're as permissive as `default` on what they can deploy. Leaves
+# move into `local` / `saas` (spec.project) in gitops; each Gateway's account
+# can only `get` Applications in its own project, so the local Octopus stops
+# surfacing saas leaves and vice versa.
+resource "kubernetes_manifest" "appproject" {
+  for_each = local.install_argocd_final ? toset(["local", "saas"]) : toset([])
+
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "AppProject"
+    metadata = {
+      name      = each.key
+      namespace = var.argocd_namespace
+    }
+    spec = {
+      sourceRepos                = ["*"]
+      destinations               = [{ server = "*", namespace = "*" }]
+      clusterResourceWhitelist   = [{ group = "*", kind = "*" }]
+      namespaceResourceWhitelist = [{ group = "*", kind = "*" }]
     }
   }
 

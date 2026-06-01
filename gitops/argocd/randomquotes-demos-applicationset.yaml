@@ -111,7 +111,9 @@ spec:
         lab.octopus.com/tenant: '{{.tenant}}'
         lab.octopus.com/flavour: '{{.flavour}}'
     spec:
-      project: default
+      # Scope each generated leaf to its source's AppProject (local/saas) so
+      # the matching Gateway's RBAC-scoped account surfaces only its own side.
+      project: '{{.source}}'
       source:
         repoURL: https://github.com/vlussenburg/octopus-iac-lab
         # Each flavour's chart is the source of truth on its own branch.

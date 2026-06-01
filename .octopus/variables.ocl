@@ -25,6 +25,10 @@ variable "Replicas" {
     value "1" {
         environment = ["dev"]
     }
+
+    value "1" {
+        channel = ["ephemeral-previews"]
+    }
 }
 
 variable "Tier" {
@@ -39,11 +43,19 @@ variable "Tier" {
     value "enterprise" {
         tenant_tag = ["tier/enterprise"]
     }
+
+    value "free" {
+        channel = ["ephemeral-previews"]
+    }
 }
 
 variable "Featured.Mood" {
     value "comedy" {
         tenant_tag = ["mood/comedy"]
+    }
+
+    value "comedy" {
+        channel = ["ephemeral-previews"]
     }
 
     value "silicon-valley" {
@@ -67,6 +79,10 @@ variable "Brand.Icon" {
     value "🧘" {
         tenant_tag = ["mood/stoic"]
     }
+
+    value "🚧" {
+        channel = ["ephemeral-previews"]
+    }
 }
 
 variable "Brand.Color" {
@@ -81,6 +97,10 @@ variable "Brand.Color" {
     value "#7E57C2" {
         tenant_tag = ["mood/stoic"]
     }
+
+    value "#FF6B35" {
+        channel = ["ephemeral-previews"]
+    }
 }
 
 variable "Branding.Watermark" {
@@ -88,6 +108,34 @@ variable "Branding.Watermark" {
 
     value "FREE TIER" {
         tenant_tag = ["tier/free"]
+    }
+
+    value "PREVIEW · #{Octopus.Environment.Name | Replace \"^preview-\" \"\"}" {
+        channel = ["ephemeral-previews"]
+    }
+}
+
+variable "K8s.Namespace" {
+    value "randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}" {}
+
+    value "randomquotes-#{Source}-#{Octopus.Environment.Name}" {
+        channel = ["ephemeral-previews"]
+    }
+}
+
+variable "App.Host" {
+    value "#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.localtest.me" {}
+
+    value "octopus-randomquotes-#{Source}-#{Octopus.Environment.Name}.localtest.me" {
+        channel = ["ephemeral-previews"]
+    }
+}
+
+variable "App.Tenant" {
+    value "#{Octopus.Deployment.Tenant.Name}" {}
+
+    value "preview-inc" {
+        channel = ["ephemeral-previews"]
     }
 }
 

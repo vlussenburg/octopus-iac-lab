@@ -1,0 +1,10 @@
+{{- if .Values.manageNamespace }}
+# A tracked Namespace so Argo's finalizer cascade deletes it on PR close.
+# CreateNamespace=true makes the namespace an UNtracked side-effect, leaving
+# an empty orphan after prune; rendering it as a chart resource puts it inside
+# the resources-finalizer cascade.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Release.Namespace }}
+{{- end }}

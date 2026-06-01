@@ -1,5 +1,5 @@
 name = "Spin up preview"
-description = "Provisioning hook for native ephemeral preview environments. Deploys randomquotes to namespace randomquotes-preview-<slug> using the release image (e.g. 1.1.150-pr141) and exposes it at http://octopus-randomquotes-preview-<slug>.localtest.me. The script derives slug = the release version's pre-release tag (pr<N>) from Octopus.Release.Number. Untenanted — previews are PR-scoped, not customer-scoped."
+description = "Provisioning hook for native ephemeral preview environments. Creates the preview namespace (randomquotes-<env-name>, e.g. randomquotes-preview-pr<N>) once at env creation. The workload itself is deployed by the project's deployment process (deploy-configmap + deploy-manifests, scoped to the ephemeral-previews channel) on every release, so a new PR build redeploys the same env with its unique release image. Untenanted — previews are PR-scoped, not customer-scoped."
 default_guided_failure_mode = "EnvironmentDefault"
 multi_tenancy_mode = "Untenanted"
 
@@ -13,8 +13,8 @@ run_retention_policy {
 }
 
 process {
-    step "deploy-preview" {
-        name = "Deploy preview namespace + workload"
+    step "create-namespace" {
+        name = "Create preview namespace"
         properties = {
             Octopus.Action.TargetRoles = "k8s"
         }
@@ -26,93 +26,9 @@ process {
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT
                 set -eu
-                REL="#{Octopus.Release.Number}"
-                SLUG="${REL##*-}"
-                NS="randomquotes-preview-$SLUG"
-                echo "Applying preview manifests into namespace $NS …"
+                NS="randomquotes-#{Source}-#{Octopus.Environment.Name}"
+                echo "Creating preview namespace $NS …"
                 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
-                kubectl apply -n "$NS" -f - <<MANIFESTS
-                apiVersion: v1
-                kind: ConfigMap
-                metadata:
-                  name: randomquotes-config
-                  labels:
-                    lab.octopus.com/preview: "${SLUG}"
-                data:
-                  config.json: |
-                    {
-                      "tenant": "preview-inc",
-                      "mood": "comedy",
-                      "icon": "🚧",
-                      "color": "#FF6B35",
-                      "watermark": "PREVIEW · ${SLUG}",
-                      "maintenance": ""
-                    }
-                ---
-                apiVersion: apps/v1
-                kind: Deployment
-                metadata:
-                  name: randomquotes
-                  labels:
-                    app: randomquotes
-                    lab.octopus.com/preview: "${SLUG}"
-                spec:
-                  replicas: 1
-                  selector:
-                    matchLabels:
-                      app: randomquotes
-                  template:
-                    metadata:
-                      labels:
-                        app: randomquotes
-                    spec:
-                      containers:
-                        - name: randomquotes
-                          image: ghcr.io/vlussenburg/octopus-iac-lab:#{Octopus.Release.Number}
-                          ports:
-                            - containerPort: 80
-                          volumeMounts:
-                            - name: config
-                              mountPath: /usr/share/nginx/html/config.json
-                              subPath: config.json
-                      volumes:
-                        - name: config
-                          configMap:
-                            name: randomquotes-config
-                ---
-                apiVersion: v1
-                kind: Service
-                metadata:
-                  name: randomquotes
-                spec:
-                  type: ClusterIP
-                  selector:
-                    app: randomquotes
-                  ports:
-                    - protocol: TCP
-                      port: 80
-                      targetPort: 80
-                ---
-                apiVersion: networking.k8s.io/v1
-                kind: Ingress
-                metadata:
-                  name: randomquotes
-                spec:
-                  ingressClassName: nginx
-                  rules:
-                    - host: octopus-randomquotes-preview-${SLUG}.localtest.me
-                      http:
-                        paths:
-                          - path: /
-                            pathType: Prefix
-                            backend:
-                              service:
-                                name: randomquotes
-                                port:
-                                  number: 80
-                MANIFESTS
-                echo "Applied. Waiting for Deployment to roll out …"
-                kubectl -n "$NS" rollout status deploy/randomquotes --timeout=120s || echo "(rollout status timed out — check pod events for ImagePullBackOff on #{Octopus.Release.Number})"
                 EOT
             }
         }
@@ -121,24 +37,26 @@ process {
     step "announce-url" {
         name = "Announce preview URL"
         properties = {
-            Octopus.Action.TargetRoles = ""
+            Octopus.Action.TargetRoles = "k8s"
         }
 
         action {
-            action_type = "Octopus.Script"
+            action_type = "Octopus.KubernetesRunScript"
             properties = {
-                Octopus.Action.RunOnServer = "true"
                 Octopus.Action.Script.ScriptSource = "Inline"
                 Octopus.Action.Script.Syntax = "Bash"
                 Octopus.Action.Script.ScriptBody = <<-EOT
-                    REL="#{Octopus.Release.Number}"
-                    SLUG="${REL##*-}"
-                    echo "Preview $SLUG (release $REL) ready."
-                    echo "  URL:       http://octopus-randomquotes-preview-$SLUG.localtest.me"
-                    echo "  Namespace: randomquotes-preview-$SLUG"
-                    echo "  Image:     ghcr.io/vlussenburg/octopus-iac-lab:$REL"
+                    ENV="#{Octopus.Environment.Name}"
+                    TAG="${ENV#preview-}"
+                    SLUG="${TAG##*-}"
+                    PRNUM="${SLUG#pr}"
+                    echo "Preview $SLUG (image #{Octopus.Release.Number}) ready."
+                    echo "  URL:       http://octopus-randomquotes-#{Source}-preview-$SLUG.localtest.me:8080"
+                    echo "  Namespace: randomquotes-#{Source}-preview-$SLUG"
+                    echo "  Image:     ghcr.io/vlussenburg/octopus-iac-lab:#{Octopus.Release.Number}"
                     echo ""
-                    echo "Argo's parallel preview lives at argo-randomquotes-preview-$SLUG."
+                    echo "Argo's parallel preview: http://argo-preview-pr-$PRNUM.localtest.me:8080"
+                    echo "Argo CD UI:               http://argocd.localtest.me:8080"
                 EOT
             }
         }

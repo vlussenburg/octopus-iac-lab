@@ -31,6 +31,7 @@ define load_env
 	       TF_VAR_octopus_url_from_cluster="$${OCTOPUS_URL_FROM_CLUSTER:-http://host.docker.internal:8090}" \
 	       TF_VAR_octopus_polling_url_from_cluster="$${OCTOPUS_POLLING_URL_FROM_CLUSTER:-https://host.docker.internal:10943}" \
 	       TF_VAR_enable_platform_hub="$${OCTOPUS_PLATFORM_HUB_ENABLED:-true}" \
+	       TF_VAR_space_is_default="$${OCTOPUS_SPACE_IS_DEFAULT:-true}" \
 	       TF_VAR_demo_branches="$$DEMO_BRANCHES" \
 	       TF_VAR_sealed_secrets_tls_b64="$${SEALED_SECRETS_TLS_B64:-}";
 endef
