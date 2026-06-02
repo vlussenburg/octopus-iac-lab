@@ -9,6 +9,11 @@
 # tag renders a no-op Application (namespace + Service + Ingress still
 # created, but zero pods). First Octopus promote writes a real tag here
 # and the Deployment materialises.
+# Gates rollout.yaml: "production" renders the Argo Rollout (blue/green
+# preview with manual promotion); anything else renders a plain
+# Deployment.
+envType: production
+
 image:
   repository: vlussenburg/octopus-iac-lab
   tag: "1.1.191"

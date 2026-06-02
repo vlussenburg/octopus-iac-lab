@@ -1,0 +1,108 @@
+{{- if .Values.image.tag }}
+{{- if eq .Values.envType "production" }}
+# Argo Rollout — gated blue/green (Production only). On Dev the chart
+# renders a plain Deployment instead (see the else branch below):
+# acme-corp on Dev runs 1 replica, which collapses the BG-preview
+# pattern (no old ReplicaSet to keep serving while the new one warms
+# up on previewService). Production runs 3+ replicas (enterprise tier)
+# where the "manual promotion" gate actually demonstrates value.
+#
+# autoPromotionEnabled=false means each release stages a new
+# ReplicaSet behind `previewService` and waits for an explicit
+# `kubectl argo rollouts promote` before swapping the active Service.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: randomquotes
+  labels:
+    app: randomquotes
+    app.kubernetes.io/name: randomquotes
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: randomquotes
+    tenant.octopus.com/tier: {{ .Values.tier | quote }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: randomquotes
+  strategy:
+    blueGreen:
+      activeService: randomquotes
+      previewService: randomquotes-preview
+      autoPromotionEnabled: false
+      scaleDownDelaySeconds: 30
+  template:
+    metadata:
+      labels:
+        app: randomquotes
+        app.kubernetes.io/name: randomquotes
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/part-of: randomquotes
+        tenant.octopus.com/tier: {{ .Values.tier | quote }}
+      annotations:
+        # Roll the pod when the ConfigMap content changes — k8s doesn't
+        # auto-restart on volume-mount updates.
+        configmap-checksum: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: randomquotes
+          image: ghcr.io/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          ports:
+            - containerPort: 80
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/nginx/html/config.json
+              subPath: config.json
+      volumes:
+        - name: config
+          configMap:
+            name: randomquotes-config
+{{- else }}
+# Plain Deployment — non-Production envs (e.g. Dev, where acme-corp runs
+# 1 replica). BG-preview is gated to Production only; see the envType
+# branch above for the rationale.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: randomquotes
+  labels:
+    app: randomquotes
+    app.kubernetes.io/name: randomquotes
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: randomquotes
+    tenant.octopus.com/tier: {{ .Values.tier | quote }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: randomquotes
+  template:
+    metadata:
+      labels:
+        app: randomquotes
+        app.kubernetes.io/name: randomquotes
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/part-of: randomquotes
+        tenant.octopus.com/tier: {{ .Values.tier | quote }}
+      annotations:
+        configmap-checksum: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: randomquotes
+          image: ghcr.io/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          ports:
+            - containerPort: 80
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/nginx/html/config.json
+              subPath: config.json
+      volumes:
+        - name: config
+          configMap:
+            name: randomquotes-config
+{{- end }}
+{{- end }}

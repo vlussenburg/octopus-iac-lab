@@ -15,3 +15,21 @@ spec:
                 name: randomquotes
                 port:
                   number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: randomquotes-preview
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.previewHost | default (printf "bg-%s" .Values.host) }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: randomquotes-preview
+                port:
+                  number: 80
