@@ -44,9 +44,9 @@ Limits set in `docker-compose.yml`. Budget targets a 16 GB Docker Desktop alloca
 | Service | mem_limit | cpus |
 |---|---|---|
 | `db` (SQL Server, `MSSQL_MEMORY_LIMIT_MB=2048`) | 4 GB | 2 |
-| `octopus` | 2 GB | 2 |
+| `octopus` | 3 GB | 2 |
 | `default-pool-worker` / `prod-pool-worker` (each) | 1.5 GB | 2 |
 
-Total compose footprint: ~9 GB, leaving ~7 GB for Docker Desktop K8s (which hosts the K8s agent + ArgoCD + nginx-ingress + the deployed apps) + system.
+The `aio-init` one-shot raises the VM kernel's `fs.aio-max-nr` before `db` starts. That limit is shared with the K8s cluster; a fully-deployed cluster exhausts the 65536 default and SQL Server then aborts on boot with "Unable to create a new asynchronous I/O context".
 
-**Set Docker Desktop → Settings → Resources → 16 GB.** Less than that and you'll feel it.
+**Set Docker Desktop → Settings → Resources → 32 GB.** The compose stack plus a fully-deployed K8s cluster (agent + ArgoCD + nginx-ingress + every demo flavour) needs the headroom; less and the DB/Octopus containers get OOM-killed.

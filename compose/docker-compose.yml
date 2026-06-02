@@ -8,11 +8,25 @@
 name: selfhost-setup
 
 services:
+  # fs.aio-max-nr is a host-level (non-namespaced) kernel limit shared by the
+  # whole Docker Desktop VM — the K8s cluster's pods and this stack draw from
+  # the same pool. The 65536 default gets exhausted by a full cluster, and SQL
+  # Server then aborts on boot ("Unable to create a new asynchronous I/O
+  # context"). A privileged one-shot raises it before db starts; runs on every
+  # `make up`, so it survives a Docker Desktop restart.
+  aio-init:
+    image: alpine
+    platform: linux/amd64
+    privileged: true
+    command: ["sysctl", "-w", "fs.aio-max-nr=1048576"]
+    restart: "no"
+
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     platform: linux/amd64
-    # Budget on a 16 GB Docker Desktop: db 4g + octopus 2g + 2 workers
-    # 1.5g each = 9g, leaving ~7g for Docker Desktop's K8s + system.
+    depends_on:
+      aio-init:
+        condition: service_completed_successfully
     mem_limit: 4g
     cpus: 2
     environment:
@@ -32,7 +46,7 @@ services:
   octopus:
     image: octopusdeploy/octopusdeploy:latest
     platform: linux/amd64
-    mem_limit: 2g
+    mem_limit: 3g
     cpus: 2
     depends_on:
       db:
