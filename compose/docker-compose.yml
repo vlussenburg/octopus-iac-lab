@@ -1,6 +1,9 @@
-# Local Octopus Server sandbox. Apple Silicon: both images are amd64,
-# enable Docker Desktop → Settings → General → "Use Rosetta" for native-ish speed.
-# Host port 8090 to avoid clashing with the local ArgoCD port-forward on 8080.
+# Local Octopus Server sandbox — HA topology. Two Octopus Server nodes
+# share one SQL DB and one set of named volumes, fronted by an nginx LB
+# doing HTTP (UI + REST) and TCP (Halibut polling, KLOS gRPC) load
+# balancing. Single-host caveat: works because both nodes hit the same
+# Linux kernel so fcntl/flock advisory locks behave; across hosts
+# you'd swap the named volumes for NFS / EFS / Azure Files.
 
 # Pinned project name so containers + named volumes stay stable regardless of
 # where this file lives on disk. Kept as "selfhost-setup" — the original parent
@@ -11,8 +14,8 @@ services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     platform: linux/amd64
-    # Budget on a 16 GB Docker Desktop: db 4g + octopus 2g + 2 workers
-    # 1.5g each = 9g, leaving ~7g for Docker Desktop's K8s + system.
+    # Budget on a 16 GB Docker Desktop: db 4g + 2 octopus 2g + 2 workers
+    # 1.5g each + lb 256m = 11.5g, leaving ~4.5g for Docker Desktop K8s + system.
     mem_limit: 4g
     cpus: 2
     environment:
@@ -29,7 +32,10 @@ services:
     volumes:
       - mssql-data:/var/opt/mssql
 
-  octopus:
+  # First Octopus node. Boots solo against the empty DB so first-run
+  # migrations + master-key setup happen on a single node before the
+  # second joins.
+  octopus-1:
     image: octopusdeploy/octopusdeploy:latest
     platform: linux/amd64
     mem_limit: 2g
@@ -42,32 +48,74 @@ services:
       DB_CONNECTION_STRING: "Server=db,1433;Database=OctopusDeploy;User=sa;Password=Octop@s!Sandb0x;TrustServerCertificate=True"
       ADMIN_USERNAME: "admin"
       ADMIN_PASSWORD: "Password01!"
-      OCTOPUS_SERVER_NODE_NAME: "OctopusServer"
+      OCTOPUS_SERVER_NODE_NAME: "OctopusNode1"
       MASTER_KEY: "${MASTER_KEY}"
       # If set, install.sh runs `Octopus.Server license --licenseBase64=…` on
       # boot. Empty = skip (paste in UI). Sourced from .env via --env-file;
       # encode once with `base64 -i license.xml | tr -d '\n'`.
       OCTOPUS_SERVER_BASE64_LICENSE: "${OCTOPUS_SERVER_BASE64_LICENSE:-}"
-    # /api answers 2xx only after migrations finish and the server is
-    # listening — so `docker compose up --wait` blocks until it's usable
-    # and bootstrap doesn't need its own curl-poll loop.
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf -o /dev/null http://localhost:8080/api || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api > /dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
       start_period: 60s
-    ports:
-      - "8090:8080"      # HTTP API + UI
-      - "10943:10943"    # Halibut — Polling Tentacle / K8s Agent comms (TLS)
-      - "18443:8443"     # gRPC — KLOS / Argo CD Gateway. Host 18443 dodges
-                         # Docker Desktop's own *:8443 binding; container is
-                         # still 8443. Argo Gateway connects via
-                         # grpc://host.docker.internal:18443.
     volumes:
       - octopus-repository:/repository
       - octopus-artifacts:/artifacts
       - octopus-tasklogs:/taskLogs
+
+  # Second node — waits for octopus-1 healthy so migrations finish first.
+  # Skip license apply (node 1 already did it).
+  octopus-2:
+    image: octopusdeploy/octopusdeploy:latest
+    platform: linux/amd64
+    mem_limit: 2g
+    cpus: 2
+    depends_on:
+      db:
+        condition: service_healthy
+      octopus-1:
+        condition: service_healthy
+    environment:
+      ACCEPT_EULA: "Y"
+      DB_CONNECTION_STRING: "Server=db,1433;Database=OctopusDeploy;User=sa;Password=Octop@s!Sandb0x;TrustServerCertificate=True"
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "Password01!"
+      OCTOPUS_SERVER_NODE_NAME: "OctopusNode2"
+      MASTER_KEY: "${MASTER_KEY}"
+      OCTOPUS_SERVER_BASE64_LICENSE: ""
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    volumes:
+      - octopus-repository:/repository
+      - octopus-artifacts:/artifacts
+      - octopus-tasklogs:/taskLogs
+
+  # nginx with the `stream` module — load-balances HTTP (UI + REST API)
+  # and TCP (Halibut polling, KLOS gRPC). Both modules ship in
+  # nginx:alpine. Host 18443 → container 8443 dodges Docker Desktop's
+  # own *:8443 binding; Argo CD Gateway connects via
+  # grpc://host.docker.internal:18443.
+  lb:
+    image: nginx:alpine
+    mem_limit: 256m
+    cpus: 1
+    depends_on:
+      octopus-1:
+        condition: service_healthy
+      octopus-2:
+        condition: service_healthy
+    ports:
+      - "8090:80"        # HTTP API + UI (load-balanced round-robin)
+      - "10943:10943"    # Halibut polling (TCP load-balanced)
+      - "18443:8443"     # KLOS / Argo CD Gateway gRPC (TCP load-balanced)
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
 
   # Worker for Octopus's built-in Default Worker Pool — handles all
   # non-Production work for this demo. No prod-only marker script
@@ -82,13 +130,13 @@ services:
     mem_limit: 1500m
     cpus: 2
     depends_on:
-      octopus:
+      lb:
         condition: service_started
     environment:
       ACCEPT_EULA: "Y"
       ServerApiKey: "${OCTOPUS_API_KEY}"
-      ServerUrl: "http://octopus:8080"
-      ServerCommsAddress: "Polling://octopus:10943/"
+      ServerUrl: "http://lb:80"
+      ServerCommsAddress: "Polling://lb:10943/"
       Space: "IaC Sandbox"
       TargetName: "default-pool-worker"
       TargetWorkerPool: "Default Worker Pool"
@@ -124,15 +172,15 @@ services:
     mem_limit: 1500m
     cpus: 2
     depends_on:
-      octopus:
+      lb:
         condition: service_started
     environment:
       ACCEPT_EULA: "Y"
       ServerApiKey: "${OCTOPUS_API_KEY}"
-      ServerUrl: "http://octopus:8080"
+      ServerUrl: "http://lb:80"
       # Polling tentacle connects on Halibut TCP — same port the K8s
-      # agent uses (10943), reached over the docker network.
-      ServerCommsAddress: "Polling://octopus:10943/"
+      # agent uses (10943), reached over the docker network via the LB.
+      ServerCommsAddress: "Polling://lb:10943/"
       Space: "IaC Sandbox"
       TargetName: "prod-pool-worker"
       TargetWorkerPool: "prod-pool"

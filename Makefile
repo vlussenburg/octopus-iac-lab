@@ -79,7 +79,7 @@ down:
 	$(COMPOSE) down
 
 logs:
-	$(COMPOSE) logs -f octopus
+	$(COMPOSE) logs -f
 
 ps:
 	$(COMPOSE) ps
