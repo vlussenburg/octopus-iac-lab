@@ -26,9 +26,6 @@ variable "Replicas" {
         environment = ["dev"]
     }
 
-    value "1" {
-        channel = ["ephemeral-previews"]
-    }
 }
 
 variable "Tier" {
@@ -44,9 +41,6 @@ variable "Tier" {
         tenant_tag = ["tier/enterprise"]
     }
 
-    value "free" {
-        channel = ["ephemeral-previews"]
-    }
 }
 
 variable "Featured.Mood" {
@@ -54,9 +48,6 @@ variable "Featured.Mood" {
         tenant_tag = ["mood/comedy"]
     }
 
-    value "comedy" {
-        channel = ["ephemeral-previews"]
-    }
 
     value "silicon-valley" {
         tenant_tag = ["mood/silicon-valley"]
@@ -80,9 +71,6 @@ variable "Brand.Icon" {
         tenant_tag = ["mood/stoic"]
     }
 
-    value "🚧" {
-        channel = ["ephemeral-previews"]
-    }
 }
 
 variable "Brand.Color" {
@@ -98,9 +86,6 @@ variable "Brand.Color" {
         tenant_tag = ["mood/stoic"]
     }
 
-    value "#FF6B35" {
-        channel = ["ephemeral-previews"]
-    }
 }
 
 variable "Branding.Watermark" {
@@ -110,9 +95,6 @@ variable "Branding.Watermark" {
         tenant_tag = ["tier/free"]
     }
 
-    value "PREVIEW · #{Octopus.Environment.Name | Replace \"^preview-\" \"\"}" {
-        channel = ["ephemeral-previews"]
-    }
 }
 
 variable "K8s.Namespace" {
@@ -134,9 +116,6 @@ variable "App.Host" {
 variable "App.Tenant" {
     value "#{Octopus.Deployment.Tenant.Name}" {}
 
-    value "preview-inc" {
-        channel = ["ephemeral-previews"]
-    }
 }
 
 variable "Maintenance.Message" {
