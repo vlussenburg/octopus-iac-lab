@@ -9,6 +9,12 @@
 # tag renders a no-op Application (namespace + Service + Ingress still
 # created, but zero pods). First Octopus promote writes a real tag here
 # and the Deployment materialises.
+# envType drives the workload kind: "production" renders the Argo
+# Rollouts canary (templates/rollout.yaml); anything else renders a
+# plain Deployment. Production-tier acme-corp runs 3 replicas, which
+# is where canary weight steps (20/40/60/80) actually shift visible
+# pod fractions.
+envType: production
 image:
   repository: vlussenburg/octopus-iac-lab
   tag: "1.1.191"

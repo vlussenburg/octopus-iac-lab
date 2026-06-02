@@ -1,9 +1,27 @@
-# Active Service — what real users hit. The Rollouts controller rewrites
-# the selector during promotion to point at the new ReplicaSet.
+# Stable Service — what real users hit outside a rollout. Argo Rollouts
+# rewrites the selector during a canary promotion to track the stable
+# ReplicaSet's pod-template-hash.
 apiVersion: v1
 kind: Service
 metadata:
   name: randomquotes
+spec:
+  type: ClusterIP
+  selector:
+    app: randomquotes
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+# Canary Service — Argo Rollouts manages its selector to point at the
+# new ReplicaSet during a canary step. The auto-generated canary Ingress
+# (mirrored off `stableIngress` in the Rollout spec) routes the
+# setWeight % of traffic here.
+apiVersion: v1
+kind: Service
+metadata:
+  name: randomquotes-canary
 spec:
   type: ClusterIP
   selector:
