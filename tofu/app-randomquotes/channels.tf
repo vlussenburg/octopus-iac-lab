@@ -3,8 +3,8 @@
 # Octopus auto-creates a "Default" channel per project and that channel owns the
 # slug "default" from birth; a second channel can't reuse the name or slug, so
 # instead we create "Stable" (slug "stable"), mark it default, and leave the
-# auto-created "Default" orphaned (non-default, unused). The deployment OCL
-# scopes its steps to channel "stable" to match.
+# auto-created "Default" orphaned (non-default, unused). Nothing routes a release
+# to "Default" (no trigger, not is_default), so it never deploys.
 #
 # The rule (pre-release tag `^$`) keeps `-pr<N>` preview images off the stable
 # channel: the GHCR feed trigger only mints a stable release for versions with
