@@ -168,3 +168,25 @@ step "update-argo-cd-application-image-tags" {
         }
     }
 }
+
+step "smoke-test-http" {
+    name = "Smoke test"
+    properties = {
+        Octopus.Action.TargetRoles = "k8s"
+    }
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.Template.Id      = "ActionTemplates-1"
+            Octopus.Action.Template.Version = "0"
+            BaseUrl                         = "http://randomquotes.randomquotes-#{Source}-#{Octopus.Deployment.Tenant.Name}-#{Octopus.Environment.Name | ToLower}.svc.cluster.local"
+            Path                            = "/config.json"
+            ExpectBody                      = "#{Octopus.Deployment.Tenant.Name}"
+            Iterations                      = "10"
+            MaxLatencyMs                    = "1500"
+            MinSuccessPct                   = "90"
+            WarmupSeconds                   = "8"
+        }
+    }
+}
