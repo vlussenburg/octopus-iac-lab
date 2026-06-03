@@ -73,7 +73,7 @@
       { q: "Waste no more time arguing what a good man should be. Be one.", a: "Marcus Aurelius", mood: "stoic" },
     ];
 
-    let cfg = { tenant: "", mood: "", icon: "", color: "", watermark: "", maintenance: "" };
+    let cfg = { tenant: "", displayName: "", mood: "", icon: "", color: "", watermark: "", maintenance: "" };
     let pool = quotes;
     let i = 0;
 
@@ -102,7 +102,8 @@
         if (cfg.mood) pool = quotes.filter(q => q.mood === cfg.mood);
         if (pool.length === 0) pool = quotes; // fallback if mood matches nothing
         i = Math.floor(Math.random() * pool.length);
-        if (cfg.tenant) document.getElementById("tenant").textContent = cfg.tenant;
+        const badge = cfg.displayName || cfg.tenant;
+        if (badge) document.getElementById("tenant").textContent = badge;
         if (cfg.watermark) {
           const wm = document.getElementById("watermark");
           wm.textContent = cfg.watermark;

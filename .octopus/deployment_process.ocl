@@ -10,7 +10,7 @@ step "deploy-configmap" {
         properties = {
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
             Octopus.Action.KubernetesContainers.ConfigMapName = "randomquotes-config"
-            Octopus.Action.KubernetesContainers.ConfigMapValues = "{\"config.json\":\"{\\\"tenant\\\":\\\"#{App.Tenant}\\\",\\\"mood\\\":\\\"#{Featured.Mood}\\\",\\\"icon\\\":\\\"#{Brand.Icon}\\\",\\\"color\\\":\\\"#{Brand.Color}\\\",\\\"watermark\\\":\\\"#{Branding.Watermark}\\\",\\\"maintenance\\\":\\\"\\\"}\"}"
+            Octopus.Action.KubernetesContainers.ConfigMapValues = "{\"config.json\":\"{\\\"tenant\\\":\\\"#{App.Tenant}\\\",\\\"displayName\\\":\\\"#{if Brand.DisplayName}#{Brand.DisplayName}#{/if}\\\",\\\"mood\\\":\\\"#{Featured.Mood}\\\",\\\"icon\\\":\\\"#{Brand.Icon}\\\",\\\"color\\\":\\\"#{Brand.Color}\\\",\\\"watermark\\\":\\\"#{Branding.Watermark}\\\",\\\"maintenance\\\":\\\"\\\"}\"}"
             Octopus.Action.KubernetesContainers.Namespace = "#{K8s.Namespace}"
         }
     }
