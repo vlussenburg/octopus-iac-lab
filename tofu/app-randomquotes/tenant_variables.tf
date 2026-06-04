@@ -1,34 +1,56 @@
-# Values for the Brand.DisplayName project template (project.tf). This is the
-# one genuinely per-tenant value in the lab — a brand name that no tier/mood tag
-# can derive. Keeping the values here (not hand-entered on the tenant variables
-# page) means a nuked instance gets every customer's display name back on apply.
+# Per-tenant values for the randomquotes project templates (project.tf). These
+# are facets of how a customer appears in *this* app — display name, plus the
+# mood that drives its icon + accent colour — so they live on the project per
+# tenant, not as control-plane tenant tags. Keeping the values here (not
+# hand-entered on the tenant variables page) means a nuked instance restores
+# every customer's branding on apply.
 #
-# Scoped to each tenant's environments (local.tenant_environment_keys) — the
-# provider requires environment scope, and acme-corp needs the value in Dev too,
-# not just Production.
+# Unscoped: none of these vary by environment (Acme is comedy in Dev and in
+# Prod). The provider rejects a fully-absent scope ("Must specify either
+# 'environment_id' or 'scope'"), so we pass an empty environment scope — which
+# means all environments. Previews are untenanted and keep their own values
+# channel-scoped in .octopus/variables.ocl.
 locals {
-  tenant_display_names = {
-    acme_corp = "Acme Corp"
-    globex    = "Globex Corporation"
-    initech   = "Initech"
+  # tenant => { display name, mood, header icon, accent colour }. Mood was the
+  # old `mood/*` tenant tag; icon/colour were derived from it in variables.ocl.
+  tenant_branding = {
+    acme_corp = { display = "Acme Corp", mood = "comedy", icon = "🃏", color = "#F5C518" }
+    globex    = { display = "Globex Corporation", mood = "silicon-valley", icon = "🚀", color = "#00B0FF" }
+    initech   = { display = "Initech", mood = "stoic", icon = "🧘", color = "#7E57C2" }
   }
 
-  brand_display_name_template_id = one([
-    for t in octopusdeploy_project.randomquotes.template : t.id
-    if t.name == "Brand.DisplayName"
-  ])
+  template_ids = {
+    for t in octopusdeploy_project.randomquotes.template : t.name => t.id
+  }
+
+  # Flatten to (tenant, template) pairs so one resource block covers every
+  # branding value × tenant.
+  tenant_branding_vars = merge([
+    for tkey, b in local.tenant_branding : {
+      for pair in [
+        { tmpl = "Brand.DisplayName", value = b.display },
+        { tmpl = "Featured.Mood", value = b.mood },
+        { tmpl = "Brand.Icon", value = b.icon },
+        { tmpl = "Brand.Color", value = b.color },
+      ] : "${tkey}.${pair.tmpl}" => {
+        tenant_key  = tkey
+        template_id = local.template_ids[pair.tmpl]
+        value       = pair.value
+      }
+    }
+  ]...)
 }
 
-resource "octopusdeploy_tenant_project_variable" "brand_display_name" {
-  for_each = local.tenant_display_names
+resource "octopusdeploy_tenant_project_variable" "branding" {
+  for_each = local.tenant_branding_vars
 
   project_id  = octopusdeploy_project.randomquotes.id
-  template_id = local.brand_display_name_template_id
-  tenant_id   = local.cp.tenant_ids[each.key]
-  value       = each.value
+  template_id = each.value.template_id
+  tenant_id   = local.cp.tenant_ids[each.value.tenant_key]
+  value       = each.value.value
 
   scope {
-    environment_ids = [for e in local.tenant_environment_keys[each.key] : local.cp.environment_ids[e]]
+    environment_ids = []
   }
 
   depends_on = [octopusdeploy_tenant_project.tenants]

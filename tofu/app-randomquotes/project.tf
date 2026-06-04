@@ -38,14 +38,50 @@ resource "octopusdeploy_project" "randomquotes" {
   # is set there. Resolves naturally as #{Source} in deployment + runbook OCL.
   included_library_variable_sets = [local.cp.lab_source_set_id]
 
-  # The one genuinely per-tenant value that isn't an archetype: each customer's
-  # display name. Unlike tier/mood (tag-scoped in variables.ocl), a brand name
-  # can't be derived from a tag, so it's a project template the tenant fills in.
-  # Values live in tenant_variables.tf so they stay reproducible from git.
+  # Per-tenant randomquotes properties. A tenant has no display name, mood,
+  # icon, or colour until it's deployed to *this* app — they're facets of how a
+  # customer appears in randomquotes, not customer identity — so they're project
+  # templates the tenant fills in, not control-plane tenant tags. (tier stays a
+  # tenant tag: it's a plan attribute that exists with or without an app.)
+  # Values live in tenant_variables.tf so a nuked instance restores them on
+  # apply. Previews deploy untenanted, so their values stay channel-scoped in
+  # .octopus/variables.ocl — the template and the OCL value share a name and
+  # resolve by scope.
   template {
     name      = "Brand.DisplayName"
     label     = "Display name"
     help_text = "Customer-facing brand name shown in the app header."
+    display_settings = {
+      "Octopus.ControlType" = "SingleLineText"
+    }
+  }
+
+  # Constrained enum: the app only ships quotes for these three themes, so the
+  # template enforces them (a Select), the way the old `mood` tag set did before
+  # mood became a per-tenant project value.
+  template {
+    name      = "Featured.Mood"
+    label     = "Mood"
+    help_text = "Quote curation theme the app filters on."
+    display_settings = {
+      "Octopus.ControlType"   = "Select"
+      "Octopus.SelectOptions" = "comedy|Comedy\nsilicon-valley|Silicon Valley\nstoic|Stoic"
+    }
+  }
+
+  template {
+    name      = "Brand.Icon"
+    label     = "Brand icon"
+    help_text = "Emoji shown in the app header for this customer."
+    display_settings = {
+      "Octopus.ControlType" = "SingleLineText"
+    }
+  }
+
+  template {
+    name      = "Brand.Color"
+    label     = "Brand colour"
+    help_text = "Accent colour (hex) for this customer's branding."
     display_settings = {
       "Octopus.ControlType" = "SingleLineText"
     }

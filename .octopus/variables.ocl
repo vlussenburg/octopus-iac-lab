@@ -49,55 +49,24 @@ variable "Tier" {
     }
 }
 
+# Featured.Mood / Brand.Icon / Brand.Color are per-tenant project templates
+# (tofu: app-randomquotes/{project,tenant_variables}.tf) — a tenant only gets a
+# mood once it's deployed to randomquotes. Previews deploy untenanted, so their
+# values stay here, channel-scoped; the template and these share a name and
+# resolve by scope.
 variable "Featured.Mood" {
     value "comedy" {
-        tenant_tag = ["mood/comedy"]
-    }
-
-    value "comedy" {
         channel = ["ephemeral-previews"]
-    }
-
-    value "silicon-valley" {
-        tenant_tag = ["mood/silicon-valley"]
-    }
-
-    value "stoic" {
-        tenant_tag = ["mood/stoic"]
     }
 }
 
 variable "Brand.Icon" {
-    value "🃏" {
-        tenant_tag = ["mood/comedy"]
-    }
-
-    value "🚀" {
-        tenant_tag = ["mood/silicon-valley"]
-    }
-
-    value "🧘" {
-        tenant_tag = ["mood/stoic"]
-    }
-
     value "🚧" {
         channel = ["ephemeral-previews"]
     }
 }
 
 variable "Brand.Color" {
-    value "#F5C518" {
-        tenant_tag = ["mood/comedy"]
-    }
-
-    value "#00B0FF" {
-        tenant_tag = ["mood/silicon-valley"]
-    }
-
-    value "#7E57C2" {
-        tenant_tag = ["mood/stoic"]
-    }
-
     value "#FF6B35" {
         channel = ["ephemeral-previews"]
     }

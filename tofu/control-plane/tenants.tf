@@ -1,31 +1,9 @@
-# Two tag sets describe the demo's tenant variations:
-#   - mood: which kind of quotes the tenant prefers
-#   - tier: free/pro/enterprise, drives replica count + watermark
+# tier is the only tenant variation that's a genuine customer attribute (plan
+# size — exists independent of any app), so it lives here as a tenant tag.
+# mood is deliberately NOT here: a tenant has no mood until randomquotes is
+# deployed, so it's a per-tenant randomquotes project variable, not tenant
+# identity. See tofu/app-randomquotes/{project,tenant_variables}.tf.
 # Tag references in tenant_tags use canonical "TagSetName/TagName" form.
-
-resource "octopusdeploy_tag_set" "mood" {
-  name        = "mood"
-  description = "Quote curation theme. Tenant variable Featured.Mood is scoped against this."
-  scopes      = ["Tenant"]
-}
-
-resource "octopusdeploy_tag" "mood_comedy" {
-  name       = "comedy"
-  color      = "#F5C518"
-  tag_set_id = octopusdeploy_tag_set.mood.id
-}
-
-resource "octopusdeploy_tag" "mood_silicon_valley" {
-  name       = "silicon-valley"
-  color      = "#00B0FF"
-  tag_set_id = octopusdeploy_tag_set.mood.id
-}
-
-resource "octopusdeploy_tag" "mood_stoic" {
-  name       = "stoic"
-  color      = "#7E57C2"
-  tag_set_id = octopusdeploy_tag_set.mood.id
-}
 
 resource "octopusdeploy_tag_set" "tier" {
   name        = "tier"
@@ -67,36 +45,33 @@ resource "octopusdeploy_tag" "tier_enterprise" {
   tag_set_id = octopusdeploy_tag_set.tier.id
 }
 
-# Fictional customer tenants, each on a different tier + mood. Tenant
-# variables (Featured.Mood, Replicas, Branding.Watermark) live in
-# .octopus/variables.ocl scoped by tenant tag.
+# Fictional customer tenants, each on a different tier. Their randomquotes mood
+# (and the icon/colour it drives) is a project variable per tenant, not a tag —
+# see tofu/app-randomquotes/tenant_variables.tf.
 
 resource "octopusdeploy_tenant" "acme_corp" {
   name        = "acme-corp"
-  description = "Looney Tunes-flavoured megacorp. Enterprise tier, comedy mood."
+  description = "Looney Tunes-flavoured megacorp. Enterprise tier."
   tenant_tags = [
     "${octopusdeploy_tag_set.app.name}/${octopusdeploy_tag.app_randomquotes.name}",
     "${octopusdeploy_tag_set.tier.name}/${octopusdeploy_tag.tier_enterprise.name}",
-    "${octopusdeploy_tag_set.mood.name}/${octopusdeploy_tag.mood_comedy.name}",
   ]
 }
 
 resource "octopusdeploy_tenant" "globex" {
   name        = "globex"
-  description = "Hank Scorpio's tech empire. Pro tier, hustle mood."
+  description = "Hank Scorpio's tech empire. Pro tier."
   tenant_tags = [
     "${octopusdeploy_tag_set.app.name}/${octopusdeploy_tag.app_randomquotes.name}",
     "${octopusdeploy_tag_set.tier.name}/${octopusdeploy_tag.tier_pro.name}",
-    "${octopusdeploy_tag_set.mood.name}/${octopusdeploy_tag.mood_silicon_valley.name}",
   ]
 }
 
 resource "octopusdeploy_tenant" "initech" {
   name        = "initech"
-  description = "Stapler-bound TPS pushers. Free tier, stoic mood."
+  description = "Stapler-bound TPS pushers. Free tier."
   tenant_tags = [
     "${octopusdeploy_tag_set.app.name}/${octopusdeploy_tag.app_randomquotes.name}",
     "${octopusdeploy_tag_set.tier.name}/${octopusdeploy_tag.tier_free.name}",
-    "${octopusdeploy_tag_set.mood.name}/${octopusdeploy_tag.mood_stoic.name}",
   ]
 }
