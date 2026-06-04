@@ -49,11 +49,6 @@ variable "Tier" {
     }
 }
 
-# Featured.Mood / Brand.Icon / Brand.Color are per-tenant project templates
-# (tofu: app-randomquotes/{project,tenant_variables}.tf) — a tenant only gets a
-# mood once it's deployed to randomquotes. Previews deploy untenanted, so their
-# values stay here, channel-scoped; the template and these share a name and
-# resolve by scope.
 variable "Featured.Mood" {
     value "comedy" {
         channel = ["ephemeral-previews"]
