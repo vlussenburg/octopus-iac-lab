@@ -6,6 +6,6 @@
     "refresh-snow-pdi": "node refresh-snow-pdi.mjs"
   },
   "dependencies": {
-    "playwright": "^1.49.0"
+    "playwright": "^1.60.0"
   }
 }
